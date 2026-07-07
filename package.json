@@ -1,0 +1,7 @@
+{
+  "name": "leadership-quest",
+  "private": true,
+  "workspaces": [
+    "app"
+  ]
+}

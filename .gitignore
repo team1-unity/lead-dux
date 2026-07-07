@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Environment / credentials — never commit real values
+.env
+.env.*
+!.env.example
+service-account-key.json
+functions/venv/
+functions/__pycache__/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
