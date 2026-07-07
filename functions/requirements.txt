@@ -1,0 +1,2 @@
+firebase_functions~=0.6.0
+firebase_admin~=6.5.0
