@@ -26,7 +26,7 @@ export function Register() {
     setSubmitting(true);
     try {
       await registerWithEmail(email, password);
-      await callCompleteSignup({ intent: 'public', name });
+      await callCompleteSignup({ name });
       await refreshRole();
       navigate('/');
     } catch (err) {
@@ -42,7 +42,7 @@ export function Register() {
     try {
       const credential = await signInWithGoogle();
       if (getAdditionalUserInfo(credential)?.isNewUser) {
-        await callCompleteSignup({ intent: 'public', name });
+        await callCompleteSignup({ name });
         await refreshRole();
       } else {
         // Existing account signing back in via the "sign up" button —
@@ -85,9 +85,6 @@ export function Register() {
       <button onClick={handleGoogleRegister} disabled={submitting}>
         Sign up with Google
       </button>
-      <p>
-        Signing up on behalf of an organization? <Link to="/register/organization">Register your organization</Link>
-      </p>
       <p>
         Already have an account? <Link to="/login">Log in</Link>
       </p>

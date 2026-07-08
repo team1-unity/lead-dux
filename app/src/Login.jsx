@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
+import { getAdditionalUserInfo } from 'firebase/auth';
 import { signInWithEmail, signInWithGoogle, signOutUser } from '@shared/auth.jsx';
+import { callCompleteSignup } from '@shared/fetch.jsx';
+import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 
@@ -28,6 +31,7 @@ export function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { refreshRole } = useAuth();
 
   async function handleEmailLogin(e) {
     e.preventDefault();
@@ -48,8 +52,20 @@ export function Login() {
     setError('');
     setSubmitting(true);
     try {
-      const { user } = await signInWithGoogle();
-      await rejectIfSuspended(user);
+      const credential = await signInWithGoogle();
+      const { user } = credential;
+      if (getAdditionalUserInfo(credential)?.isNewUser) {
+        // signInWithPopup creates the Firebase Auth account on the fly for
+        // any Google identity it hasn't seen before — "Sign in with Google"
+        // here doubles as a signup path whether the account planned for
+        // that or not. Route it through the same completion step Register
+        // uses, so it doesn't end up a half-created account with no role
+        // claim and no profile doc.
+        await callCompleteSignup({ name: user.displayName || '' });
+        await refreshRole();
+      } else {
+        await rejectIfSuspended(user);
+      }
       navigate('/');
     } catch (err) {
       setError(err.message === 'SUSPENDED' ? 'Your account has been suspended.' : getAuthErrorMessage(err));
@@ -82,7 +98,7 @@ export function Login() {
         <Link to="/forgot-password">Forgot password?</Link>
       </p>
       <p>
-        New here? <Link to="/register">Sign up</Link> or <Link to="/register/organization">register an organization</Link>
+        New here? <Link to="/register">Sign up</Link>
       </p>
     </div>
   );
