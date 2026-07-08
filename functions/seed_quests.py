@@ -20,5 +20,12 @@ if __name__ == "__main__":
     initialize_app()
     db = firestore.client()
     for quest in SAMPLE_QUESTS:
-        db.collection("quests").add({**quest, "createdAt": firestore.SERVER_TIMESTAMP})
+        db.collection("quests").add({
+            **quest,
+            "orgId": None,
+            "orgName": "Neighborhood",
+            "isDefault": True,
+            "rsvpd": [],
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        })
     print(f"Seeded {len(SAMPLE_QUESTS)} quests.")

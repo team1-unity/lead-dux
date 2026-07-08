@@ -1,7 +1,7 @@
 // React Context that wraps the app and keeps track of:
 //   - the current logged-in user (or null)
-//   - their role ("public" until a Cloud Function grants "organization" or
-//     "admin" — that Cloud Function doesn't exist yet)
+//   - their role: one of onboarding_user, user, onboarding_org, pending_org,
+//     organization, admin (see functions/main.py for the full state machine)
 //   - whether Firebase has finished figuring out the initial auth state
 //
 // Any component can call useAuth() to read this instead of passing it down
@@ -34,7 +34,10 @@ export function AuthProvider({ children }) {
       // read a cached token from before a role was granted.
       const tokenResult = await firebaseUser.getIdTokenResult(true);
       setUser(firebaseUser);
-      setRole(tokenResult.claims.role || 'public');
+      // No claim yet means complete_signup hasn't run (a brief window right
+      // after account creation) — treat that the same as onboarding_user,
+      // the least-privileged real state, rather than granting more.
+      setRole(tokenResult.claims.role || 'onboarding_user');
     } else {
       setUser(null);
       setRole(null);
