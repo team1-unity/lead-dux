@@ -1,13 +1,10 @@
 import { useState } from 'react';
 import { callSubmitOnboarding } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
-
-// Fixed vocabulary rather than free-text, so it actually lines up with
-// quest tags for the relevance sort in Quests.jsx.
-const INTEREST_OPTIONS = [
-  'environment', 'community', 'outdoors', 'education',
-  'technology', 'youth', 'arts', 'food security', 'fitness',
-];
+import { AuthShell } from '@shared/AuthShell.jsx';
+import { TagStamp } from '@shared/TagStamp.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
+import { INTEREST_OPTIONS } from '@shared/interests.js';
 
 export function Onboarding({ name: initialName, onComplete }) {
   const [name, setName] = useState(initialName || '');
@@ -41,8 +38,7 @@ export function Onboarding({ name: initialName, onComplete }) {
   }
 
   return (
-    <div className="box">
-      <h1>Tell us about yourself</h1>
+    <AuthShell title="Tell Us About Yourself">
       <form onSubmit={handleSubmit} className="flex flex-col gap-md">
         <label>
           Name
@@ -54,24 +50,25 @@ export function Onboarding({ name: initialName, onComplete }) {
         </label>
         <fieldset>
           <legend>Interests</legend>
-          <div className="flex flex-wrap gap-sm">
+          <div className="flex flex-wrap gap-sm" style={{ marginTop: 8 }}>
             {INTEREST_OPTIONS.map((interest) => (
-              <label key={interest}>
-                <input
-                  type="checkbox"
-                  checked={interests.includes(interest)}
-                  onChange={() => toggleInterest(interest)}
-                />
+              <TagStamp
+                key={interest}
+                tone={interest}
+                selectable
+                selected={interests.includes(interest)}
+                onClick={() => toggleInterest(interest)}
+              >
                 {interest}
-              </label>
+              </TagStamp>
             ))}
           </div>
         </fieldset>
         {error && <p className="box-danger">{error}</p>}
-        <button type="submit" disabled={submitting}>
+        <StampButton type="submit" variant="primary" disabled={submitting}>
           {submitting ? 'Saving...' : 'Continue'}
-        </button>
+        </StampButton>
       </form>
-    </div>
+    </AuthShell>
   );
 }

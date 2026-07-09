@@ -1,68 +1,147 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callStartOrganizationOnboarding } from '@shared/fetch.jsx';
+import { callDeleteAccount } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
+import { TopBar } from '@shared/TopBar.jsx';
+import { PageMotion } from '@shared/PageMotion.jsx';
+import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
+import { getStoredTheme, applyTheme } from '@shared/theme.js';
 
-// Reachable by any signed-in role. The one action here today is letting a
-// "user" who signed up as a regular member start registering an
-// organization — every other role just sees where things stand.
-export function Settings() {
-  const { user, role, loading, logout, refreshRole } = useAuth();
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
+];
+
+function ThemePicker() {
+  const [theme, setTheme] = useState(getStoredTheme());
+
+  function choose(value) {
+    applyTheme(value);
+    setTheme(value);
+  }
+
+  return (
+    <section className="ink-card">
+      <h2>Display</h2>
+      <p style={{ marginTop: 0 }}>Choose how Leadership Quest looks on this device.</p>
+      <div className="theme-option-row">
+        {THEME_OPTIONS.map((opt) => (
+          <StampButton
+            key={opt.value}
+            type="button"
+            className="theme-option"
+            data-active={theme === opt.value}
+            onClick={() => choose(opt.value)}
+          >
+            {opt.label}
+          </StampButton>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// Deleting an account is destructive and permanent, so it's gated behind a
+// typed confirmation rather than a single click or a plain window.confirm
+// — the cascade wording below tells the caller exactly what they're about
+// to lose before they can even reach the confirm button.
+function DangerZone() {
+  const { role, logout } = useAuth();
+  const [confirming, setConfirming] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  if (loading) return <p>Loading...</p>;
-  if (!user) return <Navigate to="/login" replace />;
+  const cascadeCopy =
+    role === 'organization'
+      ? 'This permanently deletes your organization profile and every quest you posted.'
+      : "This removes you from every quest you've RSVP'd to.";
 
-  async function registerAsOrganization() {
-    setError('');
+  async function deleteAccount() {
     setSubmitting(true);
+    setError('');
     try {
-      await callStartOrganizationOnboarding();
-      await refreshRole();
-      navigate('/register/organization');
+      await callDeleteAccount();
+      await logout();
+      navigate('/login', { replace: true });
     } catch (err) {
       setError(getAuthErrorMessage(err));
-    } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="box">
-      <h1>Settings</h1>
-      <p>Signed in as {user.email}</p>
+    <section className="ink-card" data-danger="true">
+      <h2>Danger zone</h2>
+      {!confirming ? (
+        <StampButton type="button" variant="danger" onClick={() => setConfirming(true)}>
+          Delete account
+        </StampButton>
+      ) : (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          transition={{ duration: 0.2 }}
+          style={{ overflow: 'hidden' }}
+        >
+          <div className="flex flex-col gap-md" style={{ paddingTop: 4 }}>
+            <p style={{ margin: 0 }}>{cascadeCopy} This cannot be undone.</p>
+            <label>
+              Type DELETE to confirm
+              <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" />
+            </label>
+            {error && <p className="box-danger">{error}</p>}
+            <div className="flex gap-sm">
+              <StampButton
+                type="button"
+                variant="danger"
+                disabled={confirmText !== 'DELETE' || submitting}
+                onClick={deleteAccount}
+              >
+                {submitting ? 'Deleting...' : 'Permanently delete'}
+              </StampButton>
+              <StampButton
+                type="button"
+                onClick={() => {
+                  setConfirming(false);
+                  setConfirmText('');
+                  setError('');
+                }}
+                disabled={submitting}
+              >
+                Cancel
+              </StampButton>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </section>
+  );
+}
 
-      <section className="box-secondary">
-        <h2>Organization</h2>
-        {role === 'user' && (
-          <>
-            <p>Signed up as a regular member but meant to register an organization?</p>
-            <button onClick={registerAsOrganization} disabled={submitting}>
-              {submitting ? 'Starting...' : 'Register your organization'}
-            </button>
-          </>
-        )}
-        {role === 'onboarding_org' && (
-          <p>
-            You started registering an organization —{' '}
-            <Link to="/register/organization">finish your application</Link>.
-          </p>
-        )}
-        {role === 'pending_org' && <p>Your organization application is awaiting admin review.</p>}
-        {role === 'organization' && (
-          <p>
-            You already manage an organization — see your{' '}
-            <Link to="/org">organization dashboard</Link>.
-          </p>
-        )}
-        {error && <p className="box-danger">{error}</p>}
-      </section>
+// Purely app preferences and the one destructive account action — identity,
+// interests, and organization status all live on Profile instead (see
+// Profile.jsx). Not wrapped in narrow-content: at desktop width each
+// section spans the full dashboard-style width rather than floating a
+// mobile-width form in the middle of a wide page.
+export function Settings() {
+  const { user, loading } = useAuth();
 
-      <p><Link to="/">Back to quests</Link></p>
-      <button onClick={logout}>Log out</button>
-    </div>
+  if (loading) return <LoadingSpinner />;
+  if (!user) return <Navigate to="/login" replace />;
+
+  return (
+    <PageMotion>
+      <TopBar title="Settings" />
+      <div className="settings-grid">
+        <ThemePicker />
+        <DangerZone />
+      </div>
+    </PageMotion>
   );
 }

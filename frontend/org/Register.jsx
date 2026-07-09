@@ -3,6 +3,8 @@ import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { callSubmitOrganizationRequest } from '@shared/fetch.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
+import { AuthShell } from '@shared/AuthShell.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
 
 // Reachable only by an already-signed-up "user" partway through registering
 // an organization (role onboarding_org, set by Settings' "register your
@@ -43,11 +45,11 @@ export function Register() {
 
   if (role === 'user') {
     return (
-      <div className="box">
+      <AuthShell title="Register Your Organization">
         <p>
           Go to <Link to="/settings">Settings</Link> to register your organization.
         </p>
-      </div>
+      </AuthShell>
     );
   }
 
@@ -56,9 +58,8 @@ export function Register() {
   }
 
   return (
-    <div className="box">
-      <h1>Register Your Organization</h1>
-      <p>An admin reviews your request before it's approved.</p>
+    <AuthShell title="Register Your Organization">
+      <p style={{ marginTop: -8 }}>An admin reviews your request before it's approved.</p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-md">
         <label>
           Organization name
@@ -77,10 +78,10 @@ export function Register() {
           <textarea required value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
         {error && <p className="box-danger">{error}</p>}
-        <button type="submit" disabled={submitting}>
+        <StampButton type="submit" variant="primary" disabled={submitting}>
           {submitting ? 'Submitting request...' : 'Request organization account'}
-        </button>
+        </StampButton>
       </form>
-    </div>
+    </AuthShell>
   );
 }

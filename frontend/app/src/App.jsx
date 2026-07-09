@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
 import { ProtectedRoute } from '@shared/ProtectedRoute.jsx';
 import { db } from '@shared/firebaseapp.jsx';
+import { TopBar } from '@shared/TopBar.jsx';
+import { BottomNav } from '@shared/BottomNav.jsx';
+import { AmbientParticles } from '@shared/AmbientParticles.jsx';
+import { PageMotion } from '@shared/PageMotion.jsx';
+import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { Login } from './Login.jsx';
 import { ForgotPassword } from './ForgotPassword.jsx';
 import { ResetPassword } from './ResetPassword.jsx';
 import { Settings } from './Settings.jsx';
+import { Profile } from './Profile.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
@@ -36,7 +42,7 @@ function PublicHome({ role }) {
 
   useEffect(loadProfile, [user]);
 
-  if (loadingProfile) return <p>Loading...</p>;
+  if (loadingProfile) return <LoadingSpinner />;
 
   if (role === 'onboarding_user') {
     return (
@@ -54,28 +60,24 @@ function PublicHome({ role }) {
   }
 
   return (
-    <>
+    <PageMotion>
+      <AmbientParticles />
+      <TopBar />
       {role === 'pending_org' && <PendingBanner />}
-      <nav className="flex justify-end">
-        <Link to="/settings">Settings</Link>
-      </nav>
       <Quests interests={profile?.interests || []} />
-    </>
+    </PageMotion>
   );
 }
 
-// Admin sees the same quest list a normal user does, plus a link to the
-// admin-only data page (user/org/quest management) at /admin.
+// Admin sees the same quest list a normal user does; BottomNav's "Data" tab
+// is the way to the admin-only data page (user/org/quest management).
 function AdminHome() {
-  const { logout } = useAuth();
   return (
-    <div>
-      <nav className="flex justify-between">
-        <Link to="/admin">Admin data</Link>
-        <button onClick={logout}>Log out</button>
-      </nav>
+    <PageMotion>
+      <AmbientParticles />
+      <TopBar />
       <Quests interests={[]} />
-    </div>
+    </PageMotion>
   );
 }
 
@@ -85,7 +87,7 @@ function AdminHome() {
 function Home() {
   const { user, role, loading } = useAuth();
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
   if (role === 'organization') return <Navigate to="/org" replace />;
   // Declared org intent but hasn't submitted the org-details form yet —
@@ -95,34 +97,56 @@ function Home() {
   return <PublicHome role={role} />;
 }
 
+// Persistent chrome for every signed-in app page (as opposed to auth
+// screens, which get none). Rendered once at the router layout level, as a
+// sibling of <Outlet/> rather than inside each page — react-router keeps
+// this component instance mounted across navigations between its child
+// routes, so BottomNav no longer unmounts/remounts (and visibly jumps)
+// every time PageMotion replays a page's own mount animation. onboarding_user
+// is the one signed-in state that shouldn't see nav yet (Home renders the
+// Onboarding form in its place at "/").
+function AppShell() {
+  const { role } = useAuth();
+  const showNav = role && role !== 'onboarding_user';
+  return (
+    <>
+      <Outlet />
+      {showNav && <BottomNav />}
+    </>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<RegisterPublic />} />
           <Route path="/register/organization" element={<RegisterOrganization />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requiredRole="admin">
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/org"
-            element={
-              <ProtectedRoute requiredRole="organization">
-                <OrgDashboard />
-              </ProtectedRoute>
-            }
-          />
+          <Route element={<AppShell />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/org"
+              element={
+                <ProtectedRoute requiredRole="organization">
+                  <OrgDashboard />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

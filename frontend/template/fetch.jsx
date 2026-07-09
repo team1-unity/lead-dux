@@ -127,3 +127,28 @@ export async function callListQuestAttendees(questId) {
   const result = await fn({ questId });
   return result.data.attendees;
 }
+
+// organization: sets the org's own location-area and activity-type tags
+// (separate from a single quest's tags — these describe the org itself).
+export async function callUpdateOrganizationTags({ ltag, etag }) {
+  const fn = httpsCallable(functions, 'update_organization_tags');
+  const result = await fn({ ltag, etag });
+  return result.data;
+}
+
+// user: changes their interests after onboarding (onboarding only sets
+// them once).
+export async function callUpdateInterests({ interests }) {
+  const fn = httpsCallable(functions, 'update_interests');
+  const result = await fn({ interests });
+  return result.data;
+}
+
+// Settings' danger zone: permanently deletes the caller's own account,
+// cascading owned quests (organization) or rsvpd entries (everyone else)
+// server-side before removing the Auth account itself.
+export async function callDeleteAccount() {
+  const fn = httpsCallable(functions, 'delete_account');
+  const result = await fn();
+  return result.data;
+}

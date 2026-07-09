@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { getAdditionalUserInfo } from 'firebase/auth';
-import { registerWithEmail, signInWithGoogle, signOutUser } from '@shared/auth.jsx';
+import { registerWithEmail, signInWithGoogle } from '@shared/auth.jsx';
 import { callCompleteSignup } from '@shared/fetch.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
+import { AuthShell } from '@shared/AuthShell.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
 
 export function Register() {
   const [name, setName] = useState('');
@@ -58,8 +60,14 @@ export function Register() {
   }
 
   return (
-    <div className="box">
-      <h1>Sign Up</h1>
+    <AuthShell
+      title="Sign Up"
+      footer={
+        <span>
+          Already have an account? <Link to="/login">Log in</Link>
+        </span>
+      }
+    >
       <form onSubmit={handleEmailRegister} className="flex flex-col gap-md">
         <label>
           Name
@@ -78,16 +86,13 @@ export function Register() {
           <input type="password" required minLength={6} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
         </label>
         {error && <p className="box-danger">{error}</p>}
-        <button type="submit" disabled={submitting}>
+        <StampButton type="submit" variant="primary" disabled={submitting}>
           {submitting ? 'Creating account...' : 'Create account'}
-        </button>
+        </StampButton>
       </form>
-      <button onClick={handleGoogleRegister} disabled={submitting}>
+      <StampButton type="button" onClick={handleGoogleRegister} disabled={submitting} style={{ marginTop: 10, width: '100%' }}>
         Sign up with Google
-      </button>
-      <p>
-        Already have an account? <Link to="/login">Log in</Link>
-      </p>
-    </div>
+      </StampButton>
+    </AuthShell>
   );
 }

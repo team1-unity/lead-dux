@@ -19,12 +19,13 @@
 
 import { Navigate } from 'react-router-dom';
 import { useAuth } from './AuthContext.jsx';
+import { LoadingSpinner } from './LoadingSpinner.jsx';
 
 export function ProtectedRoute({ requiredRole, children }) {
   const { user, role, loading } = useAuth();
 
   if (loading) {
-    return <p>Loading...</p>;
+    return <LoadingSpinner />;
   }
 
   if (!user) {

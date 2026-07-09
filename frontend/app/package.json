@@ -14,9 +14,11 @@
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
     "firebase": "^12.15.0",
+    "framer-motion": "^12.42.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "roughjs": "^4.6.6"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",

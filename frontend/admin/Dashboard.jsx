@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { Link } from 'react-router-dom';
 import { db } from '@shared/firebaseapp.jsx';
 import {
   callAdminListUsers,
@@ -11,9 +10,32 @@ import {
   callCreateDefaultQuest,
   callDeleteQuest,
 } from '@shared/fetch.jsx';
-import { useAuth } from '@shared/AuthContext.jsx';
+import { TopBar } from '@shared/TopBar.jsx';
+import { PageMotion } from '@shared/PageMotion.jsx';
+import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
+import { StatusStamp } from '@shared/StatusStamp.jsx';
 
 const ROLES = ['onboarding_user', 'user', 'onboarding_org', 'pending_org', 'organization', 'admin'];
+
+// What each role means for the "is this account in good standing" glance —
+// separate from the ink rack's tag semantics, chosen here because this is
+// the one screen where role meaning lives.
+const ROLE_TONE = {
+  user: 'environment',
+  pending_org: 'outdoors',
+  organization: 'education',
+  admin: 'community',
+};
+
+function RoleStamp({ role }) {
+  const tone = ROLE_TONE[role];
+  return (
+    <StatusStamp tone={tone} muted={!tone}>
+      {role}
+    </StatusStamp>
+  );
+}
 
 function PendingRequests() {
   const [requests, setRequests] = useState(null);
@@ -38,24 +60,32 @@ function PendingRequests() {
     }
   }
 
-  if (!requests) return <p>Loading requests...</p>;
+  if (!requests) return <LoadingSpinner label="Loading requests..." />;
 
   return (
-    <section className="box">
+    <section style={{ marginBottom: 24 }}>
       <h2>Pending organization requests</h2>
-      {requests.length === 0 && <p>No pending requests.</p>}
-      <ul>
-        {requests.map((r) => (
-          <li key={r.uid} className="box-secondary">
-            <strong>{r.name}</strong> ({r.email})
-            <p>{r.location} · {r.phone}</p>
-            <p>{r.reason}</p>
-            <button onClick={() => approve(r.uid)} disabled={busyUid === r.uid}>
-              {busyUid === r.uid ? 'Approving...' : 'Approve'}
-            </button>
-          </li>
-        ))}
-      </ul>
+      {requests.length === 0 ? (
+        <p>No pending requests.</p>
+      ) : (
+        <div className="ink-card data-list">
+          {requests.map((r) => (
+            <div key={r.uid} className="data-row">
+              <div className="data-row-head">
+                <p className="data-row-title">{r.name}</p>
+                <span className="data-stat">{r.email}</span>
+              </div>
+              <p className="data-row-sub">{r.location} · {r.phone}</p>
+              <p className="data-row-sub">{r.reason}</p>
+              <div className="data-row-actions">
+                <StampButton type="button" variant="primary" onClick={() => approve(r.uid)} disabled={busyUid === r.uid}>
+                  {busyUid === r.uid ? 'Approving...' : 'Approve'}
+                </StampButton>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -94,24 +124,37 @@ function AllUsers() {
     }
   }
 
-  if (!users) return <p>Loading users...</p>;
+  if (!users) return <LoadingSpinner label="Loading users..." />;
 
   return (
-    <section className="box">
-      <h2>All users</h2>
-      <ul>
+    <section style={{ marginBottom: 24 }}>
+      <div className="section-heading">
+        <h2 style={{ marginBottom: 0 }}>All users</h2>
+        <span className="data-stat">{users.length} total</span>
+      </div>
+      <div className="ink-card data-list" style={{ marginTop: 12 }}>
         {users.map((u) => (
-          <li key={u.uid}>
-            <button onClick={() => selectUser(u)}>{u.email} — {u.role}</button>
-          </li>
+          <button
+            key={u.uid}
+            type="button"
+            className="data-row"
+            onClick={() => selectUser(u)}
+          >
+            <div className="data-row-head">
+              <p className="data-row-title">{u.email}</p>
+              <RoleStamp role={u.role} />
+            </div>
+          </button>
         ))}
-      </ul>
+      </div>
 
       {selected && (
-        <div className="box-secondary">
+        <div className="ink-card" style={{ marginTop: 16 }}>
           <h3>{selected.email}</h3>
-          <p>uid: {selected.uid}</p>
-          <p>Current role: {selected.role}</p>
+          <p className="data-stat">uid: {selected.uid}</p>
+          <p style={{ marginTop: 8 }}>
+            Current role: <RoleStamp role={selected.role} />
+          </p>
           {selectedProfile && <pre>{JSON.stringify(selectedProfile, null, 2)}</pre>}
           <label>
             Assign role
@@ -119,9 +162,9 @@ function AllUsers() {
               {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </label>
-          <button onClick={assignRole} disabled={busy}>
+          <StampButton type="button" variant="primary" onClick={assignRole} disabled={busy} style={{ marginTop: 12 }}>
             {busy ? 'Saving...' : 'Save role'}
-          </button>
+          </StampButton>
         </div>
       )}
     </section>
@@ -150,23 +193,31 @@ function Organizations() {
     }
   }
 
-  if (!orgs) return <p>Loading organizations...</p>;
+  if (!orgs) return <LoadingSpinner label="Loading organizations..." />;
 
   return (
-    <section className="box">
+    <section style={{ marginBottom: 24 }}>
       <h2>Organizations</h2>
-      {orgs.length === 0 && <p>No organizations yet.</p>}
-      <ul>
-        {orgs.map((o) => (
-          <li key={o.uid} className="box-secondary">
-            <strong>{o.name}</strong> ({o.email})
-            <p>{o.location} · {o.phone}</p>
-            <button onClick={() => remove(o.uid)} disabled={busyUid === o.uid}>
-              {busyUid === o.uid ? 'Deleting...' : 'Delete organization'}
-            </button>
-          </li>
-        ))}
-      </ul>
+      {orgs.length === 0 ? (
+        <p>No organizations yet.</p>
+      ) : (
+        <div className="ink-card data-list">
+          {orgs.map((o) => (
+            <div key={o.uid} className="data-row">
+              <div className="data-row-head">
+                <p className="data-row-title">{o.name}</p>
+                <span className="data-stat">{o.email}</span>
+              </div>
+              <p className="data-row-sub">{o.location} · {o.phone}</p>
+              <div className="data-row-actions">
+                <StampButton type="button" variant="danger" onClick={() => remove(o.uid)} disabled={busyUid === o.uid}>
+                  {busyUid === o.uid ? 'Deleting...' : 'Delete organization'}
+                </StampButton>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -220,62 +271,65 @@ function QuestsAdmin() {
     }
   }
 
-  if (!quests) return <p>Loading quests...</p>;
+  if (!quests) return <LoadingSpinner label="Loading quests..." />;
 
   return (
-    <section className="box">
-      <h2>All quests</h2>
-      <form onSubmit={createDefault} className="flex flex-col gap-md">
+    <section>
+      <div className="ink-card" style={{ marginBottom: 16 }}>
         <h3>Add default neighborhood quest</h3>
-        <label>
-          Title
-          <input required value={title} onChange={(e) => setTitle(e.target.value)} />
-        </label>
-        <label>
-          Description
-          <textarea required value={description} onChange={(e) => setDescription(e.target.value)} />
-        </label>
-        <label>
-          Tags (comma separated)
-          <input value={tags} onChange={(e) => setTags(e.target.value)} />
-        </label>
-        {error && <p className="box-danger">{error}</p>}
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Adding...' : 'Add quest'}
-        </button>
-      </form>
+        <form onSubmit={createDefault} className="flex flex-col gap-md">
+          <label>
+            Title
+            <input required value={title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <label>
+            Description
+            <textarea required value={description} onChange={(e) => setDescription(e.target.value)} />
+          </label>
+          <label>
+            Tags (comma separated)
+            <input value={tags} onChange={(e) => setTags(e.target.value)} />
+          </label>
+          {error && <p className="box-danger">{error}</p>}
+          <StampButton type="submit" variant="primary" disabled={submitting}>
+            {submitting ? 'Adding...' : 'Add quest'}
+          </StampButton>
+        </form>
+      </div>
 
-      <ul>
+      <div className="section-heading" style={{ marginBottom: 8 }}>
+        <h2 style={{ marginBottom: 0 }}>All quests</h2>
+        <span className="data-stat">{quests.length} total</span>
+      </div>
+      <div className="ink-card data-list">
         {quests.map((q) => (
-          <li key={q.id} className="box-secondary">
-            <strong>{q.title}</strong>{' '}
-            {q.isDefault ? '(default neighborhood quest)' : q.orgName ? `— ${q.orgName}` : ''}
-            <p>{q.description}</p>
-            <p>{(q.rsvpd || []).length} RSVP'd</p>
-            <button onClick={() => remove(q.id)} disabled={busyId === q.id}>
-              {busyId === q.id ? 'Deleting...' : 'Delete'}
-            </button>
-          </li>
+          <div key={q.id} className="data-row">
+            <div className="data-row-head">
+              <p className="data-row-title">{q.title}</p>
+              <span className="data-stat">{(q.rsvpd || []).length} RSVP'd</span>
+            </div>
+            <p className="data-row-sub">{q.isDefault ? 'Default neighborhood quest' : q.orgName || ''}</p>
+            <p className="data-row-sub">{q.description}</p>
+            <div className="data-row-actions">
+              <StampButton type="button" variant="danger" onClick={() => remove(q.id)} disabled={busyId === q.id}>
+                {busyId === q.id ? 'Deleting...' : 'Delete'}
+              </StampButton>
+            </div>
+          </div>
         ))}
-      </ul>
+      </div>
     </section>
   );
 }
 
 export function Dashboard() {
-  const { logout } = useAuth();
-
   return (
-    <div>
-      <h1>Admin Dashboard</h1>
-      <nav className="flex justify-between">
-        <Link to="/">View quests</Link>
-        <button onClick={logout}>Log out</button>
-      </nav>
+    <PageMotion>
+      <TopBar title="Admin Data" />
       <PendingRequests />
       <AllUsers />
       <Organizations />
       <QuestsAdmin />
-    </div>
+    </PageMotion>
   );
 }

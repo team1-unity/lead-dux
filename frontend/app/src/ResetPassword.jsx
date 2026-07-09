@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { resetPassword } from '@shared/auth.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
+import { AuthShell } from '@shared/AuthShell.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
 
 // The link Firebase emails from sendResetEmail() lands here with an oobCode
 // query param — that code is what proves the click came from the real
@@ -35,25 +37,22 @@ export function ResetPassword() {
 
   if (!oobCode) {
     return (
-      <div className="box">
-        <h1>Invalid reset link</h1>
+      <AuthShell title="Invalid reset link">
         <p>This page needs to be opened from the link in your password reset email.</p>
-      </div>
+      </AuthShell>
     );
   }
 
   if (done) {
     return (
-      <div className="box">
-        <h1>Password updated</h1>
-        <Link to="/login">Log in with your new password</Link>
-      </div>
+      <AuthShell title="Password updated" footer={<Link to="/login">Log in with your new password</Link>}>
+        <p>You're all set.</p>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="box">
-      <h1>Choose a new password</h1>
+    <AuthShell title="Choose a new password">
       <form onSubmit={handleSubmit} className="flex flex-col gap-md">
         <label>
           New password
@@ -64,10 +63,10 @@ export function ResetPassword() {
           <input type="password" required minLength={6} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
         </label>
         {error && <p className="box-danger">{error}</p>}
-        <button type="submit" disabled={submitting}>
+        <StampButton type="submit" variant="primary" disabled={submitting}>
           {submitting ? 'Updating...' : 'Update password'}
-        </button>
+        </StampButton>
       </form>
-    </div>
+    </AuthShell>
   );
 }

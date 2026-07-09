@@ -7,6 +7,8 @@ import { callCompleteSignup } from '@shared/fetch.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
+import { AuthShell } from '@shared/AuthShell.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
 
 // Firebase Auth has no idea what "suspended" means — that's app data, not
 // login data — so this checks it right after authenticating, before
@@ -75,8 +77,17 @@ export function Login() {
   }
 
   return (
-    <div className="box">
-      <h1>Log In</h1>
+    <AuthShell
+      title="Log In"
+      footer={
+        <>
+          <Link to="/forgot-password">Forgot password?</Link>
+          <span>
+            New here? <Link to="/register">Sign up</Link>
+          </span>
+        </>
+      }
+    >
       <form onSubmit={handleEmailLogin} className="flex flex-col gap-md">
         <label>
           Email
@@ -87,19 +98,13 @@ export function Login() {
           <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </label>
         {error && <p className="box-danger">{error}</p>}
-        <button type="submit" disabled={submitting}>
+        <StampButton type="submit" variant="primary" disabled={submitting}>
           {submitting ? 'Signing in...' : 'Log in'}
-        </button>
+        </StampButton>
       </form>
-      <button onClick={handleGoogleLogin} disabled={submitting}>
+      <StampButton type="button" onClick={handleGoogleLogin} disabled={submitting} style={{ marginTop: 10, width: '100%' }}>
         Sign in with Google
-      </button>
-      <p>
-        <Link to="/forgot-password">Forgot password?</Link>
-      </p>
-      <p>
-        New here? <Link to="/register">Sign up</Link>
-      </p>
-    </div>
+      </StampButton>
+    </AuthShell>
   );
 }
