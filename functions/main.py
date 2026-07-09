@@ -199,6 +199,8 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "phone": request_data.get("phone"),
         "location": request_data.get("location"),
         "reason": request_data.get("reason"),
+        "ltag": [],
+        "etag": [],
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
@@ -447,3 +449,81 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
         })
 
     return {"attendees": attendees}
+
+
+# Callable from the org dashboard — lets an organization set the location
+# areas (ltag) and activity/event types (etag) they operate in. Separate
+# from a quest's own tags (which describe one event); these describe the
+# organization itself, for future browse/filter-by-location-or-activity-type
+# features.
+@https_fn.on_call()
+def update_organization_tags(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization")
+
+    ltag = req.data.get("ltag")
+    etag = req.data.get("etag")
+
+    if not isinstance(ltag, list) or not isinstance(etag, list):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "ltag and etag must both be lists of strings.",
+        )
+
+    firestore.client().collection("organizations").document(req.auth.uid).update({
+        "ltag": ltag,
+        "etag": etag,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    })
+    return {"success": True}
+
+
+# Callable from Settings — lets an already-onboarded "user" change their
+# interests after the fact (onboarding only ever sets them once).
+@https_fn.on_call()
+def update_interests(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    interests = req.data.get("interests")
+    if not isinstance(interests, list) or not interests:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "interests must be a non-empty list.",
+        )
+
+    firestore.client().collection("users").document(req.auth.uid).update({
+        "interests": interests,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    })
+    return {"success": True}
+
+
+# Callable from Settings' danger zone. Operates on the caller's own uid only
+# (no targetUid) — deleting someone else's account is out of scope for this
+# function; admins already have delete_organization/set_user_role for that.
+# Cascades before removing the Auth account itself: an organization's owned
+# quests and profile are deleted outright, while anyone else is simply
+# pulled out of every quest's rsvpd list rather than the quest being touched.
+@https_fn.on_call()
+def delete_account(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    uid = req.auth.uid
+    role = req.auth.token.get("role")
+    db = firestore.client()
+
+    if role == "organization":
+        for quest_doc in db.collection("quests").where("orgId", "==", uid).stream():
+            quest_doc.reference.delete()
+        db.collection("organizations").document(uid).delete()
+    else:
+        for quest_doc in db.collection("quests").where("rsvpd", "array_contains", uid).stream():
+            quest_doc.reference.update({"rsvpd": firestore.ArrayRemove([uid])})
+
+    # Safe unconditionally — Firestore .delete() on a doc that doesn't exist
+    # (e.g. no ORGREQ was ever filed, or the account is an admin with no
+    # users/{uid} doc per complete_signup) is a no-op, not an error.
+    db.collection("ORGREQ").document(uid).delete()
+    db.collection("users").document(uid).delete()
+    auth.delete_user(uid)
+
+    return {"success": True}

@@ -1,0 +1,1109 @@
+/* layout: flex */
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.items-start {
+  align-items: flex-start;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.items-end {
+  align-items: flex-end;
+}
+
+.justify-start {
+  justify-content: flex-start;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-end {
+  justify-content: flex-end;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-sm {
+  gap: 8px;
+}
+
+.gap-md {
+  gap: 16px;
+}
+
+.gap-lg {
+  gap: 24px;
+}
+
+/* boxes */
+
+.box {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #111827;
+}
+
+.box-primary {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #93c5fd;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.box-secondary {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.box-success {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #86efac;
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.box-warning {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #fde047;
+  background: #fef9c3;
+  color: #713f12;
+}
+
+.box-danger {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #fca5a5;
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+/* =========================================================================
+   STAMPED — Leadership Quest visual identity
+   Rough.js-inflected, neobrutalist, pastel. See the design-artifact pass for
+   full rationale. The .box/.box-primary/etc and .flex/.gap-* utilities
+   above predate this and are kept as-is — screens not yet converted to the
+   .ink-card/.ink-btn system still use them until their turn comes.
+   ========================================================================= */
+
+@font-face {
+  font-family: 'Anton';
+  src: url('/fonts/anton-v27-latin-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Karla';
+  src: url('/fonts/karla-v33-latin-variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/space-mono-v17-latin-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/space-mono-v17-latin-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* paper */
+  --paper: #f2ead9;
+  --paper-card: #fbf6ea;
+  --paper-well: #e9dcc0;
+  --line: #2a2419;
+  --line-soft: #6b6152;
+  --shadow: #2a2419;
+
+  /* pastel ink rack — one per quest interest tag */
+  --tag-community: #f1a896;
+  --tag-education: #aecbeb;
+  --tag-environment: #a9d6b3;
+  --tag-outdoors: #f0ce8e;
+  --tag-technology: #c9b7e8;
+  --tag-youth: #f0afcb;
+  --tag-fitness: #a6dbd3;
+  --tag-food-security: #eab99b;
+  --tag-arts: #d4afd1;
+
+  /* semantic */
+  --accent: var(--tag-community);
+  --success: var(--tag-environment);
+  --warning: var(--tag-outdoors);
+  --danger: #e08a76;
+  --link: #3e6fa6;
+  --focus-ring: #3e6fa6;
+
+  /* Chips (tag-stamp, status-stamp) always carry a light pastel fill, in
+     either theme — so their text is always dark ink, never the theme's
+     --line (which flips to light-on-dark and fails contrast against a
+     fill that stays light). Deliberately NOT redefined in the dark blocks
+     below. */
+  --chip-ink: #2a2419;
+
+  --font-display: 'Anton', 'Arial Narrow', sans-serif;
+  --font-body: 'Karla', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --radius: 12px;
+  --radius-lg: 24px;
+  --nav-height: 64px;
+  --nav-height-desktop: 76px;
+  --bp-wide: 860px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #211c16;
+    --paper-card: #2a231b;
+    --paper-well: #191510;
+    --line: #f1e6d2;
+    --line-soft: #c6b89e;
+    --shadow: #0a0806;
+
+    --tag-community: #d98a78;
+    --tag-education: #9fc0e2;
+    --tag-environment: #9acda4;
+    --tag-outdoors: #e6c48b;
+    --tag-technology: #bda8df;
+    --tag-youth: #e6a5c1;
+    --tag-fitness: #9ed6cc;
+    --tag-food-security: #ddae8d;
+    --tag-arts: #c6a2c3;
+
+    --danger: #d9846f;
+    --link: #9fc0e2;
+    --focus-ring: #9fc0e2;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #211c16;
+  --paper-card: #2a231b;
+  --paper-well: #191510;
+  --line: #f1e6d2;
+  --line-soft: #c6b89e;
+  --shadow: #0a0806;
+  --tag-community: #d98a78;
+  --tag-education: #9fc0e2;
+  --tag-environment: #9acda4;
+  --tag-outdoors: #e6c48b;
+  --tag-technology: #bda8df;
+  --tag-youth: #e6a5c1;
+  --tag-fitness: #9ed6cc;
+  --tag-food-security: #ddae8d;
+  --tag-arts: #c6a2c3;
+  --danger: #d9846f;
+  --link: #9fc0e2;
+  --focus-ring: #9fc0e2;
+}
+:root[data-theme="light"] {
+  --paper: #f2ead9;
+  --paper-card: #fbf6ea;
+  --paper-well: #e9dcc0;
+  --line: #2a2419;
+  --line-soft: #6b6152;
+  --shadow: #2a2419;
+  --tag-community: #f1a896;
+  --tag-education: #aecbeb;
+  --tag-environment: #a9d6b3;
+  --tag-outdoors: #f0ce8e;
+  --tag-technology: #c9b7e8;
+  --tag-youth: #f0afcb;
+  --tag-fitness: #a6dbd3;
+  --tag-food-security: #eab99b;
+  --tag-arts: #d4afd1;
+  --danger: #e08a76;
+  --link: #3e6fa6;
+  --focus-ring: #3e6fa6;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: var(--paper);
+  color: var(--line);
+  line-height: 1.55;
+  overflow-x: hidden;
+}
+
+#root {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px calc(var(--nav-height) + 32px);
+  position: relative;
+  z-index: 1;
+}
+
+/* Above --bp-wide, BottomNav becomes a persistent topbar instead of a
+   bottom bar — a bottom tab bar on a wide desktop window reads as a phone
+   app stretched thin, not a real desktop layout. Only pages that actually
+   render BottomNav reserve space for it — auth screens (no nav) stay
+   centered rather than shifting down. */
+@media (min-width: 860px) {
+  #root:has(.bottom-nav) {
+    max-width: 1180px;
+    padding: calc(var(--nav-height-desktop) + 40px) 48px 48px;
+  }
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin: 0 0 16px;
+}
+h1 { font-size: 2.1rem; line-height: 1.08; }
+h2 { font-size: 1.55rem; line-height: 1.12; }
+h3 { font-size: 1.2rem; margin-bottom: 8px; }
+
+a {
+  color: var(--link);
+}
+a:hover {
+  opacity: 0.8;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.box,
+.box-primary,
+.box-secondary,
+.box-success,
+.box-warning,
+.box-danger {
+  margin-bottom: 16px;
+}
+
+.box > *:first-child,
+.box-secondary > *:first-child {
+  margin-top: 0;
+}
+
+/* lists inside boxes read as stacked cards, not browser-default bullets */
+.box ul,
+.box-secondary ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.box li,
+.box-secondary li {
+  margin: 0;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+}
+
+/* forms */
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  padding: 9px 11px;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  background: var(--paper-card);
+  color: var(--line);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+fieldset {
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+fieldset label {
+  flex-direction: row;
+  align-items: center;
+  font-weight: 400;
+}
+
+/* buttons — hard offset shadow that collapses on press, the core STAMPED
+   interaction. Applies to every <button>, not just .ink-btn, so screens not
+   yet converted to the card system still get the pressable feel. */
+
+button {
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  border: 2.4px solid var(--line);
+  background: var(--paper-card);
+  color: var(--line);
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--shadow);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--shadow);
+}
+
+button:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--shadow);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: 4px 4px 0 var(--shadow);
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+}
+
+/* the settings/admin-data/logout nav bar shown above each dashboard */
+nav {
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.quest-org {
+  color: var(--line-soft);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 0.85em;
+}
+
+/* ---------- STAMPED card + chip system (Phase 1+ screens use these) ---------- */
+
+.ink-card {
+  background: var(--paper-card);
+  border: 2.6px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 5px 5px 0 var(--shadow);
+  padding: 18px 20px;
+}
+.ink-card[data-danger="true"] {
+  border-color: var(--danger);
+}
+
+.ink-btn-primary {
+  background: var(--accent);
+  color: var(--chip-ink);
+}
+
+.ink-btn-danger {
+  background: var(--danger);
+  color: var(--chip-ink);
+}
+
+/* pastel pill for tags/interests — TagStamp.jsx renders this. When rendered
+   as a <button> (the selectable interest-picker variant) this deliberately
+   overrides the global button treatment — a pill toggles, it doesn't press
+   like a real button. */
+.tag-stamp {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  color: var(--line);
+  background: var(--paper-well);
+  cursor: default;
+  box-shadow: none;
+  transition: none;
+}
+.tag-stamp:hover,
+.tag-stamp:active {
+  box-shadow: none;
+  transform: none;
+}
+.tag-stamp[data-selectable="true"] {
+  cursor: pointer;
+  background: none;
+}
+.tag-stamp[data-selected="true"] {
+  background: var(--tag-color, var(--paper-well));
+  color: var(--chip-ink);
+}
+
+/* filled pastel chip for role/request status — StatusStamp.jsx. Always
+   carries a colored fill (see --chip-ink note above for why the text color
+   doesn't come from --line here). */
+.status-stamp {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  border: 2.5px solid var(--line);
+  border-radius: 8px;
+  color: var(--chip-ink);
+  background: var(--tag-color, var(--paper-well));
+}
+.status-stamp[data-muted="true"] {
+  background: none;
+  color: var(--line-soft);
+  border-color: var(--line-soft);
+}
+
+/* ---------- auth screens (Login, Register, Forgot/Reset password) ---------- */
+
+.auth-shell {
+  min-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px 0;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+}
+.auth-card h1 {
+  font-size: 1.6rem;
+}
+.auth-footer {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--line-soft);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---------- persistent chrome ---------- */
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 20px;
+}
+.top-bar h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.top-bar-title-hero {
+  margin: 0;
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  line-height: 1;
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--nav-height);
+  background: var(--paper-card);
+  border-top: 2.4px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  z-index: 10;
+}
+@media (min-width: 860px) {
+  /* Same component, flipped to a horizontal topbar — icon + label always
+     visible, no collapse/expand. A long label crowding a narrow vertical
+     rail was the reason to collapse it; that constraint doesn't exist once
+     the bar runs the full window width instead. */
+  .bottom-nav {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: auto;
+    width: auto;
+    height: var(--nav-height-desktop);
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    padding: 0 40px;
+    border-top: none;
+    border-bottom: 2.4px solid var(--line);
+  }
+}
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 6px 10px;
+  color: var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  text-decoration: none;
+  letter-spacing: 0.03em;
+}
+@media (min-width: 860px) {
+  .bottom-nav-item {
+    flex-direction: row;
+    justify-content: center;
+    gap: 10px;
+    width: auto;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 2px solid transparent;
+  }
+  .bottom-nav-item svg {
+    width: 22px;
+    height: 22px;
+    flex: none;
+  }
+  .bottom-nav-item span {
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .bottom-nav-item[aria-current="page"] {
+    background: var(--accent);
+    border-color: var(--line);
+    color: var(--chip-ink);
+  }
+}
+.bottom-nav-item:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  color: var(--line);
+}
+.bottom-nav-item:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+.bottom-nav-item[aria-current="page"] {
+  color: var(--line);
+}
+
+/* ---------- quests feed ---------- */
+
+.quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 640px;
+}
+
+/* Each quest is a row: a node column (thumbnail + connecting thread down to
+   the next node) beside a content column (the actual card). align-items
+   stretch (the flex default) is what makes the thread automatically grow
+   to match the card's height when it expands — no JS measurement needed. */
+.quest-row {
+  display: flex;
+  gap: 14px;
+}
+
+.quest-node-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 52px;
+  flex: none;
+}
+
+.quest-thread {
+  position: relative; /* anchors the absolutely-positioned <svg> inside —
+    see RoughTexture.jsx for why the svg is sized via inset:0 rather than a
+    percentage height. */
+  flex: 1;
+  min-height: 0; /* flex items default to min-height:auto, which would
+    otherwise floor shrinking at whatever intrinsic size the (now
+    out-of-flow) contents suggest. */
+  width: 24px;
+  margin: 2px 0;
+  overflow: hidden;
+}
+
+.quest-content-col {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  margin-bottom: 20px;
+}
+
+.quest-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  box-shadow: none;
+  border-radius: 0;
+  font: inherit;
+}
+/* button.quest-card-head, not just .quest-card-head — the global
+   button:hover:not(:disabled) rule below is (type + 2 pseudo-classes), a
+   plain class+pseudo selector doesn't out-specify that, so the hard press
+   shadow was leaking through as an ugly box around the row on hover. */
+button.quest-card-head:hover:not(:disabled),
+button.quest-card-head:active:not(:disabled) {
+  box-shadow: none;
+  transform: none;
+}
+
+.quest-thumb {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper-well);
+}
+
+.org-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  border: 2.2px solid var(--line);
+  background: var(--tag-color, var(--paper-well));
+  color: var(--chip-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  text-transform: uppercase;
+}
+
+.quest-card-titles {
+  flex: 1;
+  min-width: 0;
+}
+.quest-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1rem;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  margin: 0;
+}
+.quest-org-line {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--line-soft);
+  margin-top: 3px;
+}
+
+.quest-chevron {
+  flex: none;
+  color: var(--line-soft);
+  transition: transform 0.15s ease;
+}
+.quest-chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .quest-chevron {
+    transition: none;
+  }
+}
+
+.quest-card-body {
+  padding: 14px 16px 16px;
+  border-top: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.quest-card-body p {
+  margin: 0;
+}
+
+.quest-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quest-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 32px 20px 40px;
+  text-align: center;
+  color: var(--line-soft);
+}
+.quest-empty h2 {
+  color: var(--line);
+  margin: 12px 0 4px;
+}
+
+/* bold hero stat tiles — a flat saturated color block, not a pastel-outline
+   card, deliberately: this is the one "shout" moment at the top of the
+   feed, everything below it stays quieter by comparison. */
+.stat-hero-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 18px;
+  max-width: 640px;
+}
+.stat-hero-tile {
+  border: 2.2px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 4px 4px 0 var(--shadow);
+  padding: 16px 18px;
+  color: var(--chip-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-hero-number {
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  line-height: 1;
+}
+.stat-hero-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tag-filter-row {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 8px;
+  padding-bottom: 4px;
+  margin-bottom: 18px;
+  max-width: 640px;
+  scrollbar-width: thin;
+}
+.tag-filter-row .tag-stamp {
+  flex: none;
+}
+
+/* ---------- utilitarian data lists (org/admin dashboards) — dense rows,
+   not illustrated cards, since these screens are operated, not browsed ---------- */
+
+.data-list {
+  padding: 0;
+  overflow: hidden;
+}
+.data-row {
+  padding: 14px 16px;
+  border-bottom: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.data-row:last-child {
+  border-bottom: none;
+}
+.data-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.data-row-title {
+  font-weight: 700;
+  margin: 0;
+}
+.data-row-sub {
+  margin: 2px 0 0;
+  font-size: 0.9rem;
+}
+.data-stat {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--line-soft);
+  white-space: nowrap;
+  flex: none;
+}
+.data-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.data-row-actions button {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.data-row-actions button:hover:not(:disabled) {
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.data-row-actions button:active:not(:disabled) {
+  box-shadow: 0 0 0 var(--shadow);
+}
+.data-sublist {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  background: var(--paper-well);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* a data-row that's also a <button> (AllUsers' clickable rows) needs to
+   shed the global button chrome (full border, radius, hard shadow) so it
+   matches the plain-div rows used everywhere else in the same list. The
+   compound selector's specificity beats both `button` and `.data-row`
+   individually, so this wins regardless of source order. */
+button.data-row {
+  border: none;
+  border-bottom: 2px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 400;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+}
+button.data-row:last-child {
+  border-bottom: none;
+}
+button.data-row:hover:not(:disabled),
+button.data-row:active:not(:disabled) {
+  box-shadow: none;
+  transform: none;
+  background: var(--paper-well);
+}
+
+/* ---------- ambient particles ---------- */
+
+.ambient-particles {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* negative, not 0 — a position:fixed layer with z-index:0 actually paints
+     ABOVE plain non-positioned content per CSS stacking order. Negative
+     puts it behind everything else inside #root's stacking context
+     (#root itself is position:relative + z-index:1). */
+  z-index: -1;
+}
+.ambient-particle {
+  position: absolute;
+  top: 100%;
+  border-radius: 50%;
+  opacity: 0;
+  animation-name: ambient-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes ambient-float {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-55vh) translateX(14px) rotate(160deg);
+  }
+  88% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-115vh) translateX(-12px) rotate(320deg);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-particle {
+    animation: none;
+    opacity: 0.15;
+    top: 30%;
+  }
+}
+
+/* ---------- dashboard grid (org today; reusable wherever a sidebar +
+   main-content split makes sense) — stacked on mobile, a real two-column
+   dashboard once there's room for one. ---------- */
+
+.dash-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+@media (min-width: 860px) {
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    align-items: start;
+    gap: 32px;
+  }
+  .dash-sidebar {
+    position: sticky;
+    top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+/* ---------- loading state ---------- */
+
+.loading-spinner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 0;
+  color: var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.loading-spinner-ring {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  border: 3px solid var(--paper-well);
+  border-top-color: var(--line);
+}
+
+/* ---------- Settings page ---------- */
+
+/* Stacked full-width sections, not a side-by-side grid — each card spans
+   the full dashboard content width (same as org/admin) rather than
+   shrinking to half on wide screens. */
+.settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.theme-option-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.theme-option[data-active="true"] {
+  background: var(--accent);
+  color: var(--chip-ink);
+}
+
+/* ---------- collapsible "create" affordance (org quest form) ---------- */
+
+.quest-create-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px;
+  margin-bottom: 16px;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-style: dashed;
+  border-width: 3px;
+}
