@@ -6,6 +6,8 @@
 #   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
 #   python seed_quests.py
 
+from datetime import datetime, timedelta, timezone
+
 from firebase_admin import firestore, initialize_app
 
 SAMPLE_QUESTS = [
@@ -19,9 +21,14 @@ SAMPLE_QUESTS = [
 if __name__ == "__main__":
     initialize_app()
     db = firestore.client()
-    for quest in SAMPLE_QUESTS:
+    # Spread a week apart so RSVP/check-in testing has a mix of quests with
+    # different eventDate windows, rather than all expiring at once.
+    now = datetime.now(timezone.utc)
+    for i, quest in enumerate(SAMPLE_QUESTS):
         db.collection("quests").add({
             **quest,
+            "eventDate": now + timedelta(days=7 * (i + 1)),
+            "eventEndTime": None,
             "orgId": None,
             "orgName": "Neighborhood",
             "isDefault": True,

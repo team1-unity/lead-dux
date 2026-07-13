@@ -15,6 +15,13 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
+import { EventDateFields } from '@shared/EventDateFields.jsx';
+
+function formatEventDate(isoOrTimestamp) {
+  if (!isoOrTimestamp) return null;
+  const date = isoOrTimestamp.toDate ? isoOrTimestamp.toDate() : new Date(isoOrTimestamp);
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
 
 const ROLES = ['onboarding_user', 'user', 'onboarding_org', 'pending_org', 'organization', 'admin'];
 
@@ -227,6 +234,8 @@ function QuestsAdmin() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventEndTime, setEventEndTime] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
@@ -249,10 +258,14 @@ function QuestsAdmin() {
         title,
         description,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        eventDate,
+        eventEndTime: eventEndTime || null,
       });
       setTitle('');
       setDescription('');
       setTags('');
+      setEventDate('');
+      setEventEndTime('');
       await load();
     } catch (err) {
       setError(err.message || 'Something went wrong.');
@@ -290,6 +303,12 @@ function QuestsAdmin() {
             Tags (comma separated)
             <input value={tags} onChange={(e) => setTags(e.target.value)} />
           </label>
+          <EventDateFields
+            eventDate={eventDate}
+            eventEndTime={eventEndTime}
+            onEventDateChange={setEventDate}
+            onEventEndTimeChange={setEventEndTime}
+          />
           {error && <p className="box-danger">{error}</p>}
           <StampButton type="submit" variant="primary" disabled={submitting}>
             {submitting ? 'Adding...' : 'Add quest'}
@@ -309,6 +328,7 @@ function QuestsAdmin() {
               <span className="data-stat">{(q.rsvpd || []).length} RSVP'd</span>
             </div>
             <p className="data-row-sub">{q.isDefault ? 'Default neighborhood quest' : q.orgName || ''}</p>
+            {formatEventDate(q.eventDate) && <p className="data-row-sub">{formatEventDate(q.eventDate)}</p>}
             <p className="data-row-sub">{q.description}</p>
             <div className="data-row-actions">
               <StampButton type="button" variant="danger" onClick={() => remove(q.id)} disabled={busyId === q.id}>

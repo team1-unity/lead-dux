@@ -33,6 +33,16 @@ service cloud.firestore {
     match /quests/{questId} {
       allow read: if request.auth != null;
       allow write: if false;
+
+      // Check-in tokens. Nobody reads or writes these directly — the
+      // member gets their QR code as an image from rsvp_to_quest/
+      // get_quest_qr, and the organization validates a scan through
+      // check_in_attendee. Explicitly denied (rather than just relying on
+      // "no rule matches") so it's clear this is deliberate, the same as
+      // config/** below.
+      match /attendance/{uid} {
+        allow read, write: if false;
+      }
     }
 
     // Admin allowlist (config/admins) and anything else under config/ —

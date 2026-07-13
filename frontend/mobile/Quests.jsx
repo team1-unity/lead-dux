@@ -3,7 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { motion, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callRsvpToQuest, callCancelRsvp } from '@shared/fetch.jsx';
+import { callRsvpToQuest, callCancelRsvp, callGetQuestQr } from '@shared/fetch.jsx';
 import { RoughTexture } from '@shared/RoughTexture.jsx';
 import { RoughFrame } from '@shared/RoughFrame.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
@@ -11,6 +11,44 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { IconChevron } from '@shared/icons.jsx';
+
+function formatEventDate(isoOrTimestamp) {
+  if (!isoOrTimestamp) return null;
+  const date = isoOrTimestamp.toDate ? isoOrTimestamp.toDate() : new Date(isoOrTimestamp);
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+// The member's own check-in QR code for a quest they've RSVP'd to. Fetched
+// lazily (only once the card is expanded and this is rendered) rather than
+// alongside the quest list itself, since most quests in the list aren't
+// ones this member RSVP'd to.
+function QuestQrCode({ questId }) {
+  const [state, setState] = useState({ loading: true, qr: null, expired: false, error: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    callGetQuestQr(questId)
+      .then((data) => {
+        if (!cancelled) setState({ loading: false, qr: data.qr, expired: data.expired, error: null });
+      })
+      .catch((err) => {
+        if (!cancelled) setState({ loading: false, qr: null, expired: false, error: err.message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [questId]);
+
+  if (state.loading) return <LoadingSpinner label="Loading your check-in code..." />;
+  if (state.error) return <p className="box-danger">{state.error}</p>;
+
+  return (
+    <div className="quest-qr" style={{ textAlign: 'center', marginTop: 12 }}>
+      <img src={state.qr} alt="Your check-in QR code" style={{ maxWidth: 220, width: '100%' }} />
+      {state.expired && <p className="box-warning">This code has expired.</p>}
+    </div>
+  );
+}
 
 // One entrance per row, staggered from the parent's transition — cheap
 // enough at feed scale (a few dozen quests) and gives the list a sense of
@@ -49,6 +87,7 @@ function drawEmptyIllustration(rc, w, h) {
 // column independently of whether any given card is expanded.
 function QuestCard({ quest, isRsvpd, canRsvp, busy, onToggleRsvp, isLast }) {
   const [open, setOpen] = useState(false);
+  const [showQr, setShowQr] = useState(false);
 
   return (
     <motion.li className="quest-row" variants={itemVariants}>
@@ -74,6 +113,9 @@ function QuestCard({ quest, isRsvpd, canRsvp, busy, onToggleRsvp, isLast }) {
 
         {open && (
           <div className="quest-card-body">
+            {formatEventDate(quest.eventDate) && (
+              <p className="quest-org-line">{formatEventDate(quest.eventDate)}</p>
+            )}
             <p>{quest.description}</p>
             <div className="quest-tags">
               {(quest.tags || []).map((tag) => (
@@ -83,15 +125,26 @@ function QuestCard({ quest, isRsvpd, canRsvp, busy, onToggleRsvp, isLast }) {
               ))}
             </div>
             {canRsvp && (
-              <StampButton
-                type="button"
-                variant={isRsvpd ? 'danger' : 'primary'}
-                onClick={() => onToggleRsvp(quest)}
-                disabled={busy}
-              >
-                {busy ? 'Saving...' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
-              </StampButton>
+              <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
+                <StampButton
+                  type="button"
+                  variant={isRsvpd ? 'danger' : 'primary'}
+                  onClick={() => {
+                    setShowQr(false);
+                    onToggleRsvp(quest);
+                  }}
+                  disabled={busy}
+                >
+                  {busy ? 'Saving...' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
+                </StampButton>
+                {isRsvpd && (
+                  <StampButton type="button" onClick={() => setShowQr((v) => !v)}>
+                    {showQr ? 'Hide my check-in code' : 'Show my check-in code'}
+                  </StampButton>
+                )}
+              </div>
             )}
+            {isRsvpd && showQr && <QuestQrCode questId={quest.id} />}
           </div>
         )}
       </div>

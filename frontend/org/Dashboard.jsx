@@ -10,8 +10,16 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
+import { EventDateFields } from '@shared/EventDateFields.jsx';
+import { QuestScanner } from '@shared/QuestScanner.jsx';
 import { hashTone } from '@shared/tagTones.js';
 import { IconPlus } from '@shared/icons.jsx';
+
+function formatEventDate(isoOrTimestamp) {
+  if (!isoOrTimestamp) return null;
+  const date = isoOrTimestamp.toDate ? isoOrTimestamp.toDate() : new Date(isoOrTimestamp);
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
 
 // Lets an organization set the location areas and activity/event types it
 // operates in — separate from a single quest's own tags, these describe
@@ -129,11 +137,14 @@ function OrgQuests() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventEndTime, setEventEndTime] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [attendeesFor, setAttendeesFor] = useState(null);
   const [attendees, setAttendees] = useState(null);
+  const [scanningFor, setScanningFor] = useState(null);
 
   async function load() {
     const snap = await getDocs(query(collection(db, 'quests'), where('orgId', '==', user.uid)));
@@ -160,10 +171,14 @@ function OrgQuests() {
         title,
         description,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        eventDate,
+        eventEndTime: eventEndTime || null,
       });
       setTitle('');
       setDescription('');
       setTags('');
+      setEventDate('');
+      setEventEndTime('');
       setCreating(false);
       await load();
     } catch (err) {
@@ -195,6 +210,15 @@ function OrgQuests() {
       setAttendeesFor(id);
     } finally {
       setBusyId(null);
+    }
+  }
+
+  // After a successful scan, re-fetch the attendee list if it's currently
+  // open for this quest so the checked-in status updates without the org
+  // having to close and reopen it.
+  async function handleScanResult(questId) {
+    if (attendeesFor === questId) {
+      setAttendees(await callListQuestAttendees(questId));
     }
   }
 
@@ -230,6 +254,12 @@ function OrgQuests() {
                 Tags (comma separated)
                 <input value={tags} onChange={(e) => setTags(e.target.value)} />
               </label>
+              <EventDateFields
+                eventDate={eventDate}
+                eventEndTime={eventEndTime}
+                onEventDateChange={setEventDate}
+                onEventEndTimeChange={setEventEndTime}
+              />
               {error && <p className="box-danger">{error}</p>}
               <div className="flex gap-sm">
                 <StampButton type="submit" variant="primary" disabled={submitting}>
@@ -272,21 +302,36 @@ function OrgQuests() {
                 <p className="data-row-title">{quest.title}</p>
                 <span className="data-stat">{(quest.rsvpd || []).length} RSVP'd</span>
               </div>
+              {formatEventDate(quest.eventDate) && (
+                <p className="data-row-sub">{formatEventDate(quest.eventDate)}</p>
+              )}
               <p className="data-row-sub">{quest.description}</p>
               <div className="data-row-actions">
                 <StampButton type="button" onClick={() => toggleAttendees(quest.id)} disabled={busyId === quest.id}>
                   {attendeesFor === quest.id ? 'Hide attendees' : 'View attendees'}
                 </StampButton>
+                <StampButton
+                  type="button"
+                  variant="primary"
+                  onClick={() => setScanningFor(scanningFor === quest.id ? null : quest.id)}
+                >
+                  {scanningFor === quest.id ? 'Close scanner' : 'Scan to check in'}
+                </StampButton>
                 <StampButton type="button" variant="danger" onClick={() => removeQuest(quest.id)} disabled={busyId === quest.id}>
                   {busyId === quest.id ? 'Working...' : 'Delete'}
                 </StampButton>
               </div>
+              {scanningFor === quest.id && (
+                <QuestScanner questId={quest.id} onCheckedIn={() => handleScanResult(quest.id)} />
+              )}
               {attendeesFor === quest.id && attendees && (
                 <ul className="data-sublist">
                   {attendees.length === 0 && <li>No RSVPs yet.</li>}
                   {attendees.map((a) => (
                     <li key={a.uid}>
                       {a.name || 'Unnamed'} — {a.email}
+                      {' — '}
+                      {a.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
                     </li>
                   ))}
                 </ul>

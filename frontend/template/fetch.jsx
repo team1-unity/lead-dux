@@ -86,16 +86,19 @@ export async function callSubmitOrganizationRequest({ name, phone, location, rea
 }
 
 // organization: creates a quest owned by the caller's organization.
-export async function callCreateQuest({ title, description, tags }) {
+// eventDate/eventEndTime are ISO datetime strings (see EventDateFields) —
+// eventEndTime is optional; the Cloud Function defaults the QR expiry to a
+// few hours past eventDate when it's omitted.
+export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime }) {
   const fn = httpsCallable(functions, 'create_quest');
-  const result = await fn({ title, description, tags });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime });
   return result.data;
 }
 
 // admin: creates a quest with no owning organization, shown to everyone.
-export async function callCreateDefaultQuest({ title, description, tags }) {
+export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime }) {
   const fn = httpsCallable(functions, 'create_default_quest');
-  const result = await fn({ title, description, tags });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime });
   return result.data;
 }
 
@@ -117,6 +120,22 @@ export async function callRsvpToQuest(questId) {
 export async function callCancelRsvp(questId) {
   const fn = httpsCallable(functions, 'cancel_rsvp');
   const result = await fn({ questId });
+  return result.data;
+}
+
+// user: re-fetches the caller's own check-in QR code for a quest they've
+// already RSVP'd to (rsvp_to_quest returns the same shape the first time).
+export async function callGetQuestQr(questId) {
+  const fn = httpsCallable(functions, 'get_quest_qr');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): validates a scanned QR
+// code's {questId, uid, token} payload and marks that attendee checked in.
+export async function callCheckInAttendee({ questId, uid, token }) {
+  const fn = httpsCallable(functions, 'check_in_attendee');
+  const result = await fn({ questId, uid, token });
   return result.data;
 }
 

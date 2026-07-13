@@ -1,3 +1,10 @@
+import base64
+import json
+import secrets
+from datetime import datetime, timedelta, timezone
+from io import BytesIO
+
+import qrcode
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import auth, firestore, initialize_app
@@ -38,6 +45,73 @@ def _require_role(req: https_fn.CallableRequest, *roles):
 
 def _require_admin(req: https_fn.CallableRequest):
     _require_role(req, "admin")
+
+
+# Attendance / QR check-in ---------------------------------------------------
+#
+# A quest's own doc gets `eventDate` (required) and `eventEndTime` (optional)
+# at creation time (see create_quest/create_default_quest below). Each RSVP
+# gets a sibling doc at quests/{questId}/attendance/{uid} holding a random
+# token. That token is never written anywhere the client can read directly —
+# it only ever leaves the server embedded in a QR code image, returned over
+# the same callable-function response channel every other action here
+# already uses. Scanning the code is just handing that same token back via
+# check_in_attendee.
+
+DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
+
+
+def _to_utc(value: datetime) -> datetime:
+    # Firestore gives back timezone-aware datetimes for Timestamp fields;
+    # this just guards against a naive one slipping in some other way.
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _qr_expires_at(event_date: datetime, event_end_time: datetime | None) -> datetime:
+    if event_end_time is not None:
+        return _to_utc(event_end_time)
+    return _to_utc(event_date) + timedelta(hours=DEFAULT_EVENT_WINDOW_HOURS)
+
+
+def _make_qr_data_uri(quest_id: str, uid: str, token: str) -> str:
+    payload = json.dumps({"questId": quest_id, "uid": uid, "token": token})
+    image = qrcode.make(payload)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _attendance_ref(db, quest_id: str, uid: str):
+    return db.collection("quests").document(quest_id).collection("attendance").document(uid)
+
+
+def _delete_quest(quest_ref):
+    # Firestore never cascades a subcollection when its parent doc is
+    # deleted — quests/{id}/attendance/* would otherwise sit there
+    # orphaned (and readable by nobody, but still consuming storage and
+    # holding onto tokens) forever. Small subcollection at this app's
+    # scale, so a plain loop is fine; a bulk-delete API would be worth it
+    # if quests ever had thousands of RSVPs each.
+    for doc in quest_ref.collection("attendance").stream():
+        doc.reference.delete()
+    quest_ref.delete()
+
+
+def _parse_event_datetime(value, field_name: str) -> datetime:
+    if not value:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"{field_name} is required and must be an ISO datetime string.",
+        )
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"{field_name} must be an ISO datetime string.",
+        )
+    return _to_utc(parsed)
 
 
 # Callable from the frontend with httpsCallable(functions, "set_user_role").
@@ -228,7 +302,7 @@ def delete_organization(req: https_fn.CallableRequest) -> dict:
     db = firestore.client()
     db.collection("organizations").document(target_uid).delete()
     for quest_doc in db.collection("quests").where("orgId", "==", target_uid).stream():
-        quest_doc.reference.delete()
+        _delete_quest(quest_doc.reference)
     auth.set_custom_user_claims(target_uid, {"role": "user"})
 
     return {"success": True, "targetUid": target_uid}
@@ -275,11 +349,22 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
     title = req.data.get("title")
     description = req.data.get("description")
     tags = req.data.get("tags") or []
+    event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate")
+    event_end_time = (
+        _parse_event_datetime(req.data.get("eventEndTime"), "eventEndTime")
+        if req.data.get("eventEndTime")
+        else None
+    )
 
     if not title or not description:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "title and description are required.",
+        )
+    if event_end_time is not None and event_end_time <= event_date:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "eventEndTime must be after eventDate.",
         )
 
     db = firestore.client()
@@ -291,6 +376,8 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
         "title": title,
         "description": description,
         "tags": tags,
+        "eventDate": event_date,
+        "eventEndTime": event_end_time,
         "orgId": req.auth.uid,
         "orgName": org_name,
         "isDefault": False,
@@ -309,11 +396,22 @@ def create_default_quest(req: https_fn.CallableRequest) -> dict:
     title = req.data.get("title")
     description = req.data.get("description")
     tags = req.data.get("tags") or []
+    event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate")
+    event_end_time = (
+        _parse_event_datetime(req.data.get("eventEndTime"), "eventEndTime")
+        if req.data.get("eventEndTime")
+        else None
+    )
 
     if not title or not description:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "title and description are required.",
+        )
+    if event_end_time is not None and event_end_time <= event_date:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "eventEndTime must be after eventDate.",
         )
 
     doc_ref = firestore.client().collection("quests").document()
@@ -321,6 +419,8 @@ def create_default_quest(req: https_fn.CallableRequest) -> dict:
         "title": title,
         "description": description,
         "tags": tags,
+        "eventDate": event_date,
+        "eventEndTime": event_end_time,
         "orgId": None,
         "orgName": "Neighborhood",
         "isDefault": True,
@@ -360,7 +460,7 @@ def delete_quest(req: https_fn.CallableRequest) -> dict:
             "You can only delete your own organization's quests.",
         )
 
-    ref.delete()
+    _delete_quest(ref)
     return {"success": True}
 
 
@@ -378,18 +478,50 @@ def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
             "questId is required.",
         )
 
-    ref = firestore.client().collection("quests").document(quest_id)
-    if not ref.get().exists:
+    db = firestore.client()
+    ref = db.collection("quests").document(quest_id)
+    snap = ref.get()
+    if not snap.exists:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.NOT_FOUND,
             f"No quest {quest_id}.",
         )
 
+    quest = snap.to_dict()
+    event_date = quest.get("eventDate")
+    if event_date is None:
+        # Predates the eventDate field (see create_quest/create_default_quest)
+        # — nothing to anchor a QR expiry to, and there's no edit-quest UI to
+        # backfill one, so this quest needs to be recreated instead.
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This quest has no event date on file and can't accept RSVPs. Ask the organization to recreate it.",
+        )
+
     ref.update({"rsvpd": firestore.ArrayUnion([req.auth.uid])})
-    return {"success": True}
+
+    # A fresh token every time — cancel_rsvp always deletes the attendance
+    # doc first, so re-RSVPing after a cancel never reuses an old token.
+    token = secrets.token_urlsafe(24)
+    qr_expires_at = _qr_expires_at(event_date, quest.get("eventEndTime"))
+    _attendance_ref(db, quest_id, req.auth.uid).set({
+        "token": token,
+        "status": "rsvpd",
+        "qrExpiresAt": qr_expires_at,
+        "checkedInAt": None,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    })
+
+    return {
+        "success": True,
+        "qr": _make_qr_data_uri(quest_id, req.auth.uid, token),
+        "qrExpiresAt": qr_expires_at.isoformat(),
+    }
 
 
-# The inverse of rsvp_to_quest.
+# The inverse of rsvp_to_quest. Deleting the attendance doc (rather than
+# e.g. marking it cancelled) means a later re-RSVP always starts from a
+# clean slate — see the comment in rsvp_to_quest.
 @https_fn.on_call()
 def cancel_rsvp(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -401,9 +533,113 @@ def cancel_rsvp(req: https_fn.CallableRequest) -> dict:
             "questId is required.",
         )
 
-    ref = firestore.client().collection("quests").document(quest_id)
-    ref.update({"rsvpd": firestore.ArrayRemove([req.auth.uid])})
+    db = firestore.client()
+    db.collection("quests").document(quest_id).update({"rsvpd": firestore.ArrayRemove([req.auth.uid])})
+    _attendance_ref(db, quest_id, req.auth.uid).delete()
     return {"success": True}
+
+
+# Callable from the quest list — re-renders the caller's own QR code without
+# minting a new token, so leaving the page and coming back (or opening it on
+# a second device) still shows a scannable code instead of a dead end. No
+# targetUid, same as update_interests — this can only ever read the caller's
+# own attendance doc.
+@https_fn.on_call()
+def get_quest_qr(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    quest_id = req.data.get("questId")
+    if not quest_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId is required.",
+        )
+
+    db = firestore.client()
+    snap = _attendance_ref(db, quest_id, req.auth.uid).get()
+    if not snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "You haven't RSVP'd to this quest.",
+        )
+
+    attendance = snap.to_dict()
+    qr_expires_at = attendance["qrExpiresAt"]
+    return {
+        "qr": _make_qr_data_uri(quest_id, req.auth.uid, attendance["token"]),
+        "qrExpiresAt": qr_expires_at.isoformat(),
+        "status": attendance["status"],
+        "expired": datetime.now(timezone.utc) > _to_utc(qr_expires_at),
+    }
+
+
+# Callable from the org dashboard's "scan to check in" screen (own quests
+# only) or the admin dashboard (any quest). questId/uid/token come from
+# decoding the scanned QR image client-side — see _make_qr_data_uri for the
+# payload shape. Idempotent: scanning an already-checked-in code again
+# succeeds with alreadyCheckedIn=True rather than erroring, since a double
+# scan at the door is an expected accident, not an attack.
+@https_fn.on_call()
+def check_in_attendee(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    quest_id = req.data.get("questId")
+    uid = req.data.get("uid")
+    token = req.data.get("token")
+    if not quest_id or not uid or not token:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId, uid, and token are required.",
+        )
+
+    db = firestore.client()
+    quest_snap = db.collection("quests").document(quest_id).get()
+    if not quest_snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            f"No quest {quest_id}.",
+        )
+
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and quest_snap.to_dict().get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only check in attendees for your own organization's quests.",
+        )
+
+    attendance_ref = _attendance_ref(db, quest_id, uid)
+    attendance_snap = attendance_ref.get()
+    if not attendance_snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "No RSVP found for this QR code.",
+        )
+
+    attendance = attendance_snap.to_dict()
+    # Constant-time comparison — this token is a bearer credential, so
+    # timing differences on a naive `!=` could in principle leak how many
+    # leading characters matched.
+    if not secrets.compare_digest(attendance["token"], token):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Invalid QR code.",
+        )
+    if datetime.now(timezone.utc) > _to_utc(attendance["qrExpiresAt"]):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This QR code has expired.",
+        )
+
+    user_snap = db.collection("users").document(uid).get()
+    user_data = user_snap.to_dict() if user_snap.exists else {}
+    attendee = {"uid": uid, "name": user_data.get("name"), "email": user_data.get("email")}
+
+    if attendance["status"] == "checked_in":
+        return {"success": True, "alreadyCheckedIn": True, "attendee": attendee}
+
+    attendance_ref.update({"status": "checked_in", "checkedInAt": firestore.SERVER_TIMESTAMP})
+    return {"success": True, "alreadyCheckedIn": False, "attendee": attendee}
 
 
 # Callable from the org dashboard's "view attendees" button (own quests
@@ -438,14 +674,23 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
             "You can only view attendees for your own organization's quests.",
         )
 
+    attendance_by_uid = {
+        doc.id: doc.to_dict()
+        for doc in db.collection("quests").document(quest_id).collection("attendance").stream()
+    }
+
     attendees = []
     for uid in quest.get("rsvpd", []):
         user_snap = db.collection("users").document(uid).get()
         user_data = user_snap.to_dict() if user_snap.exists else {}
+        attendance = attendance_by_uid.get(uid)
+        checked_in_at = attendance.get("checkedInAt") if attendance else None
         attendees.append({
             "uid": uid,
             "name": user_data.get("name"),
             "email": user_data.get("email"),
+            "status": attendance.get("status") if attendance else "rsvpd",
+            "checkedInAt": checked_in_at.isoformat() if checked_in_at else None,
         })
 
     return {"attendees": attendees}
@@ -513,11 +758,12 @@ def delete_account(req: https_fn.CallableRequest) -> dict:
 
     if role == "organization":
         for quest_doc in db.collection("quests").where("orgId", "==", uid).stream():
-            quest_doc.reference.delete()
+            _delete_quest(quest_doc.reference)
         db.collection("organizations").document(uid).delete()
     else:
         for quest_doc in db.collection("quests").where("rsvpd", "array_contains", uid).stream():
             quest_doc.reference.update({"rsvpd": firestore.ArrayRemove([uid])})
+            _attendance_ref(db, quest_doc.id, uid).delete()
 
     # Safe unconditionally — Firestore .delete() on a doc that doesn't exist
     # (e.g. no ORGREQ was ever filed, or the account is an admin with no
