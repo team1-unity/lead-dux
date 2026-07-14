@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
 import {
@@ -8,13 +8,16 @@ import {
   callSetUserRole,
   callDeleteOrganization,
   callCreateDefaultQuest,
-  callDeleteQuest,
+  callCreateRecurringQuest,
 } from '@shared/fetch.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
+import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
+import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
+import { QuestSeriesRow } from '@shared/QuestSeriesRow.jsx';
 
 const ROLES = ['onboarding_user', 'user', 'onboarding_org', 'pending_org', 'organization', 'admin'];
 
@@ -222,52 +225,80 @@ function Organizations() {
   );
 }
 
+// One row per series here too (see @shared/QuestSeriesRow.jsx) — a
+// recurring default quest, or a recurring quest an organization created,
+// both show as a single row with a date picker and the same
+// attendees/reviews/scanner/delete-series features the org dashboard has,
+// rather than one flat un-grouped row per date the way this used to work.
 function QuestsAdmin() {
   const [quests, setQuests] = useState(null);
+  const [seriesAggregates, setSeriesAggregates] = useState(new Map());
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventEndTime, setEventEndTime] = useState('');
+  const [timezone, setTimezone] = useState(detectTimezone());
+  const [location, setLocation] = useState('');
+  const [capacity, setCapacity] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [frequency, setFrequency] = useState('weekly');
+  const [until, setUntil] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
-    const snap = await getDocs(collection(db, 'quests'));
-    setQuests(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const [questsSnap, seriesSnap] = await Promise.all([
+      getDocs(collection(db, 'quests')),
+      getDocs(collection(db, 'questSeries')),
+    ]);
+    setQuests(questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    setSeriesAggregates(new Map(seriesSnap.docs.map((d) => [d.id, d.data()])));
   }
 
   useEffect(() => {
     load();
   }, []);
 
+  const seriesList = useMemo(
+    () => (quests ? attachSeriesRatings(groupBySeries(quests), seriesAggregates) : []),
+    [quests, seriesAggregates],
+  );
+
   async function createDefault(e) {
     e.preventDefault();
     setError('');
     setSubmitting(true);
     try {
-      await callCreateDefaultQuest({
+      const base = {
         title,
         description,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-      });
+        eventDate,
+        eventEndTime: eventEndTime || null,
+        timezone,
+        location,
+        capacity: capacity ? Number(capacity) : null,
+      };
+      if (isRecurring) {
+        await callCreateRecurringQuest({ ...base, frequency, until });
+      } else {
+        await callCreateDefaultQuest(base);
+      }
       setTitle('');
       setDescription('');
       setTags('');
+      setEventDate('');
+      setEventEndTime('');
+      setLocation('');
+      setCapacity('');
+      setIsRecurring(false);
+      setUntil('');
       await load();
     } catch (err) {
       setError(err.message || 'Something went wrong.');
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function remove(id) {
-    setBusyId(id);
-    try {
-      await callDeleteQuest(id);
-      await load();
-    } finally {
-      setBusyId(null);
     }
   }
 
@@ -290,32 +321,56 @@ function QuestsAdmin() {
             Tags (comma separated)
             <input value={tags} onChange={(e) => setTags(e.target.value)} />
           </label>
+          <label>
+            Location
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="123 Main St or venue name" />
+          </label>
+          <label>
+            Capacity (optional)
+            <input type="number" min="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="Unlimited" />
+          </label>
+          <EventDateFields
+            eventDate={eventDate}
+            eventEndTime={eventEndTime}
+            timezone={timezone}
+            onEventDateChange={setEventDate}
+            onEventEndTimeChange={setEventEndTime}
+            onTimezoneChange={setTimezone}
+          />
+          <label className="flex items-center gap-sm">
+            <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
+            Recurring event
+          </label>
+          {isRecurring && (
+            <>
+              <label>
+                Repeats
+                <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+              <label>
+                Until
+                <input type="date" required value={until} onChange={(e) => setUntil(e.target.value)} />
+              </label>
+            </>
+          )}
           {error && <p className="box-danger">{error}</p>}
           <StampButton type="submit" variant="primary" disabled={submitting}>
-            {submitting ? 'Adding...' : 'Add quest'}
+            {submitting ? 'Adding...' : isRecurring ? 'Add recurring quest' : 'Add quest'}
           </StampButton>
         </form>
       </div>
 
       <div className="section-heading" style={{ marginBottom: 8 }}>
         <h2 style={{ marginBottom: 0 }}>All quests</h2>
-        <span className="data-stat">{quests.length} total</span>
+        <span className="data-stat">{seriesList.length} total</span>
       </div>
       <div className="ink-card data-list">
-        {quests.map((q) => (
-          <div key={q.id} className="data-row">
-            <div className="data-row-head">
-              <p className="data-row-title">{q.title}</p>
-              <span className="data-stat">{(q.rsvpd || []).length} RSVP'd</span>
-            </div>
-            <p className="data-row-sub">{q.isDefault ? 'Default neighborhood quest' : q.orgName || ''}</p>
-            <p className="data-row-sub">{q.description}</p>
-            <div className="data-row-actions">
-              <StampButton type="button" variant="danger" onClick={() => remove(q.id)} disabled={busyId === q.id}>
-                {busyId === q.id ? 'Deleting...' : 'Delete'}
-              </StampButton>
-            </div>
-          </div>
+        {seriesList.map((series) => (
+          <QuestSeriesRow key={series.seriesId} series={series} onChanged={load} showOwner />
         ))}
       </div>
     </section>

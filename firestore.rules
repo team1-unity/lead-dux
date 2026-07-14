@@ -33,6 +33,36 @@ service cloud.firestore {
     match /quests/{questId} {
       allow read: if request.auth != null;
       allow write: if false;
+
+      // Check-in tokens. Nobody reads or writes these directly — the
+      // member gets their QR code as an image from rsvp_to_quest/
+      // get_quest_qr, and the organization validates a scan through
+      // check_in_attendee. Explicitly denied (rather than just relying on
+      // "no rule matches") so it's clear this is deliberate, the same as
+      // config/** below.
+      match /attendance/{uid} {
+        allow read, write: if false;
+      }
+    }
+
+    // Reviews and their aggregate rating live at the series level, not
+    // under any one quest occurrence's own doc — a review left after
+    // attending one date should still show up (and count toward the
+    // rating) no matter which date in the series someone's looking at,
+    // and it has to survive that original date later being deleted. See
+    // submit_review in functions/main.py.
+    match /questSeries/{seriesId} {
+      // Just the aggregate reviewCount/avgRating — any signed-in user can
+      // see a quest's rating while browsing, same as the quests collection.
+      allow read: if request.auth != null;
+      allow write: if false;
+
+      // Full review text/rating. Only readable via list_quest_reviews
+      // (owning org/admin) or get_my_review (the reviewer themselves) —
+      // both go through the Admin SDK, so this stays denied here.
+      match /reviews/{uid} {
+        allow read, write: if false;
+      }
     }
 
     // Admin allowlist (config/admins) and anything else under config/ —
