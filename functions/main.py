@@ -21,10 +21,13 @@ set_global_options(max_instances=10)
 initialize_app()
 
 # The full role state machine:
-#   (no claim) -> onboarding_user -> user -> onboarding_org -> pending_org -> organization
-# Everyone signs up and onboards the same way; onboarding_org is only
-# reached afterward, via Settings (start_organization_onboarding). admin is
-# granted out-of-band (config/admins allowlist or set_user_role).
+#   individual: (no claim) -> onboarding_user -> user
+#   organization: (no claim) -> onboarding_org -> pending_org -> organization
+# Which branch a brand-new signup starts on is chosen at signup time (see
+# complete_signup's accountType) and is permanent — there's no in-app path
+# from one branch to the other. Someone who picks the wrong one has to
+# delete their account (delete_account) and sign up again. admin is granted
+# out-of-band (config/admins allowlist or set_user_role).
 ASSIGNABLE_ROLES = {"onboarding_user", "user", "onboarding_org", "pending_org", "organization", "admin"}
 
 
@@ -294,9 +297,12 @@ def set_user_role(req: https_fn.CallableRequest) -> dict:
 
 
 # Callable from the frontend right after Firebase Auth account creation —
-# the one and only signup path. Everyone starts as onboarding_user; becoming
-# an organization is something a "user" opts into afterward, from Settings
-# (see start_organization_onboarding and submit_organization_request below).
+# the one and only signup path, for both accountTypes. accountType chooses
+# which branch of the role state machine a brand-new account starts on:
+# "organization" skips straight to onboarding_org (no users/{uid} profile —
+# organizations get their own doc later, at approve_organization) instead of
+# onboarding_user. That choice is permanent — see the state-machine note
+# above.
 @https_fn.on_call()
 def complete_signup(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -313,6 +319,10 @@ def complete_signup(req: https_fn.CallableRequest) -> dict:
     if email in admin_emails:
         auth.set_custom_user_claims(uid, {"role": "admin"})
         return {"success": True, "role": "admin"}
+
+    if req.data.get("accountType") == "organization":
+        auth.set_custom_user_claims(uid, {"role": "onboarding_org"})
+        return {"success": True, "role": "onboarding_org"}
 
     db.collection("users").document(uid).set({
         "email": email,
@@ -355,21 +365,11 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "role": "user"}
 
 
-# Callable from Settings by an already-onboarded "user" who wants to
-# register an organization after all. Just flips the state to
-# onboarding_org — the same state a brand-new org signup passes through via
-# complete_signup — and the org-details form (submit_organization_request)
-# takes it from there.
-@https_fn.on_call()
-def start_organization_onboarding(req: https_fn.CallableRequest) -> dict:
-    _require_role(req, "user")
-    auth.set_custom_user_claims(req.auth.uid, {"role": "onboarding_org"})
-    return {"success": True, "role": "onboarding_org"}
-
-
 # Callable from the org-details form, for an account currently in
-# onboarding_org (reached either via a brand-new org signup or via Settings).
-# Creates the pending ORGREQ and graduates the caller to pending_org.
+# onboarding_org (the state a brand-new org signup reaches directly via
+# complete_signup). A "user" who meant to sign up as an organization has no
+# in-app conversion path — they delete their account (Settings) and sign up
+# again choosing the organization option.
 @https_fn.on_call()
 def submit_organization_request(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "onboarding_org")

@@ -109,7 +109,7 @@
 }
 
 /* =========================================================================
-   STAMPED — Leadership Quest visual identity
+   STAMPED — Lead-Dux visual identity
    Rough.js-inflected, neobrutalist, pastel. See the design-artifact pass for
    full rationale. The .box/.box-primary/etc and .flex/.gap-* utilities
    above predate this and are kept as-is — screens not yet converted to the
@@ -404,7 +404,11 @@ fieldset label {
    interaction. Applies to every <button>, not just .ink-btn, so screens not
    yet converted to the card system still get the pressable feel. */
 
-button {
+/* button, plus .stamp-btn — StampButton.jsx's `as` prop can render this as
+   an <a> (e.g. a Link-powered nav CTA) instead of a real <button>, and the
+   tag selector alone wouldn't reach that. */
+button,
+.stamp-btn {
   font: inherit;
   font-weight: 700;
   padding: 9px 16px;
@@ -412,17 +416,21 @@ button {
   border: 2.4px solid var(--line);
   background: var(--paper-card);
   color: var(--line);
+  text-decoration: none;
+  display: inline-block;
   cursor: pointer;
   box-shadow: 4px 4px 0 var(--shadow);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.stamp-btn:hover {
   transform: translate(-1px, -1px);
   box-shadow: 5px 5px 0 var(--shadow);
 }
 
-button:active:not(:disabled) {
+button:active:not(:disabled),
+.stamp-btn:active {
   transform: translate(4px, 4px);
   box-shadow: 0 0 0 var(--shadow);
 }
@@ -435,7 +443,8 @@ button:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  button {
+  button,
+  .stamp-btn {
     transition: none;
   }
 }
@@ -1106,4 +1115,135 @@ button.data-row:active:not(:disabled) {
   letter-spacing: 0.02em;
   border-style: dashed;
   border-width: 3px;
+}
+
+/* ---------- Landing page (the signed-out root, see Landing.jsx) ---------- */
+
+.landing-hero {
+  text-align: center;
+  padding: 24px 0 8px;
+}
+.landing-title {
+  font-size: clamp(2.4rem, 9vw, 4.2rem);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.landing-tagline {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--line-soft);
+  margin: 0 0 20px;
+}
+/* Three tilted "pinned note" cards, not a paragraph — each carries its own
+   pastel tag-stamp label (see LEDE_NOTES in Landing.jsx) so the hero has
+   the same handmade-stamp energy as the how-it-works tracks below without
+   copying their numbered-step shape. The tilt lives on --tilt (not a plain
+   transform) so the pop-in keyframe can animate translateY without
+   clobbering it. */
+.landing-lede {
+  max-width: 56ch;
+  margin: 0 auto;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.landing-note {
+  background: var(--paper-card);
+  border: 2.4px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 var(--shadow);
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform: rotate(var(--tilt, 0deg));
+  animation: landing-note-in 0.4s ease-out backwards;
+}
+.landing-note:nth-child(1) { --tilt: -1.1deg; animation-delay: 0s; }
+.landing-note:nth-child(2) { --tilt: 0.9deg; animation-delay: 0.1s; }
+.landing-note:nth-child(3) { --tilt: -0.7deg; animation-delay: 0.2s; }
+.landing-note p {
+  margin: 0;
+}
+@keyframes landing-note-in {
+  from { opacity: 0; transform: rotate(var(--tilt, 0deg)) translateY(10px); }
+  to { opacity: 1; transform: rotate(var(--tilt, 0deg)) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-note {
+    animation: none;
+  }
+}
+
+.landing-steps {
+  margin-top: 40px;
+}
+.landing-section-heading {
+  text-align: center;
+}
+.landing-tracks {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 600px) {
+  .landing-tracks {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.landing-track {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform: rotate(var(--tilt, 0deg));
+}
+.landing-track:nth-child(1) { --tilt: -0.6deg; }
+.landing-track:nth-child(2) { --tilt: 0.6deg; }
+.landing-track-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.landing-track-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.landing-track-step .tag-stamp {
+  margin-top: 2px;
+  flex: none;
+}
+.landing-track-step-title {
+  font-weight: 700;
+  margin: 0;
+}
+.landing-track-step-body {
+  margin: 2px 0 0;
+  color: var(--line-soft);
+  font-size: 0.92rem;
+}
+
+.landing-cta {
+  margin-top: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.landing-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.landing-login-link {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--line-soft);
 }
