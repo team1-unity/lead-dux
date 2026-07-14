@@ -63,9 +63,14 @@ export function Register() {
     <AuthShell
       title="Sign Up"
       footer={
-        <span>
-          Already have an account? <Link to="/login">Log in</Link>
-        </span>
+        <>
+          <span>
+            Already have an account? <Link to="/login">Log in</Link>
+          </span>
+          <span>
+            Represent an organization? <Link to="/register/organization">Sign up here</Link>
+          </span>
+        </>
       }
     >
       <form onSubmit={handleEmailRegister} className="flex flex-col gap-md">

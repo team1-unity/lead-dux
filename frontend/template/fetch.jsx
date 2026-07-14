@@ -9,12 +9,13 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebaseapp.jsx';
 
 // Called once, right after Firebase Auth account creation — the one signup
-// path. No admin gate — see functions/main.py for why this is safe to
-// expose (the admin-allowlist check happens server-side regardless of what
-// the client sends).
-export async function callCompleteSignup({ name }) {
+// path for both accountTypes ('individual', the default, or 'organization').
+// No admin gate — see functions/main.py for why this is safe to expose (the
+// admin-allowlist check happens server-side regardless of what the client
+// sends).
+export async function callCompleteSignup({ name, accountType }) {
   const fn = httpsCallable(functions, 'complete_signup');
-  const result = await fn({ name });
+  const result = await fn({ name, accountType });
   return result.data;
 }
 
@@ -93,18 +94,9 @@ export async function callDeleteOrganization(targetUid) {
   return result.data;
 }
 
-// Settings: called by a "user" who wants to register an organization after
-// all — flips their role to onboarding_org so /register/organization shows
-// the org-details form.
-export async function callStartOrganizationOnboarding() {
-  const fn = httpsCallable(functions, 'start_organization_onboarding');
-  const result = await fn();
-  return result.data;
-}
-
 // The org-details form's submit, for an account currently onboarding_org
-// (whether that's a brand-new org signup or an existing "user" via
-// Settings). Creates the ORGREQ and moves the caller to pending_org.
+// (the state a brand-new org signup reaches directly). Creates the ORGREQ
+// and moves the caller to pending_org.
 export async function callSubmitOrganizationRequest({ name, phone, location, reason }) {
   const fn = httpsCallable(functions, 'submit_organization_request');
   const result = await fn({ name, phone, location, reason });
