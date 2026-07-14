@@ -43,12 +43,23 @@ service cloud.firestore {
       match /attendance/{uid} {
         allow read, write: if false;
       }
+    }
+
+    // Reviews and their aggregate rating live at the series level, not
+    // under any one quest occurrence's own doc — a review left after
+    // attending one date should still show up (and count toward the
+    // rating) no matter which date in the series someone's looking at,
+    // and it has to survive that original date later being deleted. See
+    // submit_review in functions/main.py.
+    match /questSeries/{seriesId} {
+      // Just the aggregate reviewCount/avgRating — any signed-in user can
+      // see a quest's rating while browsing, same as the quests collection.
+      allow read: if request.auth != null;
+      allow write: if false;
 
       // Full review text/rating. Only readable via list_quest_reviews
       // (owning org/admin) or get_my_review (the reviewer themselves) —
-      // both go through the Admin SDK, so this stays denied here too.
-      // The aggregate reviewCount/avgRating members see live on the quest
-      // doc above, not here.
+      // both go through the Admin SDK, so this stays denied here.
       match /reviews/{uid} {
         allow read, write: if false;
       }

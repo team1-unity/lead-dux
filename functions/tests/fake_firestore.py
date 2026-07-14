@@ -15,6 +15,7 @@ collections without any extra bookkeeping.
 """
 
 import datetime
+import uuid
 
 
 class ArrayUnion:
@@ -37,9 +38,15 @@ def _resolve(value):
 
 
 class FakeDocSnapshot:
-    def __init__(self, doc_id, data):
+    def __init__(self, doc_id, data, reference=None):
         self.id = doc_id
         self._data = data
+        # Real DocumentSnapshot.reference points back at the DocumentReference
+        # it came from — used by callers that stream() a query and then
+        # want to delete/update the doc they just read (see _delete_quest's
+        # cascade). Optional because rebuilding FakeDocRef.get()'s own
+        # snapshot doesn't need it.
+        self.reference = reference
 
     @property
     def exists(self):
@@ -61,8 +68,12 @@ class FakeDocRef:
         # unchanged; this fake has no real isolation to provide.
         return FakeDocSnapshot(self.id, self._store.get(self.path))
 
-    def set(self, data):
-        self._store[self.path] = {k: _resolve(v) for k, v in data.items()}
+    def set(self, data, merge=False):
+        resolved = {k: _resolve(v) for k, v in data.items()}
+        if merge and self.path in self._store:
+            self._store[self.path].update(resolved)
+        else:
+            self._store[self.path] = resolved
 
     def update(self, data):
         current = self._store.get(self.path)
@@ -89,21 +100,29 @@ class FakeDocRef:
 
 
 class FakeQuery:
-    def __init__(self, store, path, filters):
+    def __init__(self, store, path, filters, limit=None):
         self._store = store
         self._path = path
         self._filters = filters
+        self._limit = limit
 
     def where(self, field, op, value):
-        return FakeQuery(self._store, self._path, self._filters + [(field, op, value)])
+        return FakeQuery(self._store, self._path, self._filters + [(field, op, value)], self._limit)
+
+    def limit(self, count):
+        return FakeQuery(self._store, self._path, self._filters, count)
 
     def stream(self):
         child_len = len(self._path) + 1
+        yielded = 0
         for path, data in list(self._store.items()):
+            if self._limit is not None and yielded >= self._limit:
+                break
             if len(path) != child_len or path[: len(self._path)] != self._path:
                 continue
             if all(self._matches(data, f) for f in self._filters):
-                yield FakeDocSnapshot(path[-1], data)
+                yielded += 1
+                yield FakeDocSnapshot(path[-1], data, reference=FakeDocRef(self._store, path))
 
     @staticmethod
     def _matches(data, filt):
@@ -120,7 +139,11 @@ class FakeCollectionRef(FakeQuery):
     def __init__(self, store, path):
         super().__init__(store, path, [])
 
-    def document(self, doc_id):
+    def document(self, doc_id=None):
+        # Real Firestore auto-generates an ID when .document() is called
+        # with none — used by create_quest's `db.collection("quests").document()`.
+        if doc_id is None:
+            doc_id = uuid.uuid4().hex
         return FakeDocRef(self._store, self._path + (doc_id,))
 
 
@@ -130,8 +153,8 @@ class FakeTransaction:
     go straight to the store (via FakeDocRef.get's ignored `transaction`
     param) and writes apply immediately instead of being buffered."""
 
-    def set(self, ref, data):
-        ref.set(data)
+    def set(self, ref, data, merge=False):
+        ref.set(data, merge=merge)
 
     def update(self, ref, data):
         ref.update(data)
@@ -147,6 +170,31 @@ def transactional(func):
     return wrapper
 
 
+class FakeBatch:
+    """Real WriteBatch buffers operations and applies them atomically on
+    .commit(). This fake buffers the same way (rather than applying each
+    call immediately like FakeTransaction does) mostly so relying on
+    .commit() actually being called is caught by tests, same as it would
+    need to be against the real SDK."""
+
+    def __init__(self):
+        self._ops = []
+
+    def set(self, ref, data, merge=False):
+        self._ops.append((lambda d: ref.set(d, merge=merge), data))
+
+    def update(self, ref, data):
+        self._ops.append((ref.update, data))
+
+    def delete(self, ref):
+        self._ops.append((lambda _data: ref.delete(), None))
+
+    def commit(self):
+        for op, data in self._ops:
+            op(data)
+        self._ops = []
+
+
 class FakeFirestoreClient:
     def __init__(self):
         self._store = {}
@@ -156,6 +204,9 @@ class FakeFirestoreClient:
 
     def transaction(self):
         return FakeTransaction()
+
+    def batch(self):
+        return FakeBatch()
 
 
 class FakeFirestoreModule:

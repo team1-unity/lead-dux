@@ -3,12 +3,18 @@
 // two slightly different copies. eventDate is required; eventEndTime is
 // optional (the Cloud Function falls back to a few hours past eventDate
 // when it's left blank). Values are plain <input type="datetime-local">
-// strings (e.g. "2026-07-20T14:00") passed straight through to the Cloud
-// Function — there's no timezone conversion here, so "2:00 PM" is stored
-// and compared as 2:00 PM UTC regardless of the browser's local timezone.
-// Fine for same-timezone testing; a real deployment would need to convert
-// using the browser's offset before sending.
-export function EventDateFields({ eventDate, eventEndTime, onEventDateChange, onEventEndTimeChange }) {
+// strings (e.g. "2026-07-20T14:00") with no UTC offset attached — the
+// Cloud Function interprets that wall-clock string as being in `timezone`
+// (via Python's zoneinfo, correctly accounting for that zone's DST rules)
+// before converting to the UTC instant Firestore actually stores.
+export function EventDateFields({
+  eventDate,
+  eventEndTime,
+  timezone,
+  onEventDateChange,
+  onEventEndTimeChange,
+  onTimezoneChange,
+}) {
   return (
     <>
       <label>
@@ -28,6 +34,27 @@ export function EventDateFields({ eventDate, eventEndTime, onEventDateChange, on
           onChange={(e) => onEventEndTimeChange(e.target.value)}
         />
       </label>
+      <label>
+        Timezone
+        <input
+          type="text"
+          required
+          value={timezone}
+          onChange={(e) => onTimezoneChange(e.target.value)}
+          placeholder="America/New_York"
+        />
+      </label>
     </>
   );
+}
+
+// Best-effort guess at the organizer's own timezone, to pre-fill the field
+// above rather than leaving it blank — still freely editable, e.g. for an
+// org scheduling an event in a different city.
+export function detectTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
 }

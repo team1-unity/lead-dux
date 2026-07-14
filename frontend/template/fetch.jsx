@@ -85,27 +85,81 @@ export async function callSubmitOrganizationRequest({ name, phone, location, rea
   return result.data;
 }
 
-// organization: creates a quest owned by the caller's organization.
-// eventDate/eventEndTime are ISO datetime strings (see EventDateFields) —
-// eventEndTime is optional; the Cloud Function defaults the QR expiry to a
-// few hours past eventDate when it's omitted.
-export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime }) {
+// organization: creates a standalone quest owned by the caller's
+// organization. eventDate/eventEndTime are ISO datetime strings (see
+// EventDateFields) — eventEndTime is optional; the Cloud Function defaults
+// the QR expiry to a few hours past eventDate when it's omitted. capacity
+// is optional (unlimited if omitted). See callCreateRecurringQuest for
+// creating a whole series of dates in one call.
+export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity }) {
   const fn = httpsCallable(functions, 'create_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity });
+  return result.data;
+}
+
+// organization: creates a whole recurring series in one call — every
+// occurrence up to (and including) `until`, spaced by `frequency`
+// ('daily' | 'weekly' | 'monthly'). Returns { seriesId, questIds }.
+export async function callCreateRecurringQuest({
+  title,
+  description,
+  tags,
+  eventDate,
+  eventEndTime,
+  timezone,
+  location,
+  capacity,
+  frequency,
+  until,
+}) {
+  const fn = httpsCallable(functions, 'create_recurring_quest');
+  const result = await fn({
+    title,
+    description,
+    tags,
+    eventDate,
+    eventEndTime,
+    timezone,
+    location,
+    capacity,
+    frequency,
+    until,
+  });
+  return result.data;
+}
+
+// organization (own quest) or admin (own default quest): turns an existing
+// standalone quest into the first occurrence of a recurring series,
+// generating the remaining dates. Rejects if it's already part of a series.
+export async function callMakeQuestRecurring({ questId, frequency, until }) {
+  const fn = httpsCallable(functions, 'make_quest_recurring');
+  const result = await fn({ questId, frequency, until });
   return result.data;
 }
 
 // admin: creates a quest with no owning organization, shown to everyone.
-export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime }) {
+export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity }) {
   const fn = httpsCallable(functions, 'create_default_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity });
   return result.data;
 }
 
-// organization (own quests) or admin (any quest): deletes a quest.
+// organization (own quests) or admin (any quest): deletes just this one
+// occurrence. See callDeleteQuestSeries to remove a whole recurring series.
 export async function callDeleteQuest(questId) {
   const fn = httpsCallable(functions, 'delete_quest');
   const result = await fn({ questId });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): deletes every occurrence
+// sharing this quest's series. questId can be any occurrence in the
+// series. Pass keepQuestId to preserve one specific occurrence instead of
+// deleting the whole series — that survivor becomes a plain standalone
+// quest again (recurrence cleared) rather than being deleted too.
+export async function callDeleteQuestSeries(questId, keepQuestId) {
+  const fn = httpsCallable(functions, 'delete_quest_series');
+  const result = await fn({ questId, keepQuestId });
   return result.data;
 }
 

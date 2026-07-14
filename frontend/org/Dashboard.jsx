@@ -5,32 +5,20 @@ import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import {
   callCreateQuest,
-  callDeleteQuest,
-  callListQuestAttendees,
-  callListQuestReviews,
+  callCreateRecurringQuest,
   callUpdateOrganizationTags,
 } from '@shared/fetch.jsx';
+import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
+import { QuestSeriesRow } from '@shared/QuestSeriesRow.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
-import { EventDateFields } from '@shared/EventDateFields.jsx';
-import { QuestScanner } from '@shared/QuestScanner.jsx';
+import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { hashTone } from '@shared/tagTones.js';
 import { IconPlus } from '@shared/icons.jsx';
-
-function formatEventDate(isoOrTimestamp) {
-  if (!isoOrTimestamp) return null;
-  const date = isoOrTimestamp.toDate ? isoOrTimestamp.toDate() : new Date(isoOrTimestamp);
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-function formatStars(rating) {
-  const whole = Math.round(rating);
-  return '★'.repeat(whole) + '☆'.repeat(5 - whole);
-}
 
 // Lets an organization set the location areas and activity/event types it
 // operates in — separate from a single quest's own tags, these describe
@@ -150,102 +138,76 @@ function OrgQuests() {
   const [tags, setTags] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [eventEndTime, setEventEndTime] = useState('');
+  const [timezone, setTimezone] = useState(detectTimezone());
+  const [location, setLocation] = useState('');
+  const [capacity, setCapacity] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [frequency, setFrequency] = useState('weekly');
+  const [until, setUntil] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [busyId, setBusyId] = useState(null);
-  const [attendeesFor, setAttendeesFor] = useState(null);
-  const [attendees, setAttendees] = useState(null);
-  const [scanningFor, setScanningFor] = useState(null);
-  const [reviewsFor, setReviewsFor] = useState(null);
-  const [reviews, setReviews] = useState(null);
+
+  const [seriesAggregates, setSeriesAggregates] = useState(new Map());
 
   async function load() {
-    const snap = await getDocs(query(collection(db, 'quests'), where('orgId', '==', user.uid)));
-    setQuests(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const [questsSnap, seriesSnap] = await Promise.all([
+      getDocs(query(collection(db, 'quests'), where('orgId', '==', user.uid))),
+      getDocs(collection(db, 'questSeries')),
+    ]);
+    setQuests(questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    setSeriesAggregates(new Map(seriesSnap.docs.map((d) => [d.id, d.data()])));
   }
 
   useEffect(() => {
     load();
   }, [user]);
 
-  const visibleQuests = useMemo(() => {
-    if (!quests) return [];
+  const seriesList = useMemo(
+    () => (quests ? attachSeriesRatings(groupBySeries(quests), seriesAggregates) : []),
+    [quests, seriesAggregates],
+  );
+
+  const visibleSeries = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return quests;
-    return quests.filter((quest) => quest.title.toLowerCase().includes(q));
-  }, [quests, search]);
+    if (!q) return seriesList;
+    return seriesList.filter((s) => s.primary.title.toLowerCase().includes(q));
+  }, [seriesList, search]);
 
   async function createQuest(e) {
     e.preventDefault();
     setError('');
     setSubmitting(true);
     try {
-      await callCreateQuest({
+      const base = {
         title,
         description,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         eventDate,
         eventEndTime: eventEndTime || null,
-      });
+        timezone,
+        location,
+        capacity: capacity ? Number(capacity) : null,
+      };
+      if (isRecurring) {
+        await callCreateRecurringQuest({ ...base, frequency, until });
+      } else {
+        await callCreateQuest(base);
+      }
       setTitle('');
       setDescription('');
       setTags('');
       setEventDate('');
       setEventEndTime('');
+      setLocation('');
+      setCapacity('');
+      setIsRecurring(false);
+      setUntil('');
       setCreating(false);
       await load();
     } catch (err) {
       setError(err.message || 'Something went wrong.');
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function removeQuest(id) {
-    setBusyId(id);
-    try {
-      await callDeleteQuest(id);
-      if (attendeesFor === id) setAttendeesFor(null);
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function toggleAttendees(id) {
-    if (attendeesFor === id) {
-      setAttendeesFor(null);
-      return;
-    }
-    setBusyId(id);
-    try {
-      setAttendees(await callListQuestAttendees(id));
-      setAttendeesFor(id);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function toggleReviews(id) {
-    if (reviewsFor === id) {
-      setReviewsFor(null);
-      return;
-    }
-    setBusyId(id);
-    try {
-      setReviews(await callListQuestReviews(id));
-      setReviewsFor(id);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  // After a successful scan, re-fetch the attendee list if it's currently
-  // open for this quest so the checked-in status updates without the org
-  // having to close and reopen it.
-  async function handleScanResult(questId) {
-    if (attendeesFor === questId) {
-      setAttendees(await callListQuestAttendees(questId));
     }
   }
 
@@ -281,16 +243,52 @@ function OrgQuests() {
                 Tags (comma separated)
                 <input value={tags} onChange={(e) => setTags(e.target.value)} />
               </label>
+              <label>
+                Location
+                <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="123 Main St or venue name" />
+              </label>
+              <label>
+                Capacity (optional)
+                <input
+                  type="number"
+                  min="1"
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
+                  placeholder="Unlimited"
+                />
+              </label>
               <EventDateFields
                 eventDate={eventDate}
                 eventEndTime={eventEndTime}
+                timezone={timezone}
                 onEventDateChange={setEventDate}
                 onEventEndTimeChange={setEventEndTime}
+                onTimezoneChange={setTimezone}
               />
+              <label className="flex items-center gap-sm">
+                <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
+                Recurring event
+              </label>
+              {isRecurring && (
+                <>
+                  <label>
+                    Repeats
+                    <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </label>
+                  <label>
+                    Until
+                    <input type="date" required value={until} onChange={(e) => setUntil(e.target.value)} />
+                  </label>
+                </>
+              )}
               {error && <p className="box-danger">{error}</p>}
               <div className="flex gap-sm">
                 <StampButton type="submit" variant="primary" disabled={submitting}>
-                  {submitting ? 'Creating...' : 'Create quest'}
+                  {submitting ? 'Creating...' : isRecurring ? 'Create recurring quest' : 'Create quest'}
                 </StampButton>
                 <StampButton type="button" onClick={() => setCreating(false)} disabled={submitting}>
                   Cancel
@@ -303,10 +301,10 @@ function OrgQuests() {
 
       <div className="section-heading" style={{ marginBottom: 8 }}>
         <h2 style={{ marginBottom: 0 }}>Your quests</h2>
-        <span className="data-stat">{quests.length} total</span>
+        <span className="data-stat">{seriesList.length} total</span>
       </div>
 
-      {quests.length > 0 && (
+      {seriesList.length > 0 && (
         <input
           type="search"
           placeholder="Search your quests..."
@@ -317,71 +315,14 @@ function OrgQuests() {
         />
       )}
 
-      {quests.length === 0 ? (
+      {seriesList.length === 0 ? (
         <p>You haven't created any quests yet.</p>
-      ) : visibleQuests.length === 0 ? (
+      ) : visibleSeries.length === 0 ? (
         <p>No quests match "{search}".</p>
       ) : (
         <div className="ink-card data-list">
-          {visibleQuests.map((quest) => (
-            <div key={quest.id} className="data-row">
-              <div className="data-row-head">
-                <p className="data-row-title">{quest.title}</p>
-                <span className="data-stat">{(quest.rsvpd || []).length} RSVP'd</span>
-              </div>
-              {formatEventDate(quest.eventDate) && (
-                <p className="data-row-sub">{formatEventDate(quest.eventDate)}</p>
-              )}
-              {quest.reviewCount > 0 && (
-                <p className="data-row-sub">
-                  {formatStars(quest.avgRating)} ({quest.reviewCount} review{quest.reviewCount === 1 ? '' : 's'})
-                </p>
-              )}
-              <p className="data-row-sub">{quest.description}</p>
-              <div className="data-row-actions">
-                <StampButton type="button" onClick={() => toggleAttendees(quest.id)} disabled={busyId === quest.id}>
-                  {attendeesFor === quest.id ? 'Hide attendees' : 'View attendees'}
-                </StampButton>
-                <StampButton type="button" onClick={() => toggleReviews(quest.id)} disabled={busyId === quest.id}>
-                  {reviewsFor === quest.id ? 'Hide reviews' : 'View reviews'}
-                </StampButton>
-                <StampButton
-                  type="button"
-                  variant="primary"
-                  onClick={() => setScanningFor(scanningFor === quest.id ? null : quest.id)}
-                >
-                  {scanningFor === quest.id ? 'Close scanner' : 'Scan to check in'}
-                </StampButton>
-                <StampButton type="button" variant="danger" onClick={() => removeQuest(quest.id)} disabled={busyId === quest.id}>
-                  {busyId === quest.id ? 'Working...' : 'Delete'}
-                </StampButton>
-              </div>
-              {scanningFor === quest.id && (
-                <QuestScanner questId={quest.id} onCheckedIn={() => handleScanResult(quest.id)} />
-              )}
-              {attendeesFor === quest.id && attendees && (
-                <ul className="data-sublist">
-                  {attendees.length === 0 && <li>No RSVPs yet.</li>}
-                  {attendees.map((a) => (
-                    <li key={a.uid}>
-                      {a.name || 'Unnamed'} — {a.email}
-                      {' — '}
-                      {a.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {reviewsFor === quest.id && reviews && (
-                <ul className="data-sublist">
-                  {reviews.length === 0 && <li>No reviews yet.</li>}
-                  {reviews.map((r) => (
-                    <li key={r.uid}>
-                      {formatStars(r.rating)} — {r.name || 'Unnamed'}: {r.body}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          {visibleSeries.map((series) => (
+            <QuestSeriesRow key={series.seriesId} series={series} onChanged={load} />
           ))}
         </div>
       )}
