@@ -20,9 +20,35 @@ export async function callCompleteSignup({ name }) {
 
 // Called once from the onboarding (interests) form. No targetUid — this
 // only ever writes the caller's own doc, so there's nothing to escalate.
-export async function callSubmitOnboarding({ name, age, interests }) {
+export async function callSubmitOnboarding({
+  name,
+  age,
+  interests,
+  experienceLevel,
+  experienceLevelOther,
+  timeAvailability,
+  timeAvailabilityOther,
+  groupPreference,
+  groupPreferenceOther,
+  motivation,
+  motivationOther,
+  leaderGoal,
+}) {
   const fn = httpsCallable(functions, 'submit_onboarding');
-  const result = await fn({ name, age, interests });
+  const result = await fn({
+    name,
+    age,
+    interests,
+    experienceLevel,
+    experienceLevelOther,
+    timeAvailability,
+    timeAvailabilityOther,
+    groupPreference,
+    groupPreferenceOther,
+    motivation,
+    motivationOther,
+    leaderGoal,
+  });
   return result.data;
 }
 

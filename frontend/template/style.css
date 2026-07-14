@@ -561,6 +561,27 @@ nav {
   gap: 6px;
 }
 
+/* ---------- Onboarding's step progress (Onboarding.jsx) ---------- */
+
+.onboarding-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--paper-well);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.onboarding-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-progress-fill {
+    transition: none;
+  }
+}
+
 /* ---------- persistent chrome ---------- */
 
 .top-bar {
@@ -1088,6 +1109,24 @@ button.data-row:active:not(:disabled) {
 .theme-option[data-active="true"] {
   background: var(--accent);
   color: var(--chip-ink);
+}
+
+/* generic single-select pill row — same active/inactive treatment as the
+   theme picker above, just not settings-specific (Onboarding's leadership-
+   profile questions use this). */
+.choice-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.choice-pill[data-active="true"] {
+  background: var(--accent);
+  color: var(--chip-ink);
+}
+
+.field-optional {
+  font-weight: 400;
+  color: var(--line-soft);
 }
 
 /* ---------- collapsible "create" affordance (org quest form) ---------- */
