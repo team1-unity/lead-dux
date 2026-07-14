@@ -3,7 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { motion, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callRsvpToQuest, callCancelRsvp, callGetQuestQr } from '@shared/fetch.jsx';
+import { callRsvpToQuest, callCancelRsvp, callGetQuestQr, callGetMyReview, callSubmitReview } from '@shared/fetch.jsx';
 import { RoughTexture } from '@shared/RoughTexture.jsx';
 import { RoughFrame } from '@shared/RoughFrame.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
@@ -50,6 +50,94 @@ function QuestQrCode({ questId }) {
   );
 }
 
+function formatStars(rating) {
+  const whole = Math.round(rating);
+  return '★'.repeat(whole) + '☆'.repeat(5 - whole);
+}
+
+// A member's own review for a quest they've RSVP'd to. Shows the existing
+// review read-only if one was already submitted; otherwise a submission
+// form. submit_review itself is the source of truth on whether this member
+// actually attended (checked_in) — rather than duplicating that check
+// client-side, an attempt from someone who hasn't checked in just surfaces
+// the server's rejection message inline, same as every other form here.
+function QuestReview({ questId }) {
+  const [loading, setLoading] = useState(true);
+  const [review, setReview] = useState(null);
+  const [rating, setRating] = useState(5);
+  const [body, setBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    callGetMyReview(questId)
+      .then((data) => {
+        if (!cancelled) {
+          setReview(data.review);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message || 'Could not load your review.');
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [questId]);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      await callSubmitReview({ questId, rating, body });
+      setReview({ rating, body });
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) return <LoadingSpinner label="Loading review..." />;
+
+  if (review) {
+    return (
+      <div className="ink-card" style={{ marginTop: 12 }}>
+        <p style={{ margin: 0, fontWeight: 700 }}>Your review: {formatStars(review.rating)}</p>
+        <p style={{ margin: '6px 0 0' }}>{review.body}</p>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="ink-card flex flex-col gap-md" style={{ marginTop: 12 }}>
+      <label>
+        Rating
+        <select value={rating} onChange={(e) => setRating(Number(e.target.value))}>
+          {[5, 4, 3, 2, 1].map((n) => (
+            <option key={n} value={n}>
+              {n} star{n === 1 ? '' : 's'}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Your review
+        <textarea required value={body} onChange={(e) => setBody(e.target.value)} placeholder="How did it go?" />
+      </label>
+      {error && <p className="box-danger">{error}</p>}
+      <StampButton type="submit" variant="primary" disabled={submitting}>
+        {submitting ? 'Submitting...' : 'Submit review'}
+      </StampButton>
+    </form>
+  );
+}
+
 // One entrance per row, staggered from the parent's transition — cheap
 // enough at feed scale (a few dozen quests) and gives the list a sense of
 // arriving rather than just appearing.
@@ -88,6 +176,7 @@ function drawEmptyIllustration(rc, w, h) {
 function QuestCard({ quest, isRsvpd, canRsvp, busy, onToggleRsvp, isLast }) {
   const [open, setOpen] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [showReview, setShowReview] = useState(false);
 
   return (
     <motion.li className="quest-row" variants={itemVariants}>
@@ -107,6 +196,11 @@ function QuestCard({ quest, isRsvpd, canRsvp, busy, onToggleRsvp, isLast }) {
           <div className="quest-card-titles">
             <p className="quest-title">{quest.title}</p>
             {quest.orgName && <p className="quest-org-line">{quest.orgName}</p>}
+            {quest.reviewCount > 0 && (
+              <p className="quest-org-line">
+                {formatStars(quest.avgRating)} ({quest.reviewCount})
+              </p>
+            )}
           </div>
           <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
         </button>
@@ -142,9 +236,15 @@ function QuestCard({ quest, isRsvpd, canRsvp, busy, onToggleRsvp, isLast }) {
                     {showQr ? 'Hide my check-in code' : 'Show my check-in code'}
                   </StampButton>
                 )}
+                {isRsvpd && (
+                  <StampButton type="button" onClick={() => setShowReview((v) => !v)}>
+                    {showReview ? 'Hide review' : 'Leave a review'}
+                  </StampButton>
+                )}
               </div>
             )}
             {isRsvpd && showQr && <QuestQrCode questId={quest.id} />}
+            {isRsvpd && showReview && <QuestReview questId={quest.id} />}
           </div>
         )}
       </div>

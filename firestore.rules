@@ -43,6 +43,15 @@ service cloud.firestore {
       match /attendance/{uid} {
         allow read, write: if false;
       }
+
+      // Full review text/rating. Only readable via list_quest_reviews
+      // (owning org/admin) or get_my_review (the reviewer themselves) —
+      // both go through the Admin SDK, so this stays denied here too.
+      // The aggregate reviewCount/avgRating members see live on the quest
+      // doc above, not here.
+      match /reviews/{uid} {
+        allow read, write: if false;
+      }
     }
 
     // Admin allowlist (config/admins) and anything else under config/ —

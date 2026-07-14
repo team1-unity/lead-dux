@@ -86,15 +86,20 @@ def _attendance_ref(db, quest_id: str, uid: str):
     return db.collection("quests").document(quest_id).collection("attendance").document(uid)
 
 
+def _review_ref(db, quest_id: str, uid: str):
+    return db.collection("quests").document(quest_id).collection("reviews").document(uid)
+
+
 def _delete_quest(quest_ref):
     # Firestore never cascades a subcollection when its parent doc is
-    # deleted — quests/{id}/attendance/* would otherwise sit there
-    # orphaned (and readable by nobody, but still consuming storage and
-    # holding onto tokens) forever. Small subcollection at this app's
+    # deleted — quests/{id}/attendance/* and quests/{id}/reviews/* would
+    # otherwise sit there orphaned (and readable by nobody, but still
+    # consuming storage) forever. Small subcollections at this app's
     # scale, so a plain loop is fine; a bulk-delete API would be worth it
-    # if quests ever had thousands of RSVPs each.
-    for doc in quest_ref.collection("attendance").stream():
-        doc.reference.delete()
+    # if quests ever had thousands of RSVPs/reviews each.
+    for subcollection in ("attendance", "reviews"):
+        for doc in quest_ref.collection(subcollection).stream():
+            doc.reference.delete()
     quest_ref.delete()
 
 
@@ -694,6 +699,177 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
         })
 
     return {"attendees": attendees}
+
+
+# Reviews ---------------------------------------------------------------
+#
+# One review per user per quest — the doc id is the reviewer's uid, same
+# pattern as attendance. Gated on having actually attended (checked_in via
+# the QR check-in flow, not just RSVP'd). reviewCount/avgRating are
+# denormalized onto the quest doc itself rather than left only in the
+# reviews subcollection, since members already have read access to quests
+# but not to this subcollection (see firestore.rules) — this is what lets
+# the quest list show a rating without any new read access.
+
+MIN_RATING = 1
+MAX_RATING = 5
+
+
+def _record_review(transaction, quest_ref, review_ref, rating, body):
+    quest_snap = quest_ref.get(transaction=transaction)
+    review_snap = review_ref.get(transaction=transaction)
+    if review_snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.ALREADY_EXISTS,
+            "You've already reviewed this quest.",
+        )
+
+    quest = quest_snap.to_dict()
+    current_count = quest.get("reviewCount", 0)
+    current_avg = quest.get("avgRating", 0)
+    new_count = current_count + 1
+    new_avg = ((current_avg * current_count) + rating) / new_count
+
+    transaction.set(review_ref, {
+        "rating": rating,
+        "body": body,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    })
+    transaction.update(quest_ref, {"reviewCount": new_count, "avgRating": new_avg})
+
+
+@https_fn.on_call()
+def submit_review(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    quest_id = req.data.get("questId")
+    rating = req.data.get("rating")
+    body = req.data.get("body")
+
+    if not quest_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId is required.",
+        )
+    if isinstance(rating, bool) or not isinstance(rating, int) or not (MIN_RATING <= rating <= MAX_RATING):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"rating must be an integer between {MIN_RATING} and {MAX_RATING}.",
+        )
+    if not isinstance(body, str) or not body.strip():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "body is required.",
+        )
+
+    db = firestore.client()
+    quest_ref = db.collection("quests").document(quest_id)
+    quest_snap = quest_ref.get()
+    if not quest_snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            f"No quest {quest_id}.",
+        )
+    if not quest_snap.to_dict().get("orgId"):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This quest has no organization to review.",
+        )
+
+    attendance_snap = _attendance_ref(db, quest_id, req.auth.uid).get()
+    attended = attendance_snap.exists and attendance_snap.to_dict().get("status") == "checked_in"
+    if not attended:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "You can only review quests you've checked in to.",
+        )
+
+    review_ref = _review_ref(db, quest_id, req.auth.uid)
+    # firestore.transactional is applied here, at call time, rather than as
+    # a decorator on _record_review's def — a decorator would bind to
+    # whichever `firestore` module is in scope at import time, permanently,
+    # which breaks swapping in the fake Firestore client tests use.
+    firestore.transactional(_record_review)(db.transaction(), quest_ref, review_ref, rating, body.strip())
+
+    return {"success": True}
+
+
+# Callable from the quest list — lets a member see their own review for a
+# quest they've already reviewed (e.g. after navigating away and back),
+# same self-only shape as get_quest_qr. No targetUid, so there's nothing to
+# escalate.
+@https_fn.on_call()
+def get_my_review(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    quest_id = req.data.get("questId")
+    if not quest_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId is required.",
+        )
+
+    snap = _review_ref(firestore.client(), quest_id, req.auth.uid).get()
+    if not snap.exists:
+        return {"review": None}
+
+    review = snap.to_dict()
+    created_at = review.get("createdAt")
+    return {
+        "review": {
+            "rating": review.get("rating"),
+            "body": review.get("body"),
+            "createdAt": created_at.isoformat() if created_at else None,
+        }
+    }
+
+
+# Callable from the org dashboard's "view reviews" button (own quests
+# only) and the admin dashboard (any quest) — same ownership gate as
+# list_quest_attendees.
+@https_fn.on_call()
+def list_quest_reviews(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    quest_id = req.data.get("questId")
+    if not quest_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId is required.",
+        )
+
+    db = firestore.client()
+    snap = db.collection("quests").document(quest_id).get()
+    if not snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            f"No quest {quest_id}.",
+        )
+
+    quest = snap.to_dict()
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and quest.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only view reviews for your own organization's quests.",
+        )
+
+    reviews = []
+    for doc in db.collection("quests").document(quest_id).collection("reviews").stream():
+        review = doc.to_dict()
+        user_snap = db.collection("users").document(doc.id).get()
+        user_data = user_snap.to_dict() if user_snap.exists else {}
+        created_at = review.get("createdAt")
+        reviews.append({
+            "uid": doc.id,
+            "name": user_data.get("name"),
+            "rating": review.get("rating"),
+            "body": review.get("body"),
+            "createdAt": created_at.isoformat() if created_at else None,
+        })
+
+    return {"reviews": reviews}
 
 
 # Callable from the org dashboard — lets an organization set the location

@@ -139,6 +139,30 @@ export async function callCheckInAttendee({ questId, uid, token }) {
   return result.data;
 }
 
+// user: submits a review for a quest the caller checked in to. Rejects
+// with ALREADY_EXISTS if this uid already reviewed this quest.
+export async function callSubmitReview({ questId, rating, body }) {
+  const fn = httpsCallable(functions, 'submit_review');
+  const result = await fn({ questId, rating, body });
+  return result.data;
+}
+
+// user: fetches the caller's own review for a quest, or { review: null }
+// if they haven't reviewed it yet.
+export async function callGetMyReview(questId) {
+  const fn = httpsCallable(functions, 'get_my_review');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): lists every review left
+// on a quest.
+export async function callListQuestReviews(questId) {
+  const fn = httpsCallable(functions, 'list_quest_reviews');
+  const result = await fn({ questId });
+  return result.data.reviews;
+}
+
 // organization (own quests) or admin (any quest): resolves a quest's rsvpd
 // uids into {uid, name, email} for display.
 export async function callListQuestAttendees(questId) {

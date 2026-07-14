@@ -3,7 +3,13 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { AnimatePresence, motion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callCreateQuest, callDeleteQuest, callListQuestAttendees, callUpdateOrganizationTags } from '@shared/fetch.jsx';
+import {
+  callCreateQuest,
+  callDeleteQuest,
+  callListQuestAttendees,
+  callListQuestReviews,
+  callUpdateOrganizationTags,
+} from '@shared/fetch.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -19,6 +25,11 @@ function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
   const date = isoOrTimestamp.toDate ? isoOrTimestamp.toDate() : new Date(isoOrTimestamp);
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function formatStars(rating) {
+  const whole = Math.round(rating);
+  return '★'.repeat(whole) + '☆'.repeat(5 - whole);
 }
 
 // Lets an organization set the location areas and activity/event types it
@@ -145,6 +156,8 @@ function OrgQuests() {
   const [attendeesFor, setAttendeesFor] = useState(null);
   const [attendees, setAttendees] = useState(null);
   const [scanningFor, setScanningFor] = useState(null);
+  const [reviewsFor, setReviewsFor] = useState(null);
+  const [reviews, setReviews] = useState(null);
 
   async function load() {
     const snap = await getDocs(query(collection(db, 'quests'), where('orgId', '==', user.uid)));
@@ -208,6 +221,20 @@ function OrgQuests() {
     try {
       setAttendees(await callListQuestAttendees(id));
       setAttendeesFor(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function toggleReviews(id) {
+    if (reviewsFor === id) {
+      setReviewsFor(null);
+      return;
+    }
+    setBusyId(id);
+    try {
+      setReviews(await callListQuestReviews(id));
+      setReviewsFor(id);
     } finally {
       setBusyId(null);
     }
@@ -305,10 +332,18 @@ function OrgQuests() {
               {formatEventDate(quest.eventDate) && (
                 <p className="data-row-sub">{formatEventDate(quest.eventDate)}</p>
               )}
+              {quest.reviewCount > 0 && (
+                <p className="data-row-sub">
+                  {formatStars(quest.avgRating)} ({quest.reviewCount} review{quest.reviewCount === 1 ? '' : 's'})
+                </p>
+              )}
               <p className="data-row-sub">{quest.description}</p>
               <div className="data-row-actions">
                 <StampButton type="button" onClick={() => toggleAttendees(quest.id)} disabled={busyId === quest.id}>
                   {attendeesFor === quest.id ? 'Hide attendees' : 'View attendees'}
+                </StampButton>
+                <StampButton type="button" onClick={() => toggleReviews(quest.id)} disabled={busyId === quest.id}>
+                  {reviewsFor === quest.id ? 'Hide reviews' : 'View reviews'}
                 </StampButton>
                 <StampButton
                   type="button"
@@ -332,6 +367,16 @@ function OrgQuests() {
                       {a.name || 'Unnamed'} — {a.email}
                       {' — '}
                       {a.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {reviewsFor === quest.id && reviews && (
+                <ul className="data-sublist">
+                  {reviews.length === 0 && <li>No reviews yet.</li>}
+                  {reviews.map((r) => (
+                    <li key={r.uid}>
+                      {formatStars(r.rating)} — {r.name || 'Unnamed'}: {r.body}
                     </li>
                   ))}
                 </ul>

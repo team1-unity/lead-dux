@@ -55,7 +55,10 @@ class FakeDocRef:
         self.path = path
         self.id = path[-1]
 
-    def get(self):
+    def get(self, transaction=None):
+        # `transaction` is accepted (and ignored) so code that reads inside
+        # a transaction — `ref.get(transaction=transaction)` — works
+        # unchanged; this fake has no real isolation to provide.
         return FakeDocSnapshot(self.id, self._store.get(self.path))
 
     def set(self, data):
@@ -121,6 +124,29 @@ class FakeCollectionRef(FakeQuery):
         return FakeDocRef(self._store, self._path + (doc_id,))
 
 
+class FakeTransaction:
+    """Real Firestore transactions batch writes and commit atomically on
+    success. This fake has no concurrent access to guard against, so reads
+    go straight to the store (via FakeDocRef.get's ignored `transaction`
+    param) and writes apply immediately instead of being buffered."""
+
+    def set(self, ref, data):
+        ref.set(data)
+
+    def update(self, ref, data):
+        ref.update(data)
+
+
+def transactional(func):
+    # Real firestore.transactional retries `func` on write contention.
+    # Nothing in this fake can actually contend, so this is a direct
+    # call-through — same signature (transaction first, then *args).
+    def wrapper(transaction, *args, **kwargs):
+        return func(transaction, *args, **kwargs)
+
+    return wrapper
+
+
 class FakeFirestoreClient:
     def __init__(self):
         self._store = {}
@@ -128,15 +154,20 @@ class FakeFirestoreClient:
     def collection(self, name):
         return FakeCollectionRef(self._store, (name,))
 
+    def transaction(self):
+        return FakeTransaction()
+
 
 class FakeFirestoreModule:
     """Substitutes for the `firestore` name main.py imports from
     firebase_admin — main.py calls firestore.client()/.SERVER_TIMESTAMP/
-    .ArrayUnion/.ArrayRemove, and this provides fakes for all four."""
+    .ArrayUnion/.ArrayRemove/.transactional, and this provides fakes for
+    all of them."""
 
     SERVER_TIMESTAMP = SERVER_TIMESTAMP
     ArrayUnion = ArrayUnion
     ArrayRemove = ArrayRemove
+    transactional = staticmethod(transactional)
 
     def __init__(self):
         self._client = FakeFirestoreClient()
