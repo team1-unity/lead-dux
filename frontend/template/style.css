@@ -670,6 +670,31 @@ nav {
   color: var(--line);
 }
 
+/* unread-count badge on a nav icon (Journal today) — positioned relative
+   to a wrapping span rather than the icon itself, since the icon is a
+   plain <svg> with no box of its own to anchor an absolute child to. */
+.bottom-nav-icon {
+  position: relative;
+  display: inline-flex;
+}
+.nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--chip-ink);
+  border: 1.5px solid var(--paper-card);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 /* ---------- quests feed ---------- */
 
 .quest-list {
@@ -1106,4 +1131,118 @@ button.data-row:active:not(:disabled) {
   letter-spacing: 0.02em;
   border-style: dashed;
   border-width: 3px;
+}
+
+/* ---------- Journal (Journal.jsx) — one "tab" per completed quest ---------- */
+
+.journal-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.journal-entry-head:hover:not(:disabled),
+button.journal-entry-head:active:not(:disabled) {
+  box-shadow: none;
+  transform: none;
+}
+.journal-entry-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.05rem;
+}
+.journal-entry-new {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--chip-ink);
+}
+.journal-entry-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.journal-feedback {
+  background: var(--paper-well);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.journal-rating {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  background: var(--accent);
+  color: var(--chip-ink);
+  padding: 2px 12px;
+  border-radius: 8px;
+  border: 2px solid var(--line);
+}
+.journal-reflection ul {
+  margin: 8px 0 14px;
+  padding-left: 20px;
+}
+.journal-reflection li {
+  margin-bottom: 4px;
+}
+/* A saved reflection, once complete — plain written text in a quiet well,
+   deliberately not still shaped like an active input, so it reads as
+   finished rather than "keep typing here". */
+.journal-reflection-complete {
+  background: var(--paper-well);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.journal-saved-confirmation {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--success, var(--line-soft));
+}
+
+/* ---------- live feedback popup (FeedbackToast.jsx) ---------- */
+
+.feedback-toast-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.feedback-toast {
+  width: 100%;
+  max-width: 380px;
+}
+
+/* ---------- org-side "Give Feedback" panel (QuestSeriesRow.jsx) ---------- */
+
+.feedback-draft-row {
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--paper-well);
+}
+.feedback-draft-row textarea {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 70px;
 }

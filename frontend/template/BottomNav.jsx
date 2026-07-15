@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
-import { IconList, IconGrid, IconGear, IconPerson } from './icons.jsx';
+import { db } from './firebaseapp.jsx';
+import { IconList, IconGrid, IconGear, IconPerson, IconJournal } from './icons.jsx';
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
 // desktop — same items, same component, just a different flex direction
@@ -18,8 +21,14 @@ import { IconList, IconGrid, IconGear, IconPerson } from './icons.jsx';
 // present — every account, regardless of role, needs a way to its own
 // profile and to display settings/account deletion.
 const PRIMARY_BY_ROLE = {
-  user: [{ to: '/', icon: IconList, label: 'Quests' }],
-  pending_org: [{ to: '/', icon: IconList, label: 'Quests' }],
+  user: [
+    { to: '/', icon: IconList, label: 'Quests' },
+    { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
+  ],
+  pending_org: [
+    { to: '/', icon: IconList, label: 'Quests' },
+    { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
+  ],
   organization: [{ to: '/org', icon: IconList, label: 'Dashboard' }],
   admin: [
     { to: '/', icon: IconList, label: 'Quests' },
@@ -27,9 +36,31 @@ const PRIMARY_BY_ROLE = {
   ],
 };
 
+// Unread count for the Journal badge — a live listener (not a one-time
+// fetch), so it updates the moment an organization sends feedback while
+// the app is open, same as the FeedbackToast popup. `read` (not
+// `notified`) is what this counts: see the module note in
+// functions/main.py's feedback section for why those two flags are kept
+// separate.
+function useUnreadFeedbackCount(user, role) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!user || (role !== 'user' && role !== 'pending_org')) {
+      setCount(0);
+      return undefined;
+    }
+    const q = query(collection(db, 'users', user.uid, 'feedback'), where('read', '==', false));
+    return onSnapshot(q, (snap) => setCount(snap.size));
+  }, [user, role]);
+
+  return count;
+}
+
 export function BottomNav() {
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const location = useLocation();
+  const unreadFeedback = useUnreadFeedbackCount(user, role);
   const items = [
     ...(PRIMARY_BY_ROLE[role] || []),
     { to: '/profile', icon: IconPerson, label: 'Profile' },
@@ -54,7 +85,10 @@ export function BottomNav() {
             aria-current={current ? 'page' : undefined}
             title={item.label}
           >
-            <Icon />
+            <span className="bottom-nav-icon">
+              <Icon />
+              {item.badge && unreadFeedback > 0 && <span className="nav-badge">{unreadFeedback}</span>}
+            </span>
             <span>{item.label}</span>
           </Link>
         );
