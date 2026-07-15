@@ -700,6 +700,31 @@ nav {
   color: var(--line);
 }
 
+/* unread-count badge on a nav icon (Journal today) — positioned relative
+   to a wrapping span rather than the icon itself, since the icon is a
+   plain <svg> with no box of its own to anchor an absolute child to. */
+.bottom-nav-icon {
+  position: relative;
+  display: inline-flex;
+}
+.nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--chip-ink);
+  border: 1.5px solid var(--paper-card);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 /* ---------- quests feed ---------- */
 
 .quest-list {

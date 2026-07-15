@@ -243,6 +243,51 @@ export async function callListQuestAttendees(questId) {
   return result.data.attendees;
 }
 
+// organization (own quests) or admin (any quest): AI-drafted feedback (a
+// default rating + a generated message) for every checked-in attendee who
+// doesn't already have feedback for this quest. Nothing is persisted by
+// this call — see callSubmitQuestFeedbackBatch for the actual send.
+export async function callGenerateQuestFeedbackDrafts(questId) {
+  const fn = httpsCallable(functions, 'generate_quest_feedback_drafts');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): persists the org's
+// (possibly edited) feedback for a batch of attendees at once — this is
+// what actually writes to each attendee's journal and awards their bonus
+// points.
+export async function callSubmitQuestFeedbackBatch({ questId, feedback }) {
+  const fn = httpsCallable(functions, 'submit_quest_feedback_batch');
+  const result = await fn({ questId, feedback });
+  return result.data;
+}
+
+// user: acknowledges the live "you got feedback" popup for one quest, so it
+// doesn't show again on a later page load. Doesn't affect the journal's
+// unread badge — see callMarkFeedbackRead for that.
+export async function callMarkFeedbackNotified(questId) {
+  const fn = httpsCallable(functions, 'mark_feedback_notified');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// user: marks a journal entry as read (opened), clearing its contribution
+// to the BottomNav badge count.
+export async function callMarkFeedbackRead(questId) {
+  const fn = httpsCallable(functions, 'mark_feedback_read');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// user: saves (or updates) the caller's own private reflection for a quest
+// they've already received organization feedback on.
+export async function callSubmitQuestReflection({ questId, body }) {
+  const fn = httpsCallable(functions, 'submit_quest_reflection');
+  const result = await fn({ questId, body });
+  return result.data;
+}
+
 // organization: sets the org's own location-area and activity-type tags
 // (separate from a single quest's tags — these describe the org itself).
 export async function callUpdateOrganizationTags({ ltag, etag }) {

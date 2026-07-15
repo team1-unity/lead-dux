@@ -13,6 +13,17 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.role == 'admin');
       allow write: if false;
+
+      // Organization feedback (rating + message) on a specific completed
+      // quest, plus the user's own private reflection on it — see
+      // generate_quest_feedback_drafts/submit_quest_feedback_batch and
+      // submit_quest_reflection in functions/main.py. Nothing sensitive
+      // here (unlike attendance tokens), so — same as the parent doc —
+      // the owner can read it directly; only a Cloud Function can write.
+      match /feedback/{questId} {
+        allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.role == 'admin');
+        allow write: if false;
+      }
     }
 
     // Pending organization signup request. Same read pattern as users/{uid}.

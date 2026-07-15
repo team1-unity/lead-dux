@@ -13,6 +13,40 @@ import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { IconChevron } from '@shared/icons.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
+import { rankForPoints, pointsToNextRank } from '@shared/rank.js';
+
+// Points/rank are read straight off the user's own doc (self-readable, see
+// firestore.rules) — no dedicated Cloud Function needed just to display
+// them. Rank itself is never stored; see rank.js for why.
+function ProgressCard() {
+  const { user } = useAuth();
+  const [points, setPoints] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, 'users', user.uid)).then((snap) => {
+      setPoints(snap.exists() ? snap.data().points || 0 : 0);
+    });
+  }, [user]);
+
+  if (points === null) return null;
+
+  const rank = rankForPoints(points);
+  const toNext = pointsToNextRank(points);
+
+  return (
+    <section className="ink-card" style={{ marginBottom: 16 }}>
+      <h2 style={{ marginBottom: 4 }}>Leadership Progress</h2>
+      <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.4rem', textTransform: 'uppercase' }}>
+        {rank}
+      </p>
+      <p className="data-stat" style={{ marginTop: 4 }}>
+        {points} point{points === 1 ? '' : 's'}
+        {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
+      </p>
+    </section>
+  );
+}
 
 // Lets a "user" change the interests they picked during onboarding —
 // onboarding only ever sets them once, this is the only way back in.
@@ -103,6 +137,7 @@ export function Profile() {
         <p style={{ margin: '2px 0 0', fontWeight: 700 }}>{user.email}</p>
       </div>
 
+      {role === 'user' && <ProgressCard />}
       {role === 'user' && <InterestsEditor />}
 
       {role !== 'user' && (

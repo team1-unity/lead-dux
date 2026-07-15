@@ -9,6 +9,7 @@ import { BottomNav } from '@shared/BottomNav.jsx';
 import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { FeedbackToast } from '@shared/FeedbackToast.jsx';
 import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
 import { ForgotPassword } from './ForgotPassword.jsx';
@@ -18,6 +19,7 @@ import { Profile } from './Profile.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
+import { Journal } from '@mobile/Journal.jsx';
 import { Register as RegisterOrganization } from '@org/Register.jsx';
 import { Dashboard as OrgDashboard } from '@org/Dashboard.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
@@ -65,6 +67,7 @@ function PublicHome({ role }) {
       <AmbientParticles />
       <TopBar />
       {role === 'pending_org' && <PendingBanner />}
+      <FeedbackToast />
       <Quests interests={profile?.interests || []} />
     </PageMotion>
   );
@@ -133,6 +136,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/journal" element={<Journal />} />
             <Route
               path="/admin"
               element={
