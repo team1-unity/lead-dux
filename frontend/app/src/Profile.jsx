@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callStartOrganizationOnboarding, callUpdateInterests } from '@shared/fetch.jsx';
+import { callStartOrganizationOnboarding, callUpdateInterests, callUpdateOrganizationTags } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -13,6 +13,7 @@ import { TagStamp } from '@shared/TagStamp.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { IconChevron } from '@shared/icons.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
+import { hashTone } from '@shared/tagTones.js';
 
 // Lets a "user" change the interests they picked during onboarding —
 // onboarding only ever sets them once, this is the only way back in.
@@ -81,6 +82,84 @@ function InterestsEditor() {
   );
 }
 
+// Lets an organization set the location areas and activity/event types it
+// operates in — separate from a single quest's own tags, these describe
+// the org itself (for future browse/filter-by-org features). Lives on
+// Profile (an org's "who we are" info) rather than the Quests dashboard,
+// which is purely quest browsing/management.
+function OrgTags({ org, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [ltagInput, setLtagInput] = useState((org.ltag || []).join(', '));
+  const [etagInput, setEtagInput] = useState((org.etag || []).join(', '));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const ltag = ltagInput.split(',').map((t) => t.trim()).filter(Boolean);
+      const etag = etagInput.split(',').map((t) => t.trim()).filter(Boolean);
+      await callUpdateOrganizationTags({ ltag, etag });
+      onSaved({ ltag, etag });
+      setEditing(false);
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!editing) {
+    const ltag = org.ltag || [];
+    const etag = org.etag || [];
+    return (
+      <section className="ink-card">
+        <div className="section-heading">
+          <h2 style={{ margin: 0 }}>Locations &amp; Activities</h2>
+          <StampButton type="button" onClick={() => setEditing(true)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+            Edit
+          </StampButton>
+        </div>
+        {ltag.length === 0 && etag.length === 0 ? (
+          <p className="data-stat" style={{ margin: '10px 0 0' }}>Not set yet.</p>
+        ) : (
+          <div className="quest-tags" style={{ marginTop: 10 }}>
+            {ltag.map((t) => <TagStamp key={`l-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
+            {etag.map((t) => <TagStamp key={`e-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="ink-card">
+      <h2 style={{ marginTop: 0 }}>Locations &amp; Activities</h2>
+      <form onSubmit={save} className="flex flex-col gap-md">
+        <label>
+          Location areas (comma separated)
+          <input value={ltagInput} onChange={(e) => setLtagInput(e.target.value)} placeholder="Downtown, Riverside" />
+        </label>
+        <label>
+          Activity types (comma separated)
+          <input value={etagInput} onChange={(e) => setEtagInput(e.target.value)} placeholder="Cleanup, Workshop" />
+        </label>
+        {error && <p className="box-danger">{error}</p>}
+        <div className="flex gap-sm">
+          <StampButton type="submit" variant="primary" disabled={submitting}>
+            {submitting ? 'Saving...' : 'Save'}
+          </StampButton>
+          <StampButton type="button" onClick={() => setEditing(false)} disabled={submitting}>
+            Cancel
+          </StampButton>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 // No profile photo upload exists in this app (users have no avatar field) —
 // the duck mascot in a brand-mustard ring is the deliberate placeholder for
 // every account, rather than an initial-based tile (which would make this
@@ -102,6 +181,7 @@ function UserAvatar() {
 export function Profile() {
   const { user, role, loading, logout, refreshRole } = useAuth();
   const [name, setName] = useState(null);
+  const [org, setOrg] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -112,6 +192,15 @@ export function Profile() {
       setName(snap.exists() ? snap.data().name || '' : '');
     });
   }, [user]);
+
+  // Only an approved 'organization' account has a populated organizations/
+  // doc (About/Locations & Activities) — every other role skips this read.
+  useEffect(() => {
+    if (role !== 'organization' || !user) return;
+    getDoc(doc(db, 'organizations', user.uid)).then((snap) => {
+      if (snap.exists()) setOrg(snap.data());
+    });
+  }, [role, user]);
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
@@ -200,6 +289,18 @@ export function Profile() {
 
           {error && <p className="box-danger">{error}</p>}
         </section>
+
+        {role === 'organization' && org && (
+          <>
+            <section className="ink-card">
+              <h2 style={{ marginTop: 0 }}>About</h2>
+              <p style={{ margin: 0 }}>{org.reason}</p>
+              <p className="data-stat" style={{ marginTop: 10 }}>{org.location}</p>
+              <p className="data-stat">{org.phone}</p>
+            </section>
+            <OrgTags org={org} onSaved={(t) => setOrg((prev) => ({ ...prev, ...t }))} />
+          </>
+        )}
       </div>
     </PageMotion>
   );

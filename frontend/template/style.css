@@ -58,6 +58,18 @@
   gap: 24px;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* boxes */
 
 .box {
@@ -962,6 +974,143 @@ nav {
   background: var(--accent-soft);
 }
 
+/* Mobile-only "+" FAB (option 1c) — not a create action, a popup revealing
+   feature destinations that don't get their own persistent tab (currently
+   just Badges; a Journal entry is planned to join it later). Desktop shows
+   those same destinations as normal nav pills instead (see BottomNav.jsx's
+   FEATURES_BY_ROLE), so this whole block only ever renders below --bp-wide. */
+.bottom-nav-fab-wrap {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.bottom-nav-fab-slot {
+  position: relative;
+}
+.bottom-nav-fab {
+  width: 54px;
+  height: 54px;
+  margin-top: -22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--brand-green);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 300;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(49, 158, 95, 0.4);
+}
+.bottom-nav-fab:hover {
+  transform: none;
+}
+/* Each popped-up destination is its own circle, fanned above the FAB via an
+   inline left/bottom computed by fabCircleStyle() in BottomNav.jsx — plain
+   position:absolute here, no flex container, since the arc math already
+   places every circle independently. */
+.bottom-nav-fab-circle {
+  position: absolute;
+  transform: translate(-50%, 50%);
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-full);
+  background: var(--paper-card);
+  border: 1.5px solid var(--border);
+  color: var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px var(--shadow);
+  z-index: 11;
+}
+.bottom-nav-fab-circle:hover {
+  background: var(--paper-well);
+  transform: translate(-50%, 50%);
+}
+.fab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  background: transparent;
+}
+
+/* An organization's own Profile destination, desktop only — a top-right
+   avatar instead of a pill alongside Dashboard/Settings. Only rendered at
+   >=860px (see BottomNav.jsx); mobile keeps the normal Profile tab. */
+.bottom-nav-avatar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  padding: 4px 4px 4px 0;
+  border-radius: var(--radius-full);
+  text-decoration: none;
+}
+.bottom-nav-org-name {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--line-soft);
+  white-space: nowrap;
+}
+.nav-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--brand-mustard);
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.bottom-nav-avatar-link[aria-current='page'] .nav-avatar {
+  border-color: var(--accent);
+}
+
+/* Generic page heading block (title + subtitle) — shared by any top-level
+   screen that isn't the quest feed itself (Badges, etc). */
+.page-greeting {
+  margin-bottom: 20px;
+}
+.page-greeting h1 {
+  margin-bottom: 4px;
+}
+.page-greeting p {
+  margin: 0;
+  color: var(--line-soft);
+}
+
+/* A compact white header bar (title + circular avatar), mobile only — the
+   negative margin undoes #root's own padding so it sits flush with the
+   viewport edges instead of inset like the rest of the page content.
+   Desktop already gets an avatar from BottomNav, so this hides there. */
+.mobile-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper-card);
+  padding: 14px 18px;
+  margin: -24px -16px 20px;
+  border-bottom: 1.5px solid var(--border);
+}
+.mobile-page-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+@media (min-width: 860px) {
+  .mobile-page-header {
+    display: none;
+  }
+}
+
 /* ---------- quests feed ---------- */
 
 .quest-feed-greeting {
@@ -1083,6 +1232,15 @@ button.quest-card-head:hover:not(:disabled) {
   font-size: 0.82rem;
   color: var(--line-soft);
   margin-top: 3px;
+}
+.quest-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--brand-green);
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .quest-chevron {
@@ -1220,6 +1378,42 @@ button.quest-card-head:hover:not(:disabled) {
   opacity: 0.9;
 }
 
+/* org / side-quests segmented toggle (option 1c, mobile only) — "side-quests"
+   are the admin-created neighborhood quests (isDefault), "org" is everything
+   an organization posted itself; see Quests.jsx's segmentedList. */
+.segmented-toggle {
+  display: flex;
+  gap: 0;
+  background: var(--paper-well);
+  border-radius: var(--radius-full);
+  padding: 4px;
+  margin-bottom: 14px;
+  max-width: 640px;
+}
+.segmented-toggle button {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  box-shadow: none;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--line-soft);
+}
+.segmented-toggle button:hover {
+  transform: none;
+  box-shadow: none;
+}
+.segmented-toggle button[aria-pressed='true'] {
+  background: var(--paper-card);
+  color: var(--line);
+  font-weight: 700;
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
 .tag-filter-row {
   display: flex;
   flex-wrap: nowrap;
@@ -1244,15 +1438,30 @@ button.quest-card-head:hover:not(:disabled) {
     gap: 32px;
     max-width: none;
   }
+  /* A fixed-height column matching the detail pane beside it — the
+     greeting/toolbar/tag-filters stay put at natural height, and .quest-list
+     (below) becomes the one thing that scrolls internally as more quests
+     are added, rather than pushing the whole page taller. */
   .quest-feed-main {
     max-width: none;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--nav-height-desktop) - 80px);
   }
   .quest-list {
     max-width: none;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
   }
   .quest-detail-pane {
     position: sticky;
     top: calc(var(--nav-height-desktop) + 40px);
+    /* Fills the viewport below the header at all times, however short its
+       own content is or however far the list beside it scrolls — never
+       leaves blank page background showing underneath. */
+    min-height: calc(100vh - var(--nav-height-desktop) - 80px);
   }
 }
 .quest-detail-empty {
@@ -1415,29 +1624,95 @@ button.data-row:active:not(:disabled) {
   }
 }
 
-/* ---------- dashboard grid (org today; reusable wherever a sidebar +
-   main-content split makes sense) — stacked on mobile, a real two-column
-   dashboard once there's room for one. ---------- */
+/* ---------- org dashboard: search/filter toolbar, floating create
+   button ---------- */
 
-.dash-grid {
+.org-quests-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  gap: 10px;
+  margin-bottom: 20px;
 }
-@media (min-width: 860px) {
-  .dash-grid {
-    display: grid;
-    grid-template-columns: 260px 1fr;
-    align-items: start;
-    gap: 32px;
-  }
-  .dash-sidebar {
-    position: sticky;
-    top: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
+.search-field {
+  max-width: 320px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 11px 16px;
+}
+.search-field svg {
+  flex: none;
+  color: var(--line-soft);
+}
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  background: none;
+}
+.search-field input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.filter-icon-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  flex: none;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.filter-icon-btn[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Anchored to the sticky detail pane (its containing block — position:
+   sticky establishes one same as relative/absolute would), so it stays in
+   view without its own scroll handling. Desktop only; mobile keeps the
+   original inline dashed toggle button instead. */
+.quest-fab {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 1.8rem;
+  font-weight: 300;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.quest-fab:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.quest-detail-edit-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---------- loading state ---------- */
@@ -1499,7 +1774,6 @@ button.data-row:active:not(:disabled) {
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  align-items: start;
   gap: 16px;
 }
 
@@ -1540,4 +1814,90 @@ button.data-row:active:not(:disabled) {
   border-style: dashed;
   border-width: 2px;
   border-color: var(--border);
+}
+
+/* ---------- badges (options 1d/1e) ----------
+   Badges have no backend of their own (see @shared/badges.js) — earned,
+   in-progress, and undiscovered are all client-computed from real RSVP
+   activity, so these are purely presentational: a ring's tag-tinted fill
+   comes from the same 9-tone rack TagStamp/OrgAvatar use. */
+
+.badge-ring {
+  position: relative;
+  border-radius: var(--radius-full);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.badge-ring[data-state='earned'] {
+  background: var(--tag-color);
+  border: 2px solid var(--tag-ink);
+}
+.badge-ring[data-state='in-progress'] {
+  background: var(--paper-card);
+  border: 2px solid var(--border);
+}
+.badge-ring[data-state='locked'] {
+  background: var(--paper-well);
+  border: 2px solid transparent;
+}
+.badge-heart {
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  color: var(--danger);
+}
+.badge-lock {
+  color: var(--line-soft);
+}
+
+.badges-earned-row {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 18px;
+}
+.badges-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  justify-items: center;
+  margin-bottom: 20px;
+}
+.badges-desktop-row {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.badge-section-pill {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--paper-card);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--line);
+}
+.badge-section-pill[data-tone='muted'] {
+  background: var(--paper-well);
+  color: var(--line-soft);
+}
+.badge-section-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--line-soft);
+  margin: 0 0 16px;
+}
+.ink-card[data-muted='true'] {
+  background: var(--paper-well);
 }

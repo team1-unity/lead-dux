@@ -13,12 +13,13 @@ import {
 } from '@shared/fetch.jsx';
 import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
+import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
-import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert } from '@shared/icons.jsx';
+import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch } from '@shared/icons.jsx';
 
 const DEFAULT_EVENT_WINDOW_HOURS = 6; // mirrors functions/main.py's DEFAULT_EVENT_WINDOW_HOURS
 
@@ -49,23 +50,6 @@ function formatEventDate(isoOrTimestamp) {
 function formatStars(rating) {
   const whole = Math.round(rating);
   return '★'.repeat(whole) + '☆'.repeat(5 - whole);
-}
-
-// True once the viewport crosses the same --bp-wide breakpoint the rest of
-// the app's chrome (BottomNav) switches on — used here to decide whether a
-// quest's detail renders inline under its row (mobile accordion) or once,
-// in the side panel (desktop split view), rather than mounting both and
-// hiding one with CSS (which would fire every lazy fetch inside it twice).
-function useIsDesktop() {
-  const query = '(min-width: 860px)';
-  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const handler = (e) => setIsDesktop(e.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, []);
-  return isDesktop;
 }
 
 // The member's own check-in QR code for a quest they've RSVP'd to. Fetched
@@ -367,9 +351,12 @@ function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTi
 
 // One row per series (not per date) — a recurring quest with 8 scheduled
 // occurrences shows as a single row with a date picker inside its detail,
-// rather than flooding the list with 8 near-duplicate entries.
+// rather than flooding the list with 8 near-duplicate entries. RSVP only
+// happens once expanded (QuestDetailBody) — there's no quick-accept action
+// on the collapsed card.
 function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
   const { primary, occurrences } = series;
+
   return (
     <motion.li className="quest-row" variants={itemVariants}>
       <div className="quest-node-col">
@@ -384,6 +371,12 @@ function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
           <div className="quest-card-titles">
             <p className="quest-title">{primary.title}</p>
             {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
+            {primary.location && (
+              <p className="quest-org-line">
+                <span className="quest-dot" aria-hidden="true" />
+                {primary.location}
+              </p>
+            )}
             {series.reviewCount > 0 && (
               <p className="quest-org-line">
                 {formatStars(series.avgRating)} ({series.reviewCount})
@@ -423,6 +416,8 @@ export function Quests({ interests, name }) {
   const [busyId, setBusyId] = useState(null);
   const [activeTag, setActiveTag] = useState(null);
   const [openSeriesId, setOpenSeriesId] = useState(null);
+  const [segment, setSegment] = useState('org');
+  const [search, setSearch] = useState('');
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
 
@@ -457,23 +452,39 @@ export function Quests({ interests, name }) {
     }
   }
 
-  const availableTags = useMemo(() => {
-    if (!seriesList) return [];
-    const seen = new Set();
-    seriesList.forEach((s) => (s.primary.tags || []).forEach((t) => seen.add(t)));
-    return [...seen];
-  }, [seriesList]);
-
   const orgCount = useMemo(() => {
     if (!seriesList) return 0;
     return new Set(seriesList.filter((s) => s.primary.orgId).map((s) => s.primary.orgId)).size;
   }, [seriesList]);
 
-  const visibleSeries = useMemo(() => {
+  // The org / side-quests segmented toggle applies at both breakpoints —
+  // "side-quests" are the admin-created neighborhood quests (isDefault, no
+  // orgId; see create_default_quest in functions/main.py), "org" is
+  // everything an organization posted itself. Every quest is one or the
+  // other by construction, never both.
+  const segmentedList = useMemo(() => {
     if (!seriesList) return [];
-    if (!activeTag) return seriesList;
-    return seriesList.filter((s) => (s.primary.tags || []).includes(activeTag));
-  }, [seriesList, activeTag]);
+    return seriesList.filter((s) => (segment === 'side-quests' ? s.primary.isDefault : !s.primary.isDefault));
+  }, [seriesList, segment]);
+
+  const availableTags = useMemo(() => {
+    const seen = new Set();
+    segmentedList.forEach((s) => (s.primary.tags || []).forEach((t) => seen.add(t)));
+    return [...seen];
+  }, [segmentedList]);
+
+  const visibleSeries = useMemo(() => {
+    let list = segmentedList;
+    if (activeTag) list = list.filter((s) => (s.primary.tags || []).includes(activeTag));
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((s) => {
+        const { title, orgName, location } = s.primary;
+        return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
+      });
+    }
+    return list;
+  }, [segmentedList, activeTag, search]);
 
   const activeSeriesId = isDesktop ? openSeriesId ?? visibleSeries[0]?.seriesId ?? null : openSeriesId;
   const activeSeries = visibleSeries.find((s) => s.seriesId === activeSeriesId) || null;
@@ -515,15 +526,52 @@ export function Quests({ interests, name }) {
           </p>
         </div>
 
-        <div className="stat-hero-row">
-          <div className="stat-hero-tile" style={{ background: 'var(--brand-green)' }}>
-            <span className="stat-hero-number">{seriesList.length}</span>
-            <span className="stat-hero-label">Quests Open</span>
+        {role === 'admin' && (
+          <div className="stat-hero-row">
+            <div className="stat-hero-tile" style={{ background: 'var(--brand-green)' }}>
+              <span className="stat-hero-number">{seriesList.length}</span>
+              <span className="stat-hero-label">Quests Open</span>
+            </div>
+            <div className="stat-hero-tile" style={{ background: 'var(--brand-blue)' }}>
+              <span className="stat-hero-number">{orgCount}</span>
+              <span className="stat-hero-label">Organizations</span>
+            </div>
           </div>
-          <div className="stat-hero-tile" style={{ background: 'var(--brand-blue)' }}>
-            <span className="stat-hero-number">{orgCount}</span>
-            <span className="stat-hero-label">Organizations</span>
-          </div>
+        )}
+
+        <div className="segmented-toggle" role="tablist" aria-label="Quest source">
+          <button
+            type="button"
+            role="tab"
+            aria-pressed={segment === 'org'}
+            onClick={() => {
+              setSegment('org');
+              setActiveTag(null);
+            }}
+          >
+            org
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-pressed={segment === 'side-quests'}
+            onClick={() => {
+              setSegment('side-quests');
+              setActiveTag(null);
+            }}
+          >
+            side-quests
+          </button>
+        </div>
+        <div className="search-field" style={{ maxWidth: 640, marginBottom: 14 }}>
+          <IconSearch />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search"
+            aria-label="Search quests"
+          />
         </div>
 
         {availableTags.length > 0 && (

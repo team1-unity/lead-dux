@@ -15,6 +15,7 @@ import { Profile } from './Profile.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
+import { Badges } from '@mobile/Badges.jsx';
 import { Register as RegisterOrganization } from '@org/Register.jsx';
 import { Dashboard as OrgDashboard } from '@org/Dashboard.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
@@ -124,6 +125,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/badges" element={<Badges />} />
             <Route
               path="/admin"
               element={
