@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext.jsx';
 import { IconList, IconGrid, IconGear, IconPerson } from './icons.jsx';
+import { Logo } from './Logo.jsx';
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
 // desktop — same items, same component, just a different flex direction
@@ -43,6 +44,9 @@ export function BottomNav() {
     // reproduce it). The ARIA role gives screen readers the same landmark
     // without the engine quirk.
     <div className="bottom-nav" role="navigation" aria-label="Primary">
+      <Link to="/" className="bottom-nav-brand" aria-hidden="true" tabIndex={-1}>
+        <Logo size={24} />
+      </Link>
       {items.map((item) => {
         const Icon = item.icon;
         const current = location.pathname === item.to;

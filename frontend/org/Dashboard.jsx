@@ -11,7 +11,6 @@ import {
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { QuestSeriesRow } from '@shared/QuestSeriesRow.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
-import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
@@ -116,11 +115,11 @@ function OrgStats() {
 
   return (
     <div className="stat-hero-row" style={{ marginBottom: 0 }}>
-      <div className="stat-hero-tile" style={{ background: 'var(--tag-community)' }}>
+      <div className="stat-hero-tile" style={{ background: 'var(--brand-green)' }}>
         <span className="stat-hero-number">{stats.questCount}</span>
         <span className="stat-hero-label">Quests posted</span>
       </div>
-      <div className="stat-hero-tile" style={{ background: 'var(--tag-education)' }}>
+      <div className="stat-hero-tile" style={{ background: 'var(--brand-blue)' }}>
         <span className="stat-hero-number">{stats.totalRsvps}</span>
         <span className="stat-hero-label">Total RSVPs</span>
       </div>
@@ -343,7 +342,6 @@ export function Dashboard() {
 
   return (
     <PageMotion>
-      <AmbientParticles />
       <TopBar title={org ? org.name : 'Organization'} hero />
       <div className="dash-grid">
         <aside className="dash-sidebar">

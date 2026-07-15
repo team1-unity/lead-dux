@@ -4,9 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
 import { ProtectedRoute } from '@shared/ProtectedRoute.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { TopBar } from '@shared/TopBar.jsx';
 import { BottomNav } from '@shared/BottomNav.jsx';
-import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { Login } from './Login.jsx';
@@ -61,10 +59,8 @@ function PublicHome({ role }) {
 
   return (
     <PageMotion>
-      <AmbientParticles />
-      <TopBar />
       {role === 'pending_org' && <PendingBanner />}
-      <Quests interests={profile?.interests || []} />
+      <Quests interests={profile?.interests || []} name={profile?.name} />
     </PageMotion>
   );
 }
@@ -74,8 +70,6 @@ function PublicHome({ role }) {
 function AdminHome() {
   return (
     <PageMotion>
-      <AmbientParticles />
-      <TopBar />
       <Quests interests={[]} />
     </PageMotion>
   );

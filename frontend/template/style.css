@@ -109,83 +109,94 @@
 }
 
 /* =========================================================================
-   STAMPED — Leadership Quest visual identity
-   Rough.js-inflected, neobrutalist, pastel. See the design-artifact pass for
-   full rationale. The .box/.box-primary/etc and .flex/.gap-* utilities
-   above predate this and are kept as-is — screens not yet converted to the
-   .ink-card/.ink-btn system still use them until their turn comes.
+   LEAD-DUX visual identity — warm, flat, community-driven. Duck-on-water
+   brand mark; Crushed (display-only) / Cuprum (headings & labels) / DM Sans
+   (body & UI copy). Replaces the earlier rough.js "stamped ink" pass — see
+   git history for that version. The .box/.box-primary/etc and .flex/.gap-*
+   utilities above predate both passes and are kept as-is.
    ========================================================================= */
 
 @font-face {
-  font-family: 'Anton';
-  src: url('/fonts/anton-v27-latin-400.woff2') format('woff2');
+  font-family: 'Crushed';
+  src: url('/fonts/crushed-v32-latin-400.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Karla';
-  src: url('/fonts/karla-v33-latin-variable.woff2') format('woff2');
+  font-family: 'Cuprum';
+  src: url('/fonts/cuprum-v29-latin-variable.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Space Mono';
-  src: url('/fonts/space-mono-v17-latin-400.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Space Mono';
-  src: url('/fonts/space-mono-v17-latin-700.woff2') format('woff2');
-  font-weight: 700;
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-v17-latin-variable.woff2') format('woff2');
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  /* paper */
-  --paper: #f2ead9;
-  --paper-card: #fbf6ea;
-  --paper-well: #e9dcc0;
-  --line: #2a2419;
-  --line-soft: #6b6152;
-  --shadow: #2a2419;
+  /* brand hues — rarely used raw; almost everything below derives from these */
+  --brand-green: #319e5f;
+  --brand-green-deep: #488858;
+  --brand-mustard: #f3cf31;
+  --brand-blue: #356ac8;
+  --brand-orange: #ee9b43;
 
-  /* pastel ink rack — one per quest interest tag */
-  --tag-community: #f1a896;
-  --tag-education: #aecbeb;
-  --tag-environment: #a9d6b3;
-  --tag-outdoors: #f0ce8e;
-  --tag-technology: #c9b7e8;
-  --tag-youth: #f0afcb;
-  --tag-fitness: #a6dbd3;
-  --tag-food-security: #eab99b;
-  --tag-arts: #d4afd1;
+  /* surfaces */
+  --paper: #f4f1ea;
+  --paper-card: #ffffff;
+  --paper-well: #ece7d9;
+  --line: #26301f;
+  --line-soft: #5c6355;
+  --border: #e1dccb;
+  --shadow: rgba(38, 48, 31, 0.14);
+
+  /* pastel tag rack — one per quest interest tag, all rooted in the brand hues */
+  --tag-environment: #cfead9;
+  --tag-environment-ink: #1e5c3c;
+  --tag-community: #fbeba9;
+  --tag-community-ink: #6b4e05;
+  --tag-youth: #d7e4f7;
+  --tag-youth-ink: #1e3a73;
+  --tag-education: #d6ecf7;
+  --tag-education-ink: #1b4e66;
+  --tag-outdoors: #fbe1c4;
+  --tag-outdoors-ink: #7a4413;
+  --tag-technology: #cfe9e6;
+  --tag-technology-ink: #15574f;
+  --tag-fitness: #f6d6d0;
+  --tag-fitness-ink: #7a2c22;
+  --tag-food-security: #e7e4b0;
+  --tag-food-security-ink: #52480a;
+  --tag-arts: #e3d6f0;
+  --tag-arts-ink: #48276e;
 
   /* semantic */
-  --accent: var(--tag-community);
-  --success: var(--tag-environment);
-  --warning: var(--tag-outdoors);
-  --danger: #e08a76;
-  --link: #3e6fa6;
-  --focus-ring: #3e6fa6;
+  --accent: var(--brand-green-deep);
+  --accent-contrast: #ffffff;
+  --accent-soft: #e3efe6;
+  --secondary: var(--brand-mustard);
+  --secondary-ink: #6b4e05;
+  --info: var(--brand-blue);
+  --success: #2f8a53;
+  --warning: #a86a12;
+  --danger: #c04a3c;
+  --danger-soft: #f8e6e3;
+  --link: var(--brand-blue);
+  --focus-ring: var(--brand-blue);
 
-  /* Chips (tag-stamp, status-stamp) always carry a light pastel fill, in
-     either theme — so their text is always dark ink, never the theme's
-     --line (which flips to light-on-dark and fails contrast against a
-     fill that stays light). Deliberately NOT redefined in the dark blocks
-     below. */
-  --chip-ink: #2a2419;
+  --font-display: 'Crushed', 'Arial Narrow', sans-serif;
+  --font-heading: 'Cuprum', 'Arial Narrow', sans-serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-body);
 
-  --font-display: 'Anton', 'Arial Narrow', sans-serif;
-  --font-body: 'Karla', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
-
-  --radius: 12px;
-  --radius-lg: 24px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
   --nav-height: 64px;
   --nav-height-desktop: 76px;
   --bp-wide: 860px;
@@ -193,70 +204,121 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #211c16;
-    --paper-card: #2a231b;
-    --paper-well: #191510;
-    --line: #f1e6d2;
-    --line-soft: #c6b89e;
-    --shadow: #0a0806;
+    --paper: #182019;
+    --paper-card: #212b22;
+    --paper-well: #1a231b;
+    --line: #eef3ea;
+    --line-soft: #a9b3a2;
+    --border: #33402f;
+    --shadow: rgba(0, 0, 0, 0.4);
 
-    --tag-community: #d98a78;
-    --tag-education: #9fc0e2;
-    --tag-environment: #9acda4;
-    --tag-outdoors: #e6c48b;
-    --tag-technology: #bda8df;
-    --tag-youth: #e6a5c1;
-    --tag-fitness: #9ed6cc;
-    --tag-food-security: #ddae8d;
-    --tag-arts: #c6a2c3;
+    --tag-environment: #23422f;
+    --tag-environment-ink: #a9e0bc;
+    --tag-community: #4a3d10;
+    --tag-community-ink: #f3d873;
+    --tag-youth: #223651;
+    --tag-youth-ink: #aecbf2;
+    --tag-education: #1f3c46;
+    --tag-education-ink: #a7dcee;
+    --tag-outdoors: #4a3319;
+    --tag-outdoors-ink: #f0c290;
+    --tag-technology: #1e3c38;
+    --tag-technology-ink: #9fe0d6;
+    --tag-fitness: #452420;
+    --tag-fitness-ink: #f2b3a7;
+    --tag-food-security: #3c3a14;
+    --tag-food-security-ink: #e3dd8e;
+    --tag-arts: #362949;
+    --tag-arts-ink: #dcc4f0;
 
-    --danger: #d9846f;
-    --link: #9fc0e2;
-    --focus-ring: #9fc0e2;
+    --accent-soft: #223a29;
+    --secondary-ink: #f3d873;
+    --success: #6fce93;
+    --warning: #e0ab5c;
+    --danger: #e08a78;
+    --danger-soft: #3a2420;
+    --link: #8fb4ec;
+    --focus-ring: #8fb4ec;
   }
 }
-:root[data-theme="dark"] {
-  --paper: #211c16;
-  --paper-card: #2a231b;
-  --paper-well: #191510;
-  --line: #f1e6d2;
-  --line-soft: #c6b89e;
-  --shadow: #0a0806;
-  --tag-community: #d98a78;
-  --tag-education: #9fc0e2;
-  --tag-environment: #9acda4;
-  --tag-outdoors: #e6c48b;
-  --tag-technology: #bda8df;
-  --tag-youth: #e6a5c1;
-  --tag-fitness: #9ed6cc;
-  --tag-food-security: #ddae8d;
-  --tag-arts: #c6a2c3;
-  --danger: #d9846f;
-  --link: #9fc0e2;
-  --focus-ring: #9fc0e2;
+:root[data-theme='dark'] {
+  --paper: #182019;
+  --paper-card: #212b22;
+  --paper-well: #1a231b;
+  --line: #eef3ea;
+  --line-soft: #a9b3a2;
+  --border: #33402f;
+  --shadow: rgba(0, 0, 0, 0.4);
+
+  --tag-environment: #23422f;
+  --tag-environment-ink: #a9e0bc;
+  --tag-community: #4a3d10;
+  --tag-community-ink: #f3d873;
+  --tag-youth: #223651;
+  --tag-youth-ink: #aecbf2;
+  --tag-education: #1f3c46;
+  --tag-education-ink: #a7dcee;
+  --tag-outdoors: #4a3319;
+  --tag-outdoors-ink: #f0c290;
+  --tag-technology: #1e3c38;
+  --tag-technology-ink: #9fe0d6;
+  --tag-fitness: #452420;
+  --tag-fitness-ink: #f2b3a7;
+  --tag-food-security: #3c3a14;
+  --tag-food-security-ink: #e3dd8e;
+  --tag-arts: #362949;
+  --tag-arts-ink: #dcc4f0;
+
+  --accent-soft: #223a29;
+  --secondary-ink: #f3d873;
+  --success: #6fce93;
+  --warning: #e0ab5c;
+  --danger: #e08a78;
+  --danger-soft: #3a2420;
+  --link: #8fb4ec;
+  --focus-ring: #8fb4ec;
 }
-:root[data-theme="light"] {
-  --paper: #f2ead9;
-  --paper-card: #fbf6ea;
-  --paper-well: #e9dcc0;
-  --line: #2a2419;
-  --line-soft: #6b6152;
-  --shadow: #2a2419;
-  --tag-community: #f1a896;
-  --tag-education: #aecbeb;
-  --tag-environment: #a9d6b3;
-  --tag-outdoors: #f0ce8e;
-  --tag-technology: #c9b7e8;
-  --tag-youth: #f0afcb;
-  --tag-fitness: #a6dbd3;
-  --tag-food-security: #eab99b;
-  --tag-arts: #d4afd1;
-  --danger: #e08a76;
-  --link: #3e6fa6;
-  --focus-ring: #3e6fa6;
+:root[data-theme='light'] {
+  --paper: #f4f1ea;
+  --paper-card: #ffffff;
+  --paper-well: #ece7d9;
+  --line: #26301f;
+  --line-soft: #5c6355;
+  --border: #e1dccb;
+  --shadow: rgba(38, 48, 31, 0.14);
+
+  --tag-environment: #cfead9;
+  --tag-environment-ink: #1e5c3c;
+  --tag-community: #fbeba9;
+  --tag-community-ink: #6b4e05;
+  --tag-youth: #d7e4f7;
+  --tag-youth-ink: #1e3a73;
+  --tag-education: #d6ecf7;
+  --tag-education-ink: #1b4e66;
+  --tag-outdoors: #fbe1c4;
+  --tag-outdoors-ink: #7a4413;
+  --tag-technology: #cfe9e6;
+  --tag-technology-ink: #15574f;
+  --tag-fitness: #f6d6d0;
+  --tag-fitness-ink: #7a2c22;
+  --tag-food-security: #e7e4b0;
+  --tag-food-security-ink: #52480a;
+  --tag-arts: #e3d6f0;
+  --tag-arts-ink: #48276e;
+
+  --accent-soft: #e3efe6;
+  --secondary-ink: #6b4e05;
+  --success: #2f8a53;
+  --warning: #a86a12;
+  --danger: #c04a3c;
+  --danger-soft: #f8e6e3;
+  --link: var(--brand-blue);
+  --focus-ring: var(--brand-blue);
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -293,15 +355,36 @@ body {
   }
 }
 
-h1, h2, h3 {
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 0.01em;
+/* The auth split card (brand hero + form) goes full-bleed once it's two
+   columns — #root's default 720px cap and page padding would otherwise
+   leave a visible margin around it. Matches the .auth-card breakpoint. */
+@media (min-width: 760px) {
+  #root:has(.auth-shell) {
+    max-width: none;
+    padding: 0;
+  }
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0;
   margin: 0 0 16px;
 }
-h1 { font-size: 2.1rem; line-height: 1.08; }
-h2 { font-size: 1.55rem; line-height: 1.12; }
-h3 { font-size: 1.2rem; margin-bottom: 8px; }
+h1 {
+  font-size: 1.9rem;
+  line-height: 1.15;
+}
+h2 {
+  font-size: 1.4rem;
+  line-height: 1.2;
+}
+h3 {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
 
 a {
   color: var(--link);
@@ -360,27 +443,39 @@ pre {
 label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.9rem;
-  font-weight: 700;
+  gap: 6px;
+  font-size: 0.88rem;
+  font-family: var(--font-heading);
+  font-weight: 600;
 }
 
 input,
 textarea,
 select {
   font: inherit;
-  padding: 9px 11px;
+  font-family: var(--font-body);
+  padding: 10px 13px;
   border-radius: var(--radius);
-  border: 2px solid var(--line);
+  border: 1.5px solid var(--border);
   background: var(--paper-card);
   color: var(--line);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: var(--line-soft);
 }
 
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 25%, transparent);
 }
 
 textarea {
@@ -389,7 +484,7 @@ textarea {
 }
 
 fieldset {
-  border: 2px solid var(--line);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
 }
@@ -397,46 +492,58 @@ fieldset {
 fieldset label {
   flex-direction: row;
   align-items: center;
+  font-family: var(--font-body);
   font-weight: 400;
 }
 
-/* buttons — hard offset shadow that collapses on press, the core STAMPED
-   interaction. Applies to every <button>, not just .ink-btn, so screens not
-   yet converted to the card system still get the pressable feel. */
+/* buttons — flat fill/outline with a soft lift on hover, a gentle press
+   settle on active. Applies to every <button>, not just .ink-btn, so
+   screens not yet converted to the card system still get the same feel. */
 
 button {
   font: inherit;
-  font-weight: 700;
-  padding: 9px 16px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  padding: 10px 18px;
   border-radius: var(--radius);
-  border: 2.4px solid var(--line);
+  border: 1.5px solid var(--border);
   background: var(--paper-card);
   color: var(--line);
   cursor: pointer;
-  box-shadow: 4px 4px 0 var(--shadow);
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  box-shadow: 0 1px 2px var(--shadow);
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 button:hover:not(:disabled) {
-  transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 var(--shadow);
+  border-color: var(--line-soft);
+  box-shadow: 0 4px 12px var(--shadow);
+  transform: translateY(-1px);
 }
 
 button:active:not(:disabled) {
-  transform: translate(4px, 4px);
-  box-shadow: 0 0 0 var(--shadow);
+  transform: translateY(0);
+  box-shadow: 0 1px 2px var(--shadow);
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
-  box-shadow: 4px 4px 0 var(--shadow);
+  opacity: 0.5;
+  box-shadow: none;
   transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
   button {
-    transition: none;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  button:hover:not(:disabled) {
+    transform: none;
   }
 }
 
@@ -448,32 +555,44 @@ nav {
 
 .quest-org {
   color: var(--line-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-weight: 400;
   font-size: 0.85em;
 }
 
-/* ---------- STAMPED card + chip system (Phase 1+ screens use these) ---------- */
+/* ---------- card + chip system ---------- */
 
 .ink-card {
   background: var(--paper-card);
-  border: 2.6px solid var(--line);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 5px 5px 0 var(--shadow);
+  box-shadow: 0 1px 3px var(--shadow);
   padding: 18px 20px;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
-.ink-card[data-danger="true"] {
+.ink-card[data-danger='true'] {
   border-color: var(--danger);
 }
 
 .ink-btn-primary {
   background: var(--accent);
-  color: var(--chip-ink);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.ink-btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, black);
+  border-color: color-mix(in srgb, var(--accent) 88%, black);
 }
 
 .ink-btn-danger {
-  background: var(--danger);
-  color: var(--chip-ink);
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.ink-btn-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
 }
 
 /* pastel pill for tags/interests — TagStamp.jsx renders this. When rendered
@@ -484,56 +603,71 @@ nav {
   display: inline-flex;
   align-items: center;
   font: inherit;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 2px solid var(--line);
-  color: var(--line);
-  background: var(--paper-well);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  padding: 5px 13px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid transparent;
+  color: var(--tag-ink, var(--line));
+  background: var(--tag-color, var(--paper-well));
   cursor: default;
   box-shadow: none;
-  transition: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 .tag-stamp:hover,
 .tag-stamp:active {
   box-shadow: none;
   transform: none;
 }
-.tag-stamp[data-selectable="true"] {
+.tag-stamp[data-selectable='true'] {
   cursor: pointer;
-  background: none;
+  background: transparent;
+  border-color: var(--tag-color, var(--border));
+  color: var(--tag-select-ink, var(--line-soft));
 }
-.tag-stamp[data-selected="true"] {
+.tag-stamp[data-selectable='true']:hover {
+  background: color-mix(in srgb, var(--tag-color, var(--paper-well)) 35%, transparent);
+}
+.tag-stamp[data-selected='true'] {
   background: var(--tag-color, var(--paper-well));
-  color: var(--chip-ink);
+  border-color: var(--tag-color, var(--paper-well));
+  color: var(--tag-ink, var(--line));
 }
 
 /* filled pastel chip for role/request status — StatusStamp.jsx. Always
-   carries a colored fill (see --chip-ink note above for why the text color
-   doesn't come from --line here). */
+   carries a colored fill paired with its own per-tone ink color, falling
+   back to --line (not a fixed dark ink) when untoned, since the fallback
+   fill (--paper-well) itself flips dark in dark mode. */
 .status-stamp {
   display: inline-flex;
   align-items: center;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
-  padding: 5px 12px;
-  border: 2.5px solid var(--line);
-  border-radius: 8px;
-  color: var(--chip-ink);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+  padding: 5px 13px;
+  border: none;
+  border-radius: var(--radius-full);
+  color: var(--tag-ink, var(--line));
   background: var(--tag-color, var(--paper-well));
 }
-.status-stamp[data-muted="true"] {
+.status-stamp[data-muted='true'] {
   background: none;
   color: var(--line-soft);
-  border-color: var(--line-soft);
+  border: 1.5px solid var(--border);
 }
 
-/* ---------- auth screens (Login, Register, Forgot/Reset password) ---------- */
+/* ---------- auth screens (Login, Register, Forgot/Reset password) ----------
+   Mobile-first here is a deliberate card-less layout — icon + wordmark
+   stacked above the form, everything floating directly on the page
+   background — matching the original mobile mockup. Desktop (>=760px)
+   below turns the same markup into the brand-green/white full-bleed split
+   screen; nothing at mobile width wins from going edge-to-edge, so it
+   stays a plain centered column instead. */
 
 .auth-shell {
   min-height: calc(100vh - 48px);
@@ -547,18 +681,158 @@ nav {
 .auth-card {
   width: 100%;
   max-width: 380px;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
 }
-.auth-card h1 {
-  font-size: 1.6rem;
+.auth-hero-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
+.auth-hero-duck {
+  width: 120px;
+  height: auto;
+}
+.auth-hero-word {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 2.1rem;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--accent);
+}
+.auth-card-hero {
+  padding: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+.auth-card-hero p {
+  display: none;
+}
+.auth-card-form {
+  padding: 28px 24px 0;
+}
+.auth-card-form h1 {
+  font-size: 1.7rem;
+  text-align: center;
+}
+.auth-card-form label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--line-soft);
+}
+/* At desktop width this stops being a plain floating column at all — it
+   fills the viewport edge-to-edge, brand-green half + white half, same as
+   a real marketing/product split-screen login. */
+@media (min-width: 760px) {
+  .auth-shell {
+    min-height: 100vh;
+    padding: 0;
+    gap: 0;
+  }
+  .auth-card {
+    max-width: none;
+    min-height: 100vh;
+    background: var(--paper-card);
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .auth-hero-duck {
+    width: 48px;
+  }
+  .auth-hero-word {
+    font-size: 1.3rem;
+    color: var(--brand-mustard);
+  }
+  .auth-card-hero {
+    background: var(--brand-green);
+    flex: 1;
+    justify-content: center;
+    padding: 48px;
+  }
+  .auth-card-hero p {
+    display: block;
+    margin: 0;
+    color: #ffffff;
+    font-size: 1rem;
+    opacity: 0.92;
+    max-width: 260px;
+  }
+  .auth-card-form {
+    flex: 1;
+    padding: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .auth-card-form h1 {
+    text-align: left;
+  }
+  .auth-card-form label {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--line);
+  }
+}
+/* Sits inside .auth-card-form, right under the form's own buttons — not a
+   page-level footer — so it stays in the same visible spot whether the
+   card is a small centered island (mobile) or full-bleed (desktop). Green
+   links on mobile tie back to the floating brand-green wordmark above;
+   desktop's white form panel reverts to the standard link blue. */
 .auth-footer {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
+  margin-top: 20px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
   color: var(--line-soft);
   text-align: center;
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.auth-footer a {
+  color: var(--accent);
+  font-weight: 600;
+}
+@media (min-width: 760px) {
+  .auth-footer a {
+    color: var(--link);
+    font-weight: 400;
+  }
+}
+
+/* ---------- brand mark ---------- */
+
+.lq-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--line);
+}
+.lq-logo-word {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.3em;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: inherit;
+}
+.lq-logo[data-tone='brand'] {
+  color: var(--brand-mustard);
 }
 
 /* ---------- persistent chrome ---------- */
@@ -572,12 +846,31 @@ nav {
 }
 .top-bar h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
 }
 .top-bar-title-hero {
   margin: 0;
-  font-size: clamp(2.2rem, 5vw, 3.4rem);
-  line-height: 1;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  line-height: 1.1;
+}
+.top-bar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bottom-nav-brand {
+  display: none;
+  text-decoration: none;
+}
+@media (min-width: 860px) {
+  .bottom-nav-brand {
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+  }
 }
 
 .bottom-nav {
@@ -587,7 +880,7 @@ nav {
   bottom: 0;
   height: var(--nav-height);
   background: var(--paper-card);
-  border-top: 2.4px solid var(--line);
+  border-top: 1.5px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -612,7 +905,7 @@ nav {
     gap: 10px;
     padding: 0 40px;
     border-top: none;
-    border-bottom: 2.4px solid var(--line);
+    border-bottom: 1.5px solid var(--border);
   }
 }
 .bottom-nav-item {
@@ -624,23 +917,22 @@ nav {
   background: none;
   border: none;
   box-shadow: none;
-  padding: 6px 10px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
   color: var(--line-soft);
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  text-transform: uppercase;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.68rem;
   text-decoration: none;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.01em;
 }
 @media (min-width: 860px) {
   .bottom-nav-item {
     flex-direction: row;
     justify-content: center;
-    gap: 10px;
+    gap: 9px;
     width: auto;
     padding: 10px 18px;
-    border-radius: 999px;
-    border: 2px solid transparent;
   }
   .bottom-nav-item svg {
     width: 22px;
@@ -648,44 +940,51 @@ nav {
     flex: none;
   }
   .bottom-nav-item span {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     white-space: nowrap;
-  }
-  .bottom-nav-item[aria-current="page"] {
-    background: var(--accent);
-    border-color: var(--line);
-    color: var(--chip-ink);
   }
 }
 .bottom-nav-item:hover:not(:disabled) {
   transform: none;
   box-shadow: none;
+  background: var(--paper-well);
   color: var(--line);
 }
 .bottom-nav-item:active:not(:disabled) {
   transform: none;
   box-shadow: none;
 }
-.bottom-nav-item[aria-current="page"] {
-  color: var(--line);
+.bottom-nav-item[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.bottom-nav-item[aria-current='page']:hover:not(:disabled) {
+  background: var(--accent-soft);
 }
 
 /* ---------- quests feed ---------- */
 
+.quest-feed-greeting {
+  margin-bottom: 20px;
+}
+.quest-feed-greeting h1 {
+  margin-bottom: 4px;
+}
+.quest-feed-greeting p {
+  margin: 0;
+  color: var(--line-soft);
+}
+
 .quest-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
   max-width: 640px;
 }
 
-/* Each quest is a row: a node column (thumbnail + connecting thread down to
-   the next node) beside a content column (the actual card). align-items
-   stretch (the flex default) is what makes the thread automatically grow
-   to match the card's height when it expands — no JS measurement needed. */
 .quest-row {
   display: flex;
   gap: 14px;
@@ -699,24 +998,19 @@ nav {
   flex: none;
 }
 
+/* A simple dashed line connecting one quest's avatar to the next. */
 .quest-thread {
-  position: relative; /* anchors the absolutely-positioned <svg> inside —
-    see RoughTexture.jsx for why the svg is sized via inset:0 rather than a
-    percentage height. */
   flex: 1;
-  min-height: 0; /* flex items default to min-height:auto, which would
-    otherwise floor shrinking at whatever intrinsic size the (now
-    out-of-flow) contents suggest. */
-  width: 24px;
-  margin: 2px 0;
-  overflow: hidden;
+  min-height: 0;
+  width: 0;
+  margin: 4px 0;
+  border-left: 2px dashed var(--line-soft);
 }
 
 .quest-content-col {
   flex: 1;
   min-width: 0;
   padding: 0;
-  margin-bottom: 20px;
 }
 
 .quest-card-head {
@@ -735,19 +1029,23 @@ nav {
 }
 /* button.quest-card-head, not just .quest-card-head — the global
    button:hover:not(:disabled) rule below is (type + 2 pseudo-classes), a
-   plain class+pseudo selector doesn't out-specify that, so the hard press
-   shadow was leaking through as an ugly box around the row on hover. */
+   plain class+pseudo selector doesn't out-specify that, so the lift/shadow
+   was leaking through as an ugly box around the row on hover. */
 button.quest-card-head:hover:not(:disabled),
 button.quest-card-head:active:not(:disabled) {
   box-shadow: none;
   transform: none;
 }
+button.quest-card-head:hover:not(:disabled) {
+  background: var(--paper-well);
+  border-radius: var(--radius-lg);
+}
 
 .quest-thumb {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   flex: none;
-  border-radius: 14px;
+  border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--paper-well);
 }
@@ -755,16 +1053,16 @@ button.quest-card-head:active:not(:disabled) {
 .org-avatar {
   width: 100%;
   height: 100%;
-  border-radius: 14px;
-  border: 2.2px solid var(--line);
+  border-radius: var(--radius-full);
+  border: none;
   background: var(--tag-color, var(--paper-well));
-  color: var(--chip-ink);
+  color: var(--tag-ink, var(--line));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  text-transform: uppercase;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.15rem;
 }
 
 .quest-card-titles {
@@ -772,16 +1070,17 @@ button.quest-card-head:active:not(:disabled) {
   min-width: 0;
 }
 .quest-title {
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  font-size: 1rem;
-  line-height: 1.15;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1.25;
   overflow-wrap: break-word;
   margin: 0;
+  color: var(--line);
 }
 .quest-org-line {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
   color: var(--line-soft);
   margin-top: 3px;
 }
@@ -791,7 +1090,7 @@ button.quest-card-head:active:not(:disabled) {
   color: var(--line-soft);
   transition: transform 0.15s ease;
 }
-.quest-chevron[data-open="true"] {
+.quest-chevron[data-open='true'] {
   transform: rotate(180deg);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -799,16 +1098,48 @@ button.quest-card-head:active:not(:disabled) {
     transition: none;
   }
 }
+/* On desktop a row never expands inline — selection is shown via the
+   active-row highlight below and the shared detail pane, so the
+   expand/collapse chevron (which would never visibly rotate there) is
+   dropped rather than left showing a dead affordance. */
+@media (min-width: 860px) {
+  .quest-chevron {
+    display: none;
+  }
+  .quest-content-col[data-active='true'] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
 
 .quest-card-body {
-  padding: 14px 16px 16px;
-  border-top: 2px solid var(--line);
+  padding: 4px 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .quest-card-body p {
   margin: 0;
+}
+.quest-card-body > label {
+  max-width: 320px;
+}
+
+.quest-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--line-soft);
+}
+.quest-meta-row svg {
+  flex: none;
+  color: var(--line-soft);
+}
+
+.quest-description {
+  color: var(--line);
+  line-height: 1.6;
 }
 
 .quest-tags {
@@ -817,50 +1148,76 @@ button.quest-card-head:active:not(:disabled) {
   gap: 6px;
 }
 
+.quest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.quest-rsvp-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--success);
+}
+
 .quest-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 32px 20px 40px;
+  gap: 6px;
+  padding: 40px 20px 48px;
   text-align: center;
   color: var(--line-soft);
 }
 .quest-empty h2 {
   color: var(--line);
-  margin: 12px 0 4px;
+  margin: 16px 0 4px;
+}
+.quest-error {
+  border-color: var(--danger);
+}
+.quest-error h2 {
+  color: var(--danger);
 }
 
-/* bold hero stat tiles — a flat saturated color block, not a pastel-outline
-   card, deliberately: this is the one "shout" moment at the top of the
-   feed, everything below it stays quieter by comparison. */
+/* bold hero stat tiles — a flat saturated color block, deliberately: this
+   is the one "shout" moment at the top of the feed, everything below it
+   stays quieter by comparison. */
 .stat-hero-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   max-width: 640px;
 }
 .stat-hero-tile {
-  border: 2.2px solid var(--line);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: 4px 4px 0 var(--shadow);
+  box-shadow: 0 2px 6px var(--shadow);
   padding: 16px 18px;
-  color: var(--chip-ink);
+  color: #ffffff;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .stat-hero-number {
   font-family: var(--font-display);
-  font-size: 2.1rem;
+  font-size: 2.4rem;
   line-height: 1;
 }
 .stat-hero-label {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  opacity: 0.9;
 }
 
 .tag-filter-row {
@@ -869,12 +1226,50 @@ button.quest-card-head:active:not(:disabled) {
   overflow-x: auto;
   gap: 8px;
   padding-bottom: 4px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   max-width: 640px;
   scrollbar-width: thin;
 }
 .tag-filter-row .tag-stamp {
   flex: none;
+}
+
+/* ---------- desktop split view: list + detail panel ---------- */
+
+@media (min-width: 860px) {
+  .quest-feed-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 380px) 1fr;
+    align-items: start;
+    gap: 32px;
+    max-width: none;
+  }
+  .quest-feed-main {
+    max-width: none;
+  }
+  .quest-list {
+    max-width: none;
+  }
+  .quest-detail-pane {
+    position: sticky;
+    top: calc(var(--nav-height-desktop) + 40px);
+  }
+}
+.quest-detail-empty {
+  display: none;
+}
+@media (min-width: 860px) {
+  .quest-detail-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
+    color: var(--line-soft);
+    padding: 48px 24px;
+    min-height: 280px;
+  }
 }
 
 /* ---------- utilitarian data lists (org/admin dashboards) — dense rows,
@@ -886,7 +1281,7 @@ button.quest-card-head:active:not(:disabled) {
 }
 .data-row {
   padding: 14px 16px;
-  border-bottom: 2px solid var(--line);
+  border-bottom: 1.5px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -901,6 +1296,7 @@ button.quest-card-head:active:not(:disabled) {
   gap: 10px;
 }
 .data-row-title {
+  font-family: var(--font-heading);
   font-weight: 700;
   margin: 0;
 }
@@ -909,7 +1305,8 @@ button.quest-card-head:active:not(:disabled) {
   font-size: 0.9rem;
 }
 .data-stat {
-  font-family: var(--font-mono);
+  font-family: var(--font-heading);
+  font-weight: 600;
   font-size: 0.78rem;
   color: var(--line-soft);
   white-space: nowrap;
@@ -921,15 +1318,8 @@ button.quest-card-head:active:not(:disabled) {
   flex-wrap: wrap;
 }
 .data-row-actions button {
-  padding: 6px 12px;
+  padding: 7px 13px;
   font-size: 0.82rem;
-  box-shadow: 2px 2px 0 var(--shadow);
-}
-.data-row-actions button:hover:not(:disabled) {
-  box-shadow: 3px 3px 0 var(--shadow);
-}
-.data-row-actions button:active:not(:disabled) {
-  box-shadow: 0 0 0 var(--shadow);
 }
 .data-sublist {
   list-style: none;
@@ -957,7 +1347,7 @@ button.quest-card-head:active:not(:disabled) {
    individually, so this wins regardless of source order. */
 button.data-row {
   border: none;
-  border-bottom: 2px solid var(--line);
+  border-bottom: 1.5px solid var(--border);
   border-radius: 0;
   box-shadow: none;
   font-weight: 400;
@@ -1058,8 +1448,8 @@ button.data-row:active:not(:disabled) {
   gap: 10px;
   padding: 20px 0;
   color: var(--line-soft);
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
 }
 .loading-spinner-ring {
   width: 20px;
@@ -1067,7 +1457,50 @@ button.data-row:active:not(:disabled) {
   flex: none;
   border-radius: 50%;
   border: 3px solid var(--paper-well);
-  border-top-color: var(--line);
+  border-top-color: var(--accent);
+}
+
+/* ---------- Profile page ---------- */
+
+.user-avatar {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: var(--radius-full);
+  border: 3px solid var(--brand-mustard);
+  background: var(--paper-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.profile-identity-info {
+  flex: 1;
+  min-width: 160px;
+}
+.profile-identity-info h1 {
+  margin-bottom: 2px;
+}
+.profile-meta {
+  margin: 0;
+  color: var(--line-soft);
+}
+.profile-logout {
+  margin-left: auto;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+  gap: 16px;
 }
 
 /* ---------- Settings page ---------- */
@@ -1085,9 +1518,10 @@ button.data-row:active:not(:disabled) {
   gap: 10px;
   flex-wrap: wrap;
 }
-.theme-option[data-active="true"] {
+.theme-option[data-active='true'] {
   background: var(--accent);
-  color: var(--chip-ink);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
 }
 
 /* ---------- collapsible "create" affordance (org quest form) ---------- */
@@ -1098,12 +1532,12 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 18px;
+  padding: 16px;
   margin-bottom: 16px;
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.05rem;
   border-style: dashed;
-  border-width: 3px;
+  border-width: 2px;
+  border-color: var(--border);
 }
