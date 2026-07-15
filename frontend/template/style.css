@@ -109,7 +109,7 @@
 }
 
 /* =========================================================================
-   STAMPED — Leadership Quest visual identity
+   STAMPED — Lead-Dux visual identity
    Rough.js-inflected, neobrutalist, pastel. See the design-artifact pass for
    full rationale. The .box/.box-primary/etc and .flex/.gap-* utilities
    above predate this and are kept as-is — screens not yet converted to the
@@ -404,7 +404,11 @@ fieldset label {
    interaction. Applies to every <button>, not just .ink-btn, so screens not
    yet converted to the card system still get the pressable feel. */
 
-button {
+/* button, plus .stamp-btn — StampButton.jsx's `as` prop can render this as
+   an <a> (e.g. a Link-powered nav CTA) instead of a real <button>, and the
+   tag selector alone wouldn't reach that. */
+button,
+.stamp-btn {
   font: inherit;
   font-weight: 700;
   padding: 9px 16px;
@@ -412,17 +416,21 @@ button {
   border: 2.4px solid var(--line);
   background: var(--paper-card);
   color: var(--line);
+  text-decoration: none;
+  display: inline-block;
   cursor: pointer;
   box-shadow: 4px 4px 0 var(--shadow);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.stamp-btn:hover {
   transform: translate(-1px, -1px);
   box-shadow: 5px 5px 0 var(--shadow);
 }
 
-button:active:not(:disabled) {
+button:active:not(:disabled),
+.stamp-btn:active {
   transform: translate(4px, 4px);
   box-shadow: 0 0 0 var(--shadow);
 }
@@ -435,7 +443,8 @@ button:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  button {
+  button,
+  .stamp-btn {
     transition: none;
   }
 }
@@ -559,6 +568,27 @@ nav {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* ---------- Onboarding's step progress (Onboarding.jsx) ---------- */
+
+.onboarding-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--paper-well);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.onboarding-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-progress-fill {
+    transition: none;
+  }
 }
 
 /* ---------- persistent chrome ---------- */
@@ -1115,6 +1145,24 @@ button.data-row:active:not(:disabled) {
   color: var(--chip-ink);
 }
 
+/* generic single-select pill row — same active/inactive treatment as the
+   theme picker above, just not settings-specific (Onboarding's leadership-
+   profile questions use this). */
+.choice-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.choice-pill[data-active="true"] {
+  background: var(--accent);
+  color: var(--chip-ink);
+}
+
+.field-optional {
+  font-weight: 400;
+  color: var(--line-soft);
+}
+
 /* ---------- collapsible "create" affordance (org quest form) ---------- */
 
 .quest-create-toggle {
@@ -1133,116 +1181,133 @@ button.data-row:active:not(:disabled) {
   border-width: 3px;
 }
 
-/* ---------- Journal (Journal.jsx) — one "tab" per completed quest ---------- */
+/* ---------- Landing page (the signed-out root, see Landing.jsx) ---------- */
 
-.journal-entry-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 0;
-  background: none;
-  border: none;
-  box-shadow: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+.landing-hero {
+  text-align: center;
+  padding: 24px 0 8px;
 }
-button.journal-entry-head:hover:not(:disabled),
-button.journal-entry-head:active:not(:disabled) {
-  box-shadow: none;
-  transform: none;
+.landing-title {
+  font-size: clamp(2.4rem, 9vw, 4.2rem);
+  line-height: 1;
+  margin-bottom: 6px;
 }
-.journal-entry-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  font-size: 1.05rem;
-}
-.journal-entry-new {
+.landing-tagline {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--chip-ink);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--line-soft);
+  margin: 0 0 20px;
 }
-.journal-entry-body {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 2px solid var(--line);
+/* Three tilted "pinned note" cards, not a paragraph — each carries its own
+   pastel tag-stamp label (see LEDE_NOTES in Landing.jsx) so the hero has
+   the same handmade-stamp energy as the how-it-works tracks below without
+   copying their numbered-step shape. The tilt lives on --tilt (not a plain
+   transform) so the pop-in keyframe can animate translateY without
+   clobbering it. */
+.landing-lede {
+  max-width: 56ch;
+  margin: 0 auto;
+  text-align: left;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.journal-feedback {
-  background: var(--paper-well);
+.landing-note {
+  background: var(--paper-card);
+  border: 2.4px solid var(--line);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  box-shadow: 4px 4px 0 var(--shadow);
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform: rotate(var(--tilt, 0deg));
+  animation: landing-note-in 0.4s ease-out backwards;
 }
-.journal-rating {
-  display: inline-block;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  background: var(--accent);
-  color: var(--chip-ink);
-  padding: 2px 12px;
-  border-radius: 8px;
-  border: 2px solid var(--line);
+.landing-note:nth-child(1) { --tilt: -1.1deg; animation-delay: 0s; }
+.landing-note:nth-child(2) { --tilt: 0.9deg; animation-delay: 0.1s; }
+.landing-note:nth-child(3) { --tilt: -0.7deg; animation-delay: 0.2s; }
+.landing-note p {
+  margin: 0;
 }
-.journal-reflection ul {
-  margin: 8px 0 14px;
-  padding-left: 20px;
+@keyframes landing-note-in {
+  from { opacity: 0; transform: rotate(var(--tilt, 0deg)) translateY(10px); }
+  to { opacity: 1; transform: rotate(var(--tilt, 0deg)) translateY(0); }
 }
-.journal-reflection li {
-  margin-bottom: 4px;
+@media (prefers-reduced-motion: reduce) {
+  .landing-note {
+    animation: none;
+  }
 }
-/* A saved reflection, once complete — plain written text in a quiet well,
-   deliberately not still shaped like an active input, so it reads as
-   finished rather than "keep typing here". */
-.journal-reflection-complete {
-  background: var(--paper-well);
-  border-radius: var(--radius);
-  padding: 14px 16px;
+
+.landing-steps {
+  margin-top: 40px;
 }
-.journal-saved-confirmation {
+.landing-section-heading {
+  text-align: center;
+}
+.landing-tracks {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 600px) {
+  .landing-tracks {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.landing-track {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform: rotate(var(--tilt, 0deg));
+}
+.landing-track:nth-child(1) { --tilt: -0.6deg; }
+.landing-track:nth-child(2) { --tilt: 0.6deg; }
+.landing-track-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.landing-track-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.landing-track-step .tag-stamp {
+  margin-top: 2px;
+  flex: none;
+}
+.landing-track-step-title {
+  font-weight: 700;
+  margin: 0;
+}
+.landing-track-step-body {
+  margin: 2px 0 0;
+  color: var(--line-soft);
+  font-size: 0.92rem;
+}
+
+.landing-cta {
+  margin-top: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.landing-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.landing-login-link {
   font-family: var(--font-mono);
   font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--success, var(--line-soft));
-}
-
-/* ---------- live feedback popup (FeedbackToast.jsx) ---------- */
-
-.feedback-toast-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-.feedback-toast {
-  width: 100%;
-  max-width: 380px;
-}
-
-/* ---------- org-side "Give Feedback" panel (QuestSeriesRow.jsx) ---------- */
-
-.feedback-draft-row {
-  border: 2px solid var(--line);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  background: var(--paper-well);
-}
-.feedback-draft-row textarea {
-  width: 100%;
-  margin-top: 8px;
-  min-height: 70px;
+  color: var(--line-soft);
 }

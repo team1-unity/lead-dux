@@ -27,7 +27,7 @@ function ThemePicker() {
   return (
     <section className="ink-card">
       <h2>Display</h2>
-      <p style={{ marginTop: 0 }}>Choose how Leadership Quest looks on this device.</p>
+      <p style={{ marginTop: 0 }}>Choose how Lead-Dux looks on this device.</p>
       <div className="theme-option-row">
         {THEME_OPTIONS.map((opt) => (
           <StampButton

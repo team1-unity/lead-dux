@@ -22,10 +22,13 @@ set_global_options(max_instances=10)
 initialize_app()
 
 # The full role state machine:
-#   (no claim) -> onboarding_user -> user -> onboarding_org -> pending_org -> organization
-# Everyone signs up and onboards the same way; onboarding_org is only
-# reached afterward, via Settings (start_organization_onboarding). admin is
-# granted out-of-band (config/admins allowlist or set_user_role).
+#   individual: (no claim) -> onboarding_user -> user
+#   organization: (no claim) -> onboarding_org -> pending_org -> organization
+# Which branch a brand-new signup starts on is chosen at signup time (see
+# complete_signup's accountType) and is permanent — there's no in-app path
+# from one branch to the other. Someone who picks the wrong one has to
+# delete their account (delete_account) and sign up again. admin is granted
+# out-of-band (config/admins allowlist or set_user_role).
 ASSIGNABLE_ROLES = {"onboarding_user", "user", "onboarding_org", "pending_org", "organization", "admin"}
 
 
@@ -310,9 +313,12 @@ def set_user_role(req: https_fn.CallableRequest) -> dict:
 
 
 # Callable from the frontend right after Firebase Auth account creation —
-# the one and only signup path. Everyone starts as onboarding_user; becoming
-# an organization is something a "user" opts into afterward, from Settings
-# (see start_organization_onboarding and submit_organization_request below).
+# the one and only signup path, for both accountTypes. accountType chooses
+# which branch of the role state machine a brand-new account starts on:
+# "organization" skips straight to onboarding_org (no users/{uid} profile —
+# organizations get their own doc later, at approve_organization) instead of
+# onboarding_user. That choice is permanent — see the state-machine note
+# above.
 @https_fn.on_call()
 def complete_signup(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -330,12 +336,24 @@ def complete_signup(req: https_fn.CallableRequest) -> dict:
         auth.set_custom_user_claims(uid, {"role": "admin"})
         return {"success": True, "role": "admin"}
 
+    if req.data.get("accountType") == "organization":
+        auth.set_custom_user_claims(uid, {"role": "onboarding_org"})
+        return {"success": True, "role": "onboarding_org"}
+
     db.collection("users").document(uid).set({
         "email": email,
         "name": req.data.get("name"),
         "age": None,
         "interests": [],
-        "points": 0,
+        "experienceLevel": None,
+        "experienceLevelOther": "",
+        "timeAvailability": None,
+        "timeAvailabilityOther": "",
+        "groupPreference": None,
+        "groupPreferenceOther": "",
+        "motivation": None,
+        "motivationOther": "",
+        "leaderGoal": "",
         "isSuspended": False,
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
@@ -344,10 +362,52 @@ def complete_signup(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "role": "onboarding_user"}
 
 
-# Callable from the onboarding (interests) form, once, right after an
-# onboarding_user answers it. Writes to the caller's own doc only — there's
-# no targetUid here, unlike set_user_role, so there's nothing to escalate.
-# Graduates the caller straight to role "user".
+# The leadership-profile options submit_onboarding validates against — kept
+# server-side (not just in the frontend's leadershipProfile.js) so a
+# tampered client can't write a value the recommendation step won't
+# recognize. Keep these two vocabularies in sync by hand. "other" is always
+# additionally accepted on top of each set below — the frontend's
+# ChoiceField appends an "Other" pill to every question, which reveals a
+# free-text field (the {field}Other companion) for an answer that isn't one
+# of the presets.
+EXPERIENCE_LEVELS = {"new", "some", "experienced"}
+TIME_AVAILABILITY_OPTIONS = {"monthly", "weekly", "flexible"}
+GROUP_PREFERENCES = {"solo", "team", "leading"}
+MOTIVATIONS = {"experience", "community", "impact", "requirement"}
+MAX_OTHER_LENGTH = 120
+MAX_LEADER_GOAL_LENGTH = 280
+
+
+def _resolve_choice_with_other(value, other_value, known_values, field_name):
+    if value == "other":
+        if not isinstance(other_value, str) or not other_value.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f'{field_name}Other is required when {field_name} is "other".',
+            )
+        if len(other_value) > MAX_OTHER_LENGTH:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"{field_name}Other must be at most {MAX_OTHER_LENGTH} characters.",
+            )
+        return "other", other_value.strip()
+
+    if value not in known_values:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f'{field_name} must be one of {sorted(known_values)} or "other".',
+        )
+    return value, ""
+
+
+# Callable from the onboarding form, once, right after an onboarding_user
+# answers it. Writes to the caller's own doc only — there's no targetUid
+# here, unlike set_user_role, so there's nothing to escalate. Graduates the
+# caller straight to role "user". Beyond name/age/interests, this also
+# collects a short leadership profile (experience level, time availability,
+# group preference, motivation, and what kind of leader they want to
+# become) — richer signal for a future quest-recommendation step to match
+# quests to where someone actually is, not just their interest tags.
 @https_fn.on_call()
 def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "onboarding_user")
@@ -355,6 +415,7 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     interests = req.data.get("interests")
     age = req.data.get("age")
     name = req.data.get("name")
+    leader_goal = req.data.get("leaderGoal") or ""
 
     if not isinstance(interests, list) or not interests:
         raise https_fn.HttpsError(
@@ -362,31 +423,54 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
             "interests must be a non-empty list.",
         )
 
+    experience_level, experience_level_other = _resolve_choice_with_other(
+        req.data.get("experienceLevel"), req.data.get("experienceLevelOther"), EXPERIENCE_LEVELS, "experienceLevel",
+    )
+    time_availability, time_availability_other = _resolve_choice_with_other(
+        req.data.get("timeAvailability"), req.data.get("timeAvailabilityOther"), TIME_AVAILABILITY_OPTIONS, "timeAvailability",
+    )
+    group_preference, group_preference_other = _resolve_choice_with_other(
+        req.data.get("groupPreference"), req.data.get("groupPreferenceOther"), GROUP_PREFERENCES, "groupPreference",
+    )
+    motivation, motivation_other = _resolve_choice_with_other(
+        req.data.get("motivation"), req.data.get("motivationOther"), MOTIVATIONS, "motivation",
+    )
+
+    if not isinstance(leader_goal, str) or not leader_goal.strip():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "leaderGoal is required.",
+        )
+    if len(leader_goal) > MAX_LEADER_GOAL_LENGTH:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"leaderGoal must be at most {MAX_LEADER_GOAL_LENGTH} characters.",
+        )
+
     firestore.client().collection("users").document(req.auth.uid).update({
         "name": name,
         "age": age,
         "interests": interests,
+        "experienceLevel": experience_level,
+        "experienceLevelOther": experience_level_other,
+        "timeAvailability": time_availability,
+        "timeAvailabilityOther": time_availability_other,
+        "groupPreference": group_preference,
+        "groupPreferenceOther": group_preference_other,
+        "motivation": motivation,
+        "motivationOther": motivation_other,
+        "leaderGoal": leader_goal.strip(),
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
     auth.set_custom_user_claims(req.auth.uid, {"role": "user"})
     return {"success": True, "role": "user"}
 
 
-# Callable from Settings by an already-onboarded "user" who wants to
-# register an organization after all. Just flips the state to
-# onboarding_org — the same state a brand-new org signup passes through via
-# complete_signup — and the org-details form (submit_organization_request)
-# takes it from there.
-@https_fn.on_call()
-def start_organization_onboarding(req: https_fn.CallableRequest) -> dict:
-    _require_role(req, "user")
-    auth.set_custom_user_claims(req.auth.uid, {"role": "onboarding_org"})
-    return {"success": True, "role": "onboarding_org"}
-
-
 # Callable from the org-details form, for an account currently in
-# onboarding_org (reached either via a brand-new org signup or via Settings).
-# Creates the pending ORGREQ and graduates the caller to pending_org.
+# onboarding_org (the state a brand-new org signup reaches directly via
+# complete_signup). A "user" who meant to sign up as an organization has no
+# in-app conversion path — they delete their account (Settings) and sign up
+# again choosing the organization option.
 @https_fn.on_call()
 def submit_organization_request(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "onboarding_org")

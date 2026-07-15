@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callStartOrganizationOnboarding, callUpdateInterests } from '@shared/fetch.jsx';
+import { callUpdateInterests } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -121,27 +121,10 @@ function InterestsEditor() {
 // account deletion; this split keeps "things about me" separate from
 // "things about how the app looks/whether I keep my account."
 export function Profile() {
-  const { user, role, loading, logout, refreshRole } = useAuth();
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const { user, role, loading, logout } = useAuth();
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
-
-  async function registerAsOrganization() {
-    setError('');
-    setSubmitting(true);
-    try {
-      await callStartOrganizationOnboarding();
-      await refreshRole();
-      navigate('/register/organization');
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   return (
     <PageMotion>
@@ -157,60 +140,51 @@ export function Profile() {
       {role === 'user' && <ProgressCard />}
       {role === 'user' && <InterestsEditor />}
 
-      <section className="ink-card" style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <h2 style={{ marginBottom: 0 }}>Organization</h2>
+      {role !== 'user' && (
+        <section className="ink-card" style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <h2 style={{ marginBottom: 0 }}>Organization</h2>
 
-        {role === 'user' && (
-          <>
-            <p style={{ margin: 0 }}>Signed up as a regular member but meant to register an organization?</p>
-            <StampButton type="button" variant="primary" onClick={registerAsOrganization} disabled={submitting}>
-              {submitting ? 'Starting...' : 'Register your organization'}
-            </StampButton>
-          </>
-        )}
-
-        {role === 'onboarding_org' && (
-          <div className="flex justify-between items-center">
-            <div>
-              <StatusStamp muted>IN PROGRESS</StatusStamp>
-              <p style={{ margin: '8px 0 0' }}>You started registering an organization.</p>
+          {role === 'onboarding_org' && (
+            <div className="flex justify-between items-center">
+              <div>
+                <StatusStamp muted>IN PROGRESS</StatusStamp>
+                <p style={{ margin: '8px 0 0' }}>You started registering an organization.</p>
+              </div>
+              <Link to="/register/organization" aria-label="Finish your application">
+                <IconChevron style={{ transform: 'rotate(-90deg)' }} />
+              </Link>
             </div>
-            <Link to="/register/organization" aria-label="Finish your application">
-              <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-            </Link>
-          </div>
-        )}
+          )}
 
-        {role === 'pending_org' && (
-          <div>
-            <StatusStamp tone="outdoors">UNDER REVIEW</StatusStamp>
-            <p style={{ margin: '8px 0 0' }}>Your organization application is awaiting admin review.</p>
-          </div>
-        )}
-
-        {role === 'organization' && (
-          <div className="flex justify-between items-center">
+          {role === 'pending_org' && (
             <div>
-              <StatusStamp tone="education">APPROVED</StatusStamp>
-              <p style={{ margin: '8px 0 0' }}>You already manage an organization.</p>
+              <StatusStamp tone="outdoors">UNDER REVIEW</StatusStamp>
+              <p style={{ margin: '8px 0 0' }}>Your organization application is awaiting admin review.</p>
             </div>
-            <Link to="/org" aria-label="Go to your organization dashboard">
-              <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-            </Link>
-          </div>
-        )}
+          )}
 
-        {role === 'admin' && (
-          <div>
-            <StatusStamp tone="community">FULL ACCESS</StatusStamp>
-            <p style={{ margin: '8px 0 0' }}>
-              You manage the whole platform from the <Link to="/admin">admin data page</Link>.
-            </p>
-          </div>
-        )}
+          {role === 'organization' && (
+            <div className="flex justify-between items-center">
+              <div>
+                <StatusStamp tone="education">APPROVED</StatusStamp>
+                <p style={{ margin: '8px 0 0' }}>You already manage an organization.</p>
+              </div>
+              <Link to="/org" aria-label="Go to your organization dashboard">
+                <IconChevron style={{ transform: 'rotate(-90deg)' }} />
+              </Link>
+            </div>
+          )}
 
-        {error && <p className="box-danger">{error}</p>}
-      </section>
+          {role === 'admin' && (
+            <div>
+              <StatusStamp tone="community">FULL ACCESS</StatusStamp>
+              <p style={{ margin: '8px 0 0' }}>
+                You manage the whole platform from the <Link to="/admin">admin data page</Link>.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       <StampButton type="button" variant="danger" onClick={logout} style={{ width: '100%' }}>
         Log out

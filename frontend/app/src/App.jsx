@@ -10,6 +10,7 @@ import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { FeedbackToast } from '@shared/FeedbackToast.jsx';
+import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
 import { ForgotPassword } from './ForgotPassword.jsx';
 import { ResetPassword } from './ResetPassword.jsx';
@@ -86,12 +87,14 @@ function AdminHome() {
 
 // The single place that decides, after auth, which interface someone
 // belongs in. Login/Register pages never branch on role themselves — they
-// just navigate('/') and let this sort it out.
+// just navigate('/') and let this sort it out. A signed-out visitor gets
+// the marketing Landing page here instead of bouncing straight to /login —
+// "/" is the actual front door, not a redirect.
 function Home() {
   const { user, role, loading } = useAuth();
 
   if (loading) return <LoadingSpinner />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Landing />;
   if (role === 'organization') return <Navigate to="/org" replace />;
   // Declared org intent but hasn't submitted the org-details form yet —
   // send them back to finish it instead of showing the quest list.
