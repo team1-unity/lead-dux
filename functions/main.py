@@ -6,8 +6,9 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import anthropic
 import qrcode
+from google import genai
+from google.genai import types as genai_types
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import auth, firestore, initialize_app
@@ -1156,7 +1157,8 @@ def check_in_attendee(req: https_fn.CallableRequest) -> dict:
 # shouldn't itself mark the journal entry as read.
 #
 # Writing feedback is a two-step flow: generate_quest_feedback_drafts uses
-# Claude to write a first-pass rating+message per checked-in attendee (so an
+# Gemini (Google's free-tier-eligible API — see the GEMINI_API_KEY secret
+# below) to write a first-pass rating+message per checked-in attendee (so an
 # org with many attendees doesn't have to write N messages from scratch),
 # then the org reviews/edits in the frontend and submit_quest_feedback_batch
 # persists whatever it actually decided to send. Nothing is written to
@@ -1206,13 +1208,13 @@ def _get_quest_or_404(db, quest_id: str) -> dict:
 # Callable from the org dashboard's "Give Feedback" button on a quest (own
 # quests only, or admin for any). Every checked-in attendee who doesn't
 # already have a feedback doc for this quest gets a draft — the org's own
-# name is never sent to Claude, only the quest's title/description and each
+# name is never sent to Gemini, only the quest's title/description and each
 # attendee's name, so the model has nothing to invent specific actions from
 # and is told not to. Ratings default to the max (10); the org can lower
 # any of them, or edit any message, before anything is actually sent (see
 # submit_quest_feedback_batch). Nothing is persisted here — this only
 # returns a proposal.
-@https_fn.on_call(secrets=["ANTHROPIC_API_KEY"])
+@https_fn.on_call(secrets=["GEMINI_API_KEY"])
 def generate_quest_feedback_drafts(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "organization", "admin")
 
@@ -1256,17 +1258,31 @@ def generate_quest_feedback_drafts(req: https_fn.CallableRequest) -> dict:
         f"and your generated `message`."
     )
 
-    response = _claude.messages.create(
-        model="claude-opus-4-8",
-        max_tokens=2048,
-        thinking={"type": "adaptive"},
-        output_config={
-            "effort": "low",
-            "format": {"type": "json_schema", "schema": _FEEDBACK_DRAFT_SCHEMA},
-        },
-        messages=[{"role": "user", "content": prompt}],
+    # genai.Client() reads GEMINI_API_KEY from the environment on its own —
+    # created here, not at module level, so a missing/misconfigured secret
+    # only breaks this one function's cold start, not every function in
+    # this file (see the ORG_QUEST_BASE_POINTS module note for the same
+    # reasoning applied to Firestore access elsewhere).
+    #
+    # NOTE for whoever touches this next: ai.google.dev's own docs (as of
+    # this writing) describe a client.interactions.create(...) method that
+    # doesn't match what the google-genai SDK's own GitHub README documents
+    # (client.models.generate_content(...), used below) — sourced from the
+    # README since it's tied directly to the installed package version,
+    # not a docs page that may be ahead of or behind it. Worth
+    # re-verifying if this starts throwing AttributeErrors after a SDK
+    # upgrade.
+    client = genai.Client()
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=genai_types.GenerateContentConfig(
+            max_output_tokens=2048,
+            response_mime_type="application/json",
+            response_json_schema=_FEEDBACK_DRAFT_SCHEMA,
+        ),
     )
-    text = next((block.text for block in response.content if block.type == "text"), None)
+    text = response.text
     if not text:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INTERNAL,
