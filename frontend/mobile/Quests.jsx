@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import {
@@ -12,14 +12,14 @@ import {
   callListQuestReviews,
 } from '@shared/fetch.jsx';
 import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
-import { RoughTexture } from '@shared/RoughTexture.jsx';
-import { RoughFrame } from '@shared/RoughFrame.jsx';
+import { DuckMark } from '@shared/Logo.jsx';
+import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
-import { IconChevron } from '@shared/icons.jsx';
+import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch } from '@shared/icons.jsx';
 
 const DEFAULT_EVENT_WINDOW_HOURS = 6; // mirrors functions/main.py's DEFAULT_EVENT_WINDOW_HOURS
 
@@ -47,10 +47,15 @@ function formatEventDate(isoOrTimestamp) {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function formatStars(rating) {
+  const whole = Math.round(rating);
+  return '★'.repeat(whole) + '☆'.repeat(5 - whole);
+}
+
 // The member's own check-in QR code for a quest they've RSVP'd to. Fetched
-// lazily (only once the card is expanded and this is rendered) rather than
-// alongside the quest list itself, since most quests in the list aren't
-// ones this member RSVP'd to.
+// lazily (only once the detail is shown) rather than alongside the quest
+// list itself, since most quests in the list aren't ones this member
+// RSVP'd to.
 function QuestQrCode({ questId }) {
   const [state, setState] = useState({ loading: true, qr: null, expired: false, error: null });
 
@@ -77,11 +82,6 @@ function QuestQrCode({ questId }) {
       {state.expired && <p className="box-warning">This code has expired.</p>}
     </div>
   );
-}
-
-function formatStars(rating) {
-  const whole = Math.round(rating);
-  return '★'.repeat(whole) + '☆'.repeat(5 - whole);
 }
 
 // A member's own review for a quest they've RSVP'd to. Shows the existing
@@ -139,7 +139,9 @@ function QuestReview({ questId }) {
   if (review) {
     return (
       <div className="ink-card" style={{ marginTop: 12 }}>
-        <p style={{ margin: 0, fontWeight: 700 }}>Your review: {formatStars(review.rating)}</p>
+        <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
+          Your review: {formatStars(review.rating)}
+        </p>
         <p style={{ margin: '6px 0 0' }}>{review.body}</p>
       </div>
     );
@@ -172,7 +174,7 @@ function QuestReview({ questId }) {
 // Every reviewer's rating/body for this quest's series — same list an org
 // or admin sees on their own dashboard (list_quest_reviews has no
 // ownership gate; reviews are meant to help anyone deciding whether to
-// attend), fetched lazily since most cards on the list never get expanded.
+// attend), fetched lazily since most cards on the list never get opened.
 function QuestReviewsList({ questId }) {
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState(null);
@@ -215,6 +217,181 @@ function QuestReviewsList({ questId }) {
   );
 }
 
+// The full body of a quest's detail: date/location/capacity, description,
+// tags, and the RSVP/QR/review actions. Rendered exactly once at a time —
+// inline under its row on mobile, or in the side panel on desktop — so its
+// own lazily-fetched sub-state (QR, review) never double-fetches.
+function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTitle = false }) {
+  const { primary, occurrences } = series;
+  const [selectedId, setSelectedId] = useState(occurrences[0].id);
+  const [showQr, setShowQr] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [showReviewsList, setShowReviewsList] = useState(false);
+  const reduce = useReducedMotion();
+
+  // Reset to the first occurrence and collapse any open sub-panels whenever
+  // a different series is shown in this slot (desktop: clicking a new row
+  // reuses this same mounted component rather than remounting it).
+  useEffect(() => {
+    setSelectedId(occurrences[0].id);
+    setShowQr(false);
+    setShowReview(false);
+    setShowReviewsList(false);
+  }, [series.seriesId]);
+
+  const selected = occurrences.find((o) => o.id === selectedId) || occurrences[0];
+  const rsvpCount = (selected.rsvpd || []).length;
+  const isRsvpd = (selected.rsvpd || []).includes(userId);
+  const isFull = selected.capacity != null && rsvpCount >= selected.capacity && !isRsvpd;
+
+  return (
+    <div className="quest-card-body">
+      {showTitle && (
+        <div>
+          <p className="quest-title" style={{ fontSize: '1.25rem' }}>{primary.title}</p>
+          {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
+        </div>
+      )}
+      {formatRecurrence(primary) && <p className="quest-org-line">{formatRecurrence(primary)}</p>}
+      {occurrences.length > 1 ? (
+        <label>
+          Date
+          <select
+            value={selectedId}
+            onChange={(e) => {
+              setSelectedId(e.target.value);
+              setShowQr(false);
+              setShowReview(false);
+              setShowReviewsList(false);
+            }}
+          >
+            {occurrences.map((o) => {
+              const full = o.capacity != null && (o.rsvpd || []).length >= o.capacity && !(o.rsvpd || []).includes(userId);
+              return (
+                <option key={o.id} value={o.id}>
+                  {formatEventDate(o.eventDate)}
+                  {o.capacity ? ` — ${(o.rsvpd || []).length}/${o.capacity} spots` : ''}
+                  {full ? ' (Full)' : ''}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+      ) : (
+        formatEventDate(selected.eventDate) && (
+          <p className="quest-meta-row">
+            <IconCalendar /> {formatEventDate(selected.eventDate)}
+          </p>
+        )
+      )}
+      {selected.location && (
+        <p className="quest-meta-row">
+          <IconPin /> {selected.location}
+        </p>
+      )}
+      <p className="quest-meta-row">
+        <IconUsers /> {selected.capacity ? `${rsvpCount} / ${selected.capacity} spots filled` : `${rsvpCount} RSVP'd`}
+      </p>
+      <p className="quest-description">{primary.description}</p>
+      <div className="quest-tags">
+        {(primary.tags || []).map((tag) => (
+          <TagStamp key={tag} tone={tag}>
+            {tag}
+          </TagStamp>
+        ))}
+      </div>
+      <div className="quest-actions">
+        {canRsvp && (
+          <StampButton
+            type="button"
+            variant={isRsvpd ? 'danger' : 'primary'}
+            onClick={() => {
+              setShowQr(false);
+              onToggleRsvp(selected);
+            }}
+            disabled={busyId === selected.id || isFull}
+          >
+            {busyId === selected.id ? 'Saving...' : isFull ? 'Full' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
+          </StampButton>
+        )}
+        <AnimatePresence>
+          {canRsvp && isRsvpd && busyId !== selected.id && (
+            <motion.span
+              className="quest-rsvp-confirm"
+              initial={reduce ? false : { opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={reduce ? undefined : { opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <IconCheck /> You're in!
+            </motion.span>
+          )}
+        </AnimatePresence>
+        {canRsvp && isRsvpd && (
+          <StampButton type="button" onClick={() => setShowQr((v) => !v)}>
+            {showQr ? 'Hide my check-in code' : 'Show my check-in code'}
+          </StampButton>
+        )}
+        {canRsvp && isRsvpd && (
+          <StampButton type="button" onClick={() => setShowReview((v) => !v)}>
+            {showReview ? 'Hide review' : 'Leave a review'}
+          </StampButton>
+        )}
+        <StampButton type="button" onClick={() => setShowReviewsList((v) => !v)}>
+          {showReviewsList ? 'Hide reviews' : 'View reviews'}
+        </StampButton>
+        <AddToCalendar quest={selected} />
+      </div>
+      {isRsvpd && showQr && <QuestQrCode questId={selected.id} />}
+      {isRsvpd && showReview && <QuestReview questId={selected.id} />}
+      {showReviewsList && <QuestReviewsList questId={selected.id} />}
+    </div>
+  );
+}
+
+// One row per series (not per date) — a recurring quest with 8 scheduled
+// occurrences shows as a single row with a date picker inside its detail,
+// rather than flooding the list with 8 near-duplicate entries. RSVP only
+// happens once expanded (QuestDetailBody) — there's no quick-accept action
+// on the collapsed card.
+function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
+  const { primary, occurrences } = series;
+
+  return (
+    <motion.li className="quest-row" variants={itemVariants}>
+      <div className="quest-node-col">
+        <div className="quest-thumb">
+          <OrgAvatar name={primary.orgName} seed={primary.orgId || series.seriesId} />
+        </div>
+        {!isLast && <div className="quest-thread" />}
+      </div>
+
+      <div className="ink-card quest-content-col" data-active={isActive ? 'true' : undefined}>
+        <button type="button" className="quest-card-head" onClick={onSelect} aria-expanded={isOpen || isActive}>
+          <div className="quest-card-titles">
+            <p className="quest-title">{primary.title}</p>
+            {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
+            {primary.location && (
+              <p className="quest-org-line">
+                <span className="quest-dot" aria-hidden="true" />
+                {primary.location}
+              </p>
+            )}
+            {series.reviewCount > 0 && (
+              <p className="quest-org-line">
+                {formatStars(series.avgRating)} ({series.reviewCount})
+              </p>
+            )}
+            {occurrences.length > 1 && <p className="quest-org-line">{occurrences.length} upcoming dates</p>}
+          </div>
+          <IconChevron className="quest-chevron" data-open={isOpen ? 'true' : 'false'} />
+        </button>
+        {isOpen && children}
+      </div>
+    </motion.li>
+  );
+}
+
 // One entrance per row, staggered from the parent's transition — cheap
 // enough at feed scale (a few dozen series) and gives the list a sense of
 // arriving rather than just appearing.
@@ -232,166 +409,31 @@ function relevanceScore(quest, interests) {
   return (quest.tags || []).filter((tag) => interests.includes(tag)).length;
 }
 
-
-// One-off decorative illustration for the empty state — a hand-drawn target,
-// resolved to real theme colors at draw time since <canvas> can't read CSS
-// custom properties the way SVG's currentColor can.
-function drawEmptyIllustration(rc, w, h) {
-  const styles = getComputedStyle(document.documentElement);
-  const ink = styles.getPropertyValue('--line').trim();
-  const fill = styles.getPropertyValue('--tag-outdoors').trim();
-  const cx = w / 2;
-  const cy = h / 2;
-  const outer = Math.min(w, h) - 24;
-  const base = { roughness: 0.85, bowing: 0.7, stroke: ink, strokeWidth: 2.4 };
-  rc.circle(cx, cy, outer, { ...base, fill, fillStyle: 'solid', seed: 11 });
-  rc.circle(cx, cy, outer * 0.55, { ...base, strokeWidth: 1.8, fill: 'none', seed: 12 });
-}
-
-// One card per series (not per date) — a recurring quest with 8 scheduled
-// occurrences shows as a single card with a date picker, rather than
-// flooding the list with 8 near-duplicate entries. RSVP, QR check-in, and
-// review all act on whichever occurrence is currently selected, since
-// those are inherently per-date (see functions/main.py — nothing about
-// that changed, only how many dates are visually surfaced at once).
-function QuestCard({ series, userId, canRsvp, busyId, onToggleRsvp, isLast }) {
-  const [open, setOpen] = useState(false);
-  const [showQr, setShowQr] = useState(false);
-  const [showReview, setShowReview] = useState(false);
-  const [showReviewsList, setShowReviewsList] = useState(false);
-  const [selectedId, setSelectedId] = useState(series.occurrences[0].id);
-
-  const selected = series.occurrences.find((o) => o.id === selectedId) || series.occurrences[0];
-  const { primary, occurrences } = series;
-  const rsvpCount = (selected.rsvpd || []).length;
-  const isRsvpd = (selected.rsvpd || []).includes(userId);
-  const isFull = selected.capacity != null && rsvpCount >= selected.capacity && !isRsvpd;
-
-  return (
-    <motion.li className="quest-row" variants={itemVariants}>
-      <div className="quest-node-col">
-        <div className="quest-thumb">
-          <OrgAvatar name={primary.orgName} seed={primary.orgId || series.seriesId} />
-        </div>
-        {!isLast && (
-          <div className="quest-thread">
-            <RoughTexture variant="thread" seed={series.seriesId} />
-          </div>
-        )}
-      </div>
-
-      <div className="ink-card quest-content-col">
-        <button type="button" className="quest-card-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-          <div className="quest-card-titles">
-            <p className="quest-title">{primary.title}</p>
-            {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
-            {series.reviewCount > 0 && (
-              <p className="quest-org-line">
-                {formatStars(series.avgRating)} ({series.reviewCount})
-              </p>
-            )}
-          </div>
-          <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
-        </button>
-
-        {open && (
-          <div className="quest-card-body">
-            {formatRecurrence(primary) && <p className="quest-org-line">{formatRecurrence(primary)}</p>}
-            {occurrences.length > 1 ? (
-              <label>
-                Date
-                <select
-                  value={selectedId}
-                  onChange={(e) => {
-                    setSelectedId(e.target.value);
-                    setShowQr(false);
-                    setShowReview(false);
-                    setShowReviewsList(false);
-                  }}
-                >
-                  {occurrences.map((o) => {
-                    const full = o.capacity != null && (o.rsvpd || []).length >= o.capacity && !(o.rsvpd || []).includes(userId);
-                    return (
-                      <option key={o.id} value={o.id}>
-                        {formatEventDate(o.eventDate)}
-                        {o.capacity ? ` — ${(o.rsvpd || []).length}/${o.capacity} spots` : ''}
-                        {full ? ' (Full)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
-            ) : (
-              formatEventDate(selected.eventDate) && <p className="quest-org-line">{formatEventDate(selected.eventDate)}</p>
-            )}
-            {selected.location && <p className="quest-org-line">{selected.location}</p>}
-            <p className="quest-org-line">
-              {selected.capacity ? `${rsvpCount} / ${selected.capacity} spots filled` : `${rsvpCount} RSVP'd`}
-            </p>
-            <p>{primary.description}</p>
-            <div className="quest-tags">
-              {(primary.tags || []).map((tag) => (
-                <TagStamp key={tag} tone={tag}>
-                  {tag}
-                </TagStamp>
-              ))}
-            </div>
-            <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
-              {canRsvp && (
-                <StampButton
-                  type="button"
-                  variant={isRsvpd ? 'danger' : 'primary'}
-                  onClick={() => {
-                    setShowQr(false);
-                    onToggleRsvp(selected);
-                  }}
-                  disabled={busyId === selected.id || isFull}
-                >
-                  {busyId === selected.id ? 'Saving...' : isFull ? 'Full' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
-                </StampButton>
-              )}
-              {canRsvp && isRsvpd && (
-                <StampButton type="button" onClick={() => setShowQr((v) => !v)}>
-                  {showQr ? 'Hide my check-in code' : 'Show my check-in code'}
-                </StampButton>
-              )}
-              {canRsvp && isRsvpd && (
-                <StampButton type="button" onClick={() => setShowReview((v) => !v)}>
-                  {showReview ? 'Hide review' : 'Leave a review'}
-                </StampButton>
-              )}
-              <StampButton type="button" onClick={() => setShowReviewsList((v) => !v)}>
-                {showReviewsList ? 'Hide reviews' : 'View reviews'}
-              </StampButton>
-              <AddToCalendar quest={selected} />
-            </div>
-            {isRsvpd && showQr && <QuestQrCode questId={selected.id} />}
-            {isRsvpd && showReview && <QuestReview questId={selected.id} />}
-            {showReviewsList && <QuestReviewsList questId={selected.id} />}
-          </div>
-        )}
-      </div>
-    </motion.li>
-  );
-}
-
-export function Quests({ interests }) {
+export function Quests({ interests, name }) {
   const { user, role } = useAuth();
   const [seriesList, setSeriesList] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [activeTag, setActiveTag] = useState(null);
+  const [openSeriesId, setOpenSeriesId] = useState(null);
+  const [segment, setSegment] = useState('org');
+  const [search, setSearch] = useState('');
   const reduce = useReducedMotion();
+  const isDesktop = useIsDesktop();
 
   function load() {
-    Promise.all([getDocs(collection(db, 'quests')), getDocs(collection(db, 'questSeries'))]).then(
-      ([questsSnap, seriesSnap]) => {
+    setLoadError(null);
+    Promise.all([getDocs(collection(db, 'quests')), getDocs(collection(db, 'questSeries'))])
+      .then(([questsSnap, seriesSnap]) => {
         const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         const grouped = attachSeriesRatings(groupBySeries(all), seriesDocsById);
         grouped.sort((a, b) => relevanceScore(b.primary, interests) - relevanceScore(a.primary, interests));
         setSeriesList(grouped);
-      },
-    );
+      })
+      .catch((err) => {
+        setLoadError(err.message || 'Could not load quests.');
+      });
   }
 
   useEffect(load, [interests]);
@@ -410,83 +452,189 @@ export function Quests({ interests }) {
     }
   }
 
-  const availableTags = useMemo(() => {
-    if (!seriesList) return [];
-    const seen = new Set();
-    seriesList.forEach((s) => (s.primary.tags || []).forEach((t) => seen.add(t)));
-    return [...seen];
-  }, [seriesList]);
-
   const orgCount = useMemo(() => {
     if (!seriesList) return 0;
     return new Set(seriesList.filter((s) => s.primary.orgId).map((s) => s.primary.orgId)).size;
   }, [seriesList]);
 
-  const visibleSeries = useMemo(() => {
+  // The org / side-quests segmented toggle applies at both breakpoints —
+  // "side-quests" are the admin-created neighborhood quests (isDefault, no
+  // orgId; see create_default_quest in functions/main.py), "org" is
+  // everything an organization posted itself. Every quest is one or the
+  // other by construction, never both.
+  const segmentedList = useMemo(() => {
     if (!seriesList) return [];
-    if (!activeTag) return seriesList;
-    return seriesList.filter((s) => (s.primary.tags || []).includes(activeTag));
-  }, [seriesList, activeTag]);
+    return seriesList.filter((s) => (segment === 'side-quests' ? s.primary.isDefault : !s.primary.isDefault));
+  }, [seriesList, segment]);
+
+  const availableTags = useMemo(() => {
+    const seen = new Set();
+    segmentedList.forEach((s) => (s.primary.tags || []).forEach((t) => seen.add(t)));
+    return [...seen];
+  }, [segmentedList]);
+
+  const visibleSeries = useMemo(() => {
+    let list = segmentedList;
+    if (activeTag) list = list.filter((s) => (s.primary.tags || []).includes(activeTag));
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((s) => {
+        const { title, orgName, location } = s.primary;
+        return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
+      });
+    }
+    return list;
+  }, [segmentedList, activeTag, search]);
+
+  const activeSeriesId = isDesktop ? openSeriesId ?? visibleSeries[0]?.seriesId ?? null : openSeriesId;
+  const activeSeries = visibleSeries.find((s) => s.seriesId === activeSeriesId) || null;
+
+  if (loadError) {
+    return (
+      <div className="ink-card quest-empty quest-error">
+        <IconAlert />
+        <h2>Couldn't load quests</h2>
+        <p>{loadError}</p>
+        <StampButton type="button" variant="primary" onClick={load} style={{ marginTop: 8 }}>
+          Try again
+        </StampButton>
+      </div>
+    );
+  }
 
   if (!seriesList) return <LoadingSpinner label="Loading quests..." />;
 
   if (seriesList.length === 0) {
     return (
       <div className="quest-empty">
-        <RoughFrame width={120} height={120} draw={drawEmptyIllustration} />
-        <h2>No Quests Yet</h2>
+        <DuckMark size={96} />
+        <h2>No quests yet</h2>
         <p>Check back soon — organizations are just getting started.</p>
       </div>
     );
   }
 
+  const firstName = name ? name.split(' ')[0] : null;
+
   return (
-    <div>
-      <div className="stat-hero-row">
-        <div className="stat-hero-tile" style={{ background: 'var(--tag-community)' }}>
-          <span className="stat-hero-number">{seriesList.length}</span>
-          <span className="stat-hero-label">Quests Open</span>
+    <div className={isDesktop ? 'quest-feed-layout' : undefined}>
+      <div className="quest-feed-main">
+        <div className="quest-feed-greeting">
+          <h1>{firstName ? `Hi, ${firstName}` : 'Quests near you'}</h1>
+          <p>
+            {seriesList.length} quest{seriesList.length === 1 ? '' : 's'} open — here's what's happening nearby.
+          </p>
         </div>
-        <div className="stat-hero-tile" style={{ background: 'var(--tag-education)' }}>
-          <span className="stat-hero-number">{orgCount}</span>
-          <span className="stat-hero-label">Organizations</span>
+
+        {role === 'admin' && (
+          <div className="stat-hero-row">
+            <div className="stat-hero-tile" style={{ background: 'var(--brand-green)' }}>
+              <span className="stat-hero-number">{seriesList.length}</span>
+              <span className="stat-hero-label">Quests Open</span>
+            </div>
+            <div className="stat-hero-tile" style={{ background: 'var(--brand-blue)' }}>
+              <span className="stat-hero-number">{orgCount}</span>
+              <span className="stat-hero-label">Organizations</span>
+            </div>
+          </div>
+        )}
+
+        <div className="segmented-toggle" role="tablist" aria-label="Quest source">
+          <button
+            type="button"
+            role="tab"
+            aria-pressed={segment === 'org'}
+            onClick={() => {
+              setSegment('org');
+              setActiveTag(null);
+            }}
+          >
+            org
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-pressed={segment === 'side-quests'}
+            onClick={() => {
+              setSegment('side-quests');
+              setActiveTag(null);
+            }}
+          >
+            side-quests
+          </button>
         </div>
+        <div className="search-field" style={{ maxWidth: 640, marginBottom: 14 }}>
+          <IconSearch />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search"
+            aria-label="Search quests"
+          />
+        </div>
+
+        {availableTags.length > 0 && (
+          <div className="tag-filter-row">
+            <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
+              All
+            </TagStamp>
+            {availableTags.map((tag) => (
+              <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
+                {tag}
+              </TagStamp>
+            ))}
+          </div>
+        )}
+
+        {visibleSeries.length === 0 ? (
+          <p>No quests match that filter.</p>
+        ) : (
+          <motion.ul className="quest-list" variants={listVariants} initial={reduce ? false : 'hidden'} animate="show">
+            {visibleSeries.map((series, i) => (
+              <QuestRow
+                key={series.seriesId}
+                series={series}
+                isLast={i === visibleSeries.length - 1}
+                isOpen={!isDesktop && openSeriesId === series.seriesId}
+                isActive={isDesktop && activeSeriesId === series.seriesId}
+                onSelect={() =>
+                  setOpenSeriesId(!isDesktop && openSeriesId === series.seriesId ? null : series.seriesId)
+                }
+              >
+                {!isDesktop && openSeriesId === series.seriesId && (
+                  <QuestDetailBody
+                    series={series}
+                    userId={user?.uid}
+                    canRsvp={role === 'user'}
+                    busyId={busyId}
+                    onToggleRsvp={toggleRsvp}
+                  />
+                )}
+              </QuestRow>
+            ))}
+          </motion.ul>
+        )}
       </div>
 
-      {availableTags.length > 0 && (
-        <div className="tag-filter-row">
-          <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
-            All
-          </TagStamp>
-          {availableTags.map((tag) => (
-            <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
-              {tag}
-            </TagStamp>
-          ))}
-        </div>
-      )}
-
-      {visibleSeries.length === 0 ? (
-        <p>No quests match that filter.</p>
-      ) : (
-        <motion.ul
-          className="quest-list"
-          variants={listVariants}
-          initial={reduce ? false : 'hidden'}
-          animate="show"
-        >
-          {visibleSeries.map((series, i) => (
-            <QuestCard
-              key={series.seriesId}
-              series={series}
+      {isDesktop && (
+        <div className="ink-card quest-detail-pane">
+          {activeSeries ? (
+            <QuestDetailBody
+              series={activeSeries}
               userId={user?.uid}
               canRsvp={role === 'user'}
               busyId={busyId}
               onToggleRsvp={toggleRsvp}
-              isLast={i === visibleSeries.length - 1}
+              showTitle
             />
-          ))}
-        </motion.ul>
+          ) : (
+            <div className="quest-detail-empty">
+              <DuckMark size={56} />
+              <p>Select a quest to see its details.</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

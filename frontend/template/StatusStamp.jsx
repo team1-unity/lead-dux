@@ -5,7 +5,7 @@
 // `muted` drops the fill entirely for "nothing to show yet" states
 // (onboarding_user has no status worth stamping).
 export function StatusStamp({ tone, muted = false, children }) {
-  const style = !muted && tone ? { '--tag-color': `var(--tag-${tone})` } : undefined;
+  const style = !muted && tone ? { '--tag-color': `var(--tag-${tone})`, '--tag-ink': `var(--tag-${tone}-ink)` } : undefined;
   return (
     <span className="status-stamp" data-muted={muted ? 'true' : undefined} style={style}>
       {children}

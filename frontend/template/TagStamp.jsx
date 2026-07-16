@@ -12,7 +12,12 @@ const KNOWN_TONES = new Set(TAG_TONES);
 
 function toneStyle(tone) {
   const key = tone && String(tone).toLowerCase().replace(/\s+/g, '-');
-  return KNOWN_TONES.has(key) ? { '--tag-color': `var(--tag-${key})` } : undefined;
+  if (!KNOWN_TONES.has(key)) return undefined;
+  return {
+    '--tag-color': `var(--tag-${key})`,
+    '--tag-ink': `var(--tag-${key}-ink)`,
+    '--tag-select-ink': `var(--tag-${key}-ink)`,
+  };
 }
 
 export function TagStamp({ tone, children, selectable = false, selected = false, onClick }) {

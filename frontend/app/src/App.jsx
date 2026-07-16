@@ -4,9 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
 import { ProtectedRoute } from '@shared/ProtectedRoute.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { TopBar } from '@shared/TopBar.jsx';
 import { BottomNav } from '@shared/BottomNav.jsx';
-import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { FeedbackToast } from '@shared/FeedbackToast.jsx';
@@ -19,6 +17,7 @@ import { Profile } from './Profile.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
+import { Badges } from '@mobile/Badges.jsx';
 import { Journal } from '@mobile/Journal.jsx';
 import { Register as RegisterOrganization } from '@org/Register.jsx';
 import { Dashboard as OrgDashboard } from '@org/Dashboard.jsx';
@@ -64,11 +63,9 @@ function PublicHome({ role }) {
 
   return (
     <PageMotion>
-      <AmbientParticles />
-      <TopBar />
       {role === 'pending_org' && <PendingBanner />}
       <FeedbackToast />
-      <Quests interests={profile?.interests || []} />
+      <Quests interests={profile?.interests || []} name={profile?.name} />
     </PageMotion>
   );
 }
@@ -78,8 +75,6 @@ function PublicHome({ role }) {
 function AdminHome() {
   return (
     <PageMotion>
-      <AmbientParticles />
-      <TopBar />
       <Quests interests={[]} />
     </PageMotion>
   );
@@ -136,6 +131,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/badges" element={<Badges />} />
             <Route path="/journal" element={<Journal />} />
             <Route
               path="/admin"
