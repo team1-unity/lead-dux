@@ -56,14 +56,29 @@ def _require_admin(req: https_fn.CallableRequest):
 
 # Attendance / QR check-in ---------------------------------------------------
 #
+# The QR belongs to the EVENT, not to a person: an organization generates one
+# QR per quest (see generate_event_qr_code) and displays it at the event
+# itself (poster, tablet, projector); attendees scan it themselves via
+# check_in_to_event. This replaced an earlier per-attendee model (RSVP minted
+# a personal QR, the org scanned each attendee) — see git history for that
+# version if you need it.
+#
 # A quest's own doc gets `eventDate` (required) and `eventEndTime` (optional)
-# at creation time (see create_quest/create_default_quest below). Each RSVP
-# gets a sibling doc at quests/{questId}/attendance/{uid} holding a random
-# token. That token is never written anywhere the client can read directly —
-# it only ever leaves the server embedded in a QR code image, returned over
-# the same callable-function response channel every other action here
-# already uses. Scanning the code is just handing that same token back via
-# check_in_attendee.
+# at creation time (see create_quest/create_default_quest below), plus
+# `qrToken`/`qrTokenVersion` once an org has generated a QR for it (absent
+# until then — no schema migration needed for quests created before this).
+# Refreshing the QR mints a new token and bumps the version; the old token
+# simply stops matching, invalidating it, while every `attendance` doc
+# already recorded (which stores the token it was redeemed with, not a live
+# reference to the quest's current one) is left untouched — a refresh can
+# never retroactively un-attend someone.
+#
+# Attendance records live in their own top-level `attendance` collection
+# (not nested under quests) — one doc per successful check-in, id
+# `{eventId}_{userId}` (see _attendance_doc_id) so "has this person already
+# checked in to this event" is a cheap existence read rather than a query.
+# This is the canonical source for "did this person attend this quest" —
+# list_quest_attendees and submit_review's attendance gate both read it.
 
 DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
 
@@ -128,8 +143,12 @@ def _qr_expires_at(event_date: datetime, event_end_time: datetime | None) -> dat
     return _to_utc(event_date) + timedelta(hours=DEFAULT_EVENT_WINDOW_HOURS)
 
 
-def _make_qr_data_uri(quest_id: str, uid: str, token: str) -> str:
-    payload = json.dumps({"questId": quest_id, "uid": uid, "token": token})
+def _make_qr_data_uri(quest_id: str, token: str, version: int) -> str:
+    # No uid in the payload — this QR belongs to the event, not to whoever
+    # happens to scan it. `v` (qrTokenVersion) rides along purely as a
+    # sanity check for check_in_to_event; the token itself is what actually
+    # gets validated (see the constant-time compare there).
+    payload = json.dumps({"questId": quest_id, "token": token, "v": version})
     image = qrcode.make(payload)
     buffer = BytesIO()
     image.save(buffer, format="PNG")
@@ -137,8 +156,12 @@ def _make_qr_data_uri(quest_id: str, uid: str, token: str) -> str:
     return f"data:image/png;base64,{encoded}"
 
 
-def _attendance_ref(db, quest_id: str, uid: str):
-    return db.collection("quests").document(quest_id).collection("attendance").document(uid)
+def _attendance_doc_id(event_id: str, uid: str) -> str:
+    return f"{event_id}_{uid}"
+
+
+def _attendance_ref(db, event_id: str, uid: str):
+    return db.collection("attendance").document(_attendance_doc_id(event_id, uid))
 
 
 def _review_ref(db, series_id: str, uid: str, quest_id: str):
@@ -156,12 +179,13 @@ def _delete_series_reviews(db, series_id: str):
 
 
 def _delete_quest(db, quest_ref):
-    # Firestore never cascades a subcollection when its parent doc is
-    # deleted — quests/{id}/attendance/* would otherwise sit there orphaned
-    # (and readable by nobody, but still consuming storage) forever. Small
-    # subcollection at this app's scale, so a plain loop is fine; a
-    # bulk-delete API would be worth it if quests ever had thousands of
-    # RSVPs each.
+    # attendance lives in its own top-level collection (not nested under
+    # this quest), keyed by eventId — deleting the quest doc doesn't touch
+    # those rows automatically, so they're cleaned up explicitly here or
+    # they'd sit around orphaned (readable by nobody, but still consuming
+    # storage) forever. Small collection at this app's scale, so a plain
+    # query+loop is fine; a bulk-delete API would be worth it if quests ever
+    # had thousands of attendees each.
     #
     # Deletes only this one occurrence — a recurring series' other dates
     # are untouched (see delete_quest_series for deleting a whole series at
@@ -172,7 +196,7 @@ def _delete_quest(db, quest_ref):
     # whole series' reviews gone (delete_quest_series with no keepQuestId,
     # delete_organization, delete_account) do that explicitly themselves via
     # _delete_series_reviews.
-    for doc in quest_ref.collection("attendance").stream():
+    for doc in db.collection("attendance").where("eventId", "==", quest_ref.id).stream():
         doc.reference.delete()
     quest_ref.delete()
 
@@ -1067,28 +1091,12 @@ def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
     # incorrectly rejected on a harmless repeat call.
     firestore.transactional(_record_rsvp)(db.transaction(), ref, req.auth.uid)
 
-    # A fresh token every time — cancel_rsvp always deletes the attendance
-    # doc first, so re-RSVPing after a cancel never reuses an old token.
-    token = secrets.token_urlsafe(24)
-    qr_expires_at = _qr_expires_at(event_date, quest.get("eventEndTime"))
-    _attendance_ref(db, quest_id, req.auth.uid).set({
-        "token": token,
-        "status": "rsvpd",
-        "qrExpiresAt": qr_expires_at,
-        "checkedInAt": None,
-        "createdAt": firestore.SERVER_TIMESTAMP,
-    })
-
-    return {
-        "success": True,
-        "qr": _make_qr_data_uri(quest_id, req.auth.uid, token),
-        "qrExpiresAt": qr_expires_at.isoformat(),
-    }
+    return {"success": True}
 
 
-# The inverse of rsvp_to_quest. Deleting the attendance doc (rather than
-# e.g. marking it cancelled) means a later re-RSVP always starts from a
-# clean slate — see the comment in rsvp_to_quest.
+# The inverse of rsvp_to_quest — just pulls the uid back out of rsvpd. Any
+# attendance record from an earlier check-in is left alone: cancelling an
+# RSVP after already attending shouldn't retroactively erase that you did.
 @https_fn.on_call()
 def cancel_rsvp(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -1102,109 +1110,163 @@ def cancel_rsvp(req: https_fn.CallableRequest) -> dict:
 
     db = firestore.client()
     db.collection("quests").document(quest_id).update({"rsvpd": firestore.ArrayRemove([req.auth.uid])})
-    _attendance_ref(db, quest_id, req.auth.uid).delete()
     return {"success": True}
 
 
-# Callable from the quest list — re-renders the caller's own QR code without
-# minting a new token, so leaving the page and coming back (or opening it on
-# a second device) still shows a scannable code instead of a dead end. No
-# targetUid, same as update_interests — this can only ever read the caller's
-# own attendance doc.
-@https_fn.on_call()
-def get_quest_qr(req: https_fn.CallableRequest) -> dict:
-    _require_role(req, "user")
-
-    quest_id = req.data.get("questId")
-    if not quest_id:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "questId is required.",
-        )
-
-    db = firestore.client()
-    snap = _attendance_ref(db, quest_id, req.auth.uid).get()
-    if not snap.exists:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.NOT_FOUND,
-            "You haven't RSVP'd to this quest.",
-        )
-
-    attendance = snap.to_dict()
-    qr_expires_at = attendance["qrExpiresAt"]
-    return {
-        "qr": _make_qr_data_uri(quest_id, req.auth.uid, attendance["token"]),
-        "qrExpiresAt": qr_expires_at.isoformat(),
-        "status": attendance["status"],
-        "expired": datetime.now(timezone.utc) > _to_utc(qr_expires_at),
-    }
-
-
-# Callable from the org dashboard's "scan to check in" screen (own quests
-# only) or the admin dashboard (any quest). questId/uid/token come from
-# decoding the scanned QR image client-side — see _make_qr_data_uri for the
-# payload shape. Idempotent: scanning an already-checked-in code again
-# succeeds with alreadyCheckedIn=True rather than erroring, since a double
-# scan at the door is an expected accident, not an attack.
-@https_fn.on_call()
-def check_in_attendee(req: https_fn.CallableRequest) -> dict:
-    _require_auth(req)
-
-    quest_id = req.data.get("questId")
-    uid = req.data.get("uid")
-    token = req.data.get("token")
-    if not quest_id or not uid or not token:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "questId, uid, and token are required.",
-        )
-
-    db = firestore.client()
-    quest_snap = db.collection("quests").document(quest_id).get()
-    if not quest_snap.exists:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.NOT_FOUND,
-            f"No quest {quest_id}.",
-        )
-
+def _require_owning_org_or_admin_for_quest(req, quest):
     role = req.auth.token.get("role")
-    is_owning_org = role == "organization" and quest_snap.to_dict().get("orgId") == req.auth.uid
+    is_owning_org = role == "organization" and quest.get("orgId") == req.auth.uid
     if role != "admin" and not is_owning_org:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-            "You can only check in attendees for your own organization's quests.",
+            "You can only manage QR codes for your own organization's quests.",
+        )
+
+
+def _get_quest_for_qr(db, quest_id):
+    if not quest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
+    ref = db.collection("quests").document(quest_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, f"No quest {quest_id}.")
+    return ref, snap.to_dict()
+
+
+# Callable from the org dashboard's "Generate QR Code" button (own quests
+# only) or the admin dashboard (any quest). Idempotent — if this quest
+# already has a token, re-renders it rather than rotating it; rotating is
+# refresh_event_qr_code's job specifically, so an accidental double-click
+# here never invalidates a code that's already posted somewhere.
+@https_fn.on_call()
+def generate_event_qr_code(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+    db = firestore.client()
+    ref, quest = _get_quest_for_qr(db, req.data.get("questId"))
+    _require_owning_org_or_admin_for_quest(req, quest)
+
+    token = quest.get("qrToken")
+    version = quest.get("qrTokenVersion", 0)
+    if not token:
+        token = secrets.token_urlsafe(24)
+        ref.update({"qrToken": token, "qrTokenVersion": version})
+
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+
+
+# Callable from the org dashboard's "View QR Code" button — re-renders
+# whatever token is currently live without minting or rotating anything.
+@https_fn.on_call()
+def get_event_qr_code(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+    db = firestore.client()
+    ref, quest = _get_quest_for_qr(db, req.data.get("questId"))
+    _require_owning_org_or_admin_for_quest(req, quest)
+
+    token = quest.get("qrToken")
+    if not token:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "No QR code has been generated for this quest yet.",
+        )
+
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, quest.get("qrTokenVersion", 0))}
+
+
+# Callable from the org dashboard's "Refresh QR Code" button — mints a new
+# token and bumps the version, so the previous QR (poster, tablet, whatever
+# still has the old image on screen) stops validating. Every `attendance`
+# doc already recorded stores the token it was redeemed with, not a live
+# pointer to the quest, so existing attendance is never disturbed by this.
+@https_fn.on_call()
+def refresh_event_qr_code(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+    db = firestore.client()
+    ref, quest = _get_quest_for_qr(db, req.data.get("questId"))
+    _require_owning_org_or_admin_for_quest(req, quest)
+
+    token = secrets.token_urlsafe(24)
+    version = quest.get("qrTokenVersion", 0) + 1
+    ref.update({"qrToken": token, "qrTokenVersion": version})
+
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+
+
+# Callable from the new user-facing "Scan QR Code" flow (see
+# frontend/template/QuestScanner.jsx) — any signed-in user, not just an
+# org/admin, since the whole point of this redesign is that attendees scan
+# themselves in. questId/token/v come from decoding the event's QR image
+# client-side (see _make_qr_data_uri for the payload shape). Idempotent:
+# scanning an already-checked-in code again succeeds with
+# alreadyCheckedIn=True rather than erroring, since a double scan is an
+# expected accident, not an attack.
+@https_fn.on_call()
+def check_in_to_event(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    quest_id = req.data.get("questId")
+    token = req.data.get("token")
+    if not quest_id or not token:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId and token are required.",
+        )
+
+    db = firestore.client()
+    quest_ref, quest = _get_quest_for_qr(db, quest_id)
+    uid = req.auth.uid
+
+    stored_token = quest.get("qrToken")
+    # Constant-time comparison — this token is a bearer credential, so
+    # timing differences on a naive `!=` could in principle leak how many
+    # leading characters matched. A quest with no token yet (or one that's
+    # been refreshed since this QR was generated) never has a stored_token
+    # equal to whatever was scanned, so this same check covers both
+    # "invalid code" and "stale/refreshed code" — no separate version check
+    # needed at validation time.
+    if not stored_token or not secrets.compare_digest(stored_token, token):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Invalid or expired QR code.",
+        )
+
+    event_date = quest.get("eventDate")
+    if event_date is None or datetime.now(timezone.utc) > _to_utc(_qr_expires_at(event_date, quest.get("eventEndTime"))):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This event's check-in window has closed.",
+        )
+
+    if uid not in quest.get("rsvpd", []):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "RSVP to this quest before checking in.",
         )
 
     attendance_ref = _attendance_ref(db, quest_id, uid)
-    attendance_snap = attendance_ref.get()
-    if not attendance_snap.exists:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.NOT_FOUND,
-            "No RSVP found for this QR code.",
-        )
+    existing = attendance_ref.get()
+    if existing.exists:
+        return {"success": True, "alreadyCheckedIn": True, "pointsAwarded": existing.to_dict().get("pointsAwarded", 0)}
 
-    attendance = attendance_snap.to_dict()
-    # Constant-time comparison — this token is a bearer credential, so
-    # timing differences on a naive `!=` could in principle leak how many
-    # leading characters matched.
-    if not secrets.compare_digest(attendance["token"], token):
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-            "Invalid QR code.",
-        )
-    if datetime.now(timezone.utc) > _to_utc(attendance["qrExpiresAt"]):
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "This QR code has expired.",
-        )
+    # Base points only for organization quests today — default/neighborhood
+    # quests (isDefault) have no tier concept in the schema yet, matching
+    # check_in_attendee's behavior before this redesign; that's a separate
+    # follow-up, not something this ticket changes.
+    base_points = ORG_QUEST_BASE_POINTS if quest.get("orgId") else 0
+    if base_points:
+        db.collection("users").document(uid).update({"points": firestore.Increment(base_points)})
 
-    user_snap = db.collection("users").document(uid).get()
-    user_data = user_snap.to_dict() if user_snap.exists else {}
-    attendee = {"uid": uid, "name": user_data.get("name"), "email": user_data.get("email")}
+    attendance_ref.set({
+        "userId": uid,
+        "orgId": quest.get("orgId"),
+        "eventId": quest_id,
+        "checkedInAt": firestore.SERVER_TIMESTAMP,
+        "pointsAwarded": base_points,
+        "qrToken": token,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    })
 
-    if attendance["status"] == "checked_in":
-        return {"success": True, "alreadyCheckedIn": True, "attendee": attendee}
-
+    return {"success": True, "alreadyCheckedIn": False, "pointsAwarded": base_points}
     attendance_ref.update({"status": "checked_in", "checkedInAt": firestore.SERVER_TIMESTAMP})
     # Flat points for an organization quest, tiered points for a side/
     # neighborhood one — see the Point System note above ORG_QUEST_BASE_POINTS.
@@ -1566,8 +1628,8 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
         )
 
     attendance_by_uid = {
-        doc.id: doc.to_dict()
-        for doc in db.collection("quests").document(quest_id).collection("attendance").stream()
+        doc.to_dict()["userId"]: doc.to_dict()
+        for doc in db.collection("attendance").where("eventId", "==", quest_id).stream()
     }
 
     attendees = []
@@ -1580,7 +1642,7 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
             "uid": uid,
             "name": user_data.get("name"),
             "email": user_data.get("email"),
-            "status": attendance.get("status") if attendance else "rsvpd",
+            "status": "checked_in" if attendance else "rsvpd",
             "checkedInAt": checked_in_at.isoformat() if checked_in_at else None,
         })
 
@@ -1691,8 +1753,10 @@ def submit_review(req: https_fn.CallableRequest) -> dict:
     # Attendance is checked against this specific occurrence — reviewing
     # still requires having actually checked in to *a* date, just not
     # necessarily whichever one happens to be selected when this is called.
-    attendance_snap = _attendance_ref(db, quest_id, req.auth.uid).get()
-    attended = attendance_snap.exists and attendance_snap.to_dict().get("status") == "checked_in"
+    # An attendance doc's mere existence means checked-in now (see
+    # check_in_to_event) — there's no separate "rsvpd but not yet attended"
+    # status stored in this collection anymore.
+    attended = _attendance_ref(db, quest_id, req.auth.uid).get().exists
     if not attended:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
@@ -1722,7 +1786,7 @@ def submit_review(req: https_fn.CallableRequest) -> dict:
 
 # Callable from the quest list — lets a member see their own review for
 # this specific occurrence (e.g. after navigating away and back), same
-# self-only shape as get_quest_qr. No targetUid, so there's nothing to
+# self-only shape as update_interests. No targetUid, so there's nothing to
 # escalate. Scoped to questId, not the whole series — a member who's
 # reviewed one date but not another should still see the submission form
 # for the un-reviewed one.

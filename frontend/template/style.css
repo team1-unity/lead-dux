@@ -1639,6 +1639,39 @@ button.quest-card-head:hover:not(:disabled) {
   gap: 4px;
 }
 
+/* ---------- event QR code (org/admin generate-view-refresh, see
+   QuestSeriesRow.jsx / org/Dashboard.jsx's QuestSeriesDetailPane) ---------- */
+.event-qr-display {
+  margin-top: 12px;
+  text-align: center;
+}
+.event-qr-display img {
+  max-width: 220px;
+  width: 100%;
+  border-radius: var(--radius);
+}
+
+/* ---------- Check In confirmation (see CheckIn.jsx) ---------- */
+.check-in-confirmation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 32px 20px;
+}
+.check-in-confirmation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
 .section-heading {
   display: flex;
   align-items: center;

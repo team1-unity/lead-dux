@@ -16,7 +16,7 @@ def get_org(fake_firestore, uid):
 class TestSubmitReview:
     def test_attended_user_can_submit(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
 
         result = call(main.submit_review, make_request(
             data={"questId": "quest-1", "rating": 5, "body": "Great cleanup!"},
@@ -34,8 +34,8 @@ class TestSubmitReview:
 
     def test_computes_running_average_across_multiple_reviewers(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1", "user-2"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
-        seed_attendance(fake_firestore, "quest-1", "user-2", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
+        seed_attendance(fake_firestore, "quest-1", "user-2")
 
         call(main.submit_review, make_request(
             data={"questId": "quest-1", "rating": 5, "body": "Loved it"}, uid="user-1", role="user",
@@ -60,8 +60,11 @@ class TestSubmitReview:
         assert exc_info.value.code == https_fn.FunctionsErrorCode.FAILED_PRECONDITION
 
     def test_rejects_user_who_rsvpd_but_never_checked_in(self, fake_firestore, make_request, call):
+        # No seed_attendance call at all — under the new model, an
+        # attendance record only ever exists once someone has actually
+        # checked in (see check_in_to_event), so "RSVP'd but never checked
+        # in" is simply "no attendance doc exists yet".
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="rsvpd")
 
         with pytest.raises(https_fn.HttpsError) as exc_info:
             call(main.submit_review, make_request(
@@ -72,7 +75,7 @@ class TestSubmitReview:
 
     def test_rejects_duplicate_review_for_the_same_date(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
         req = make_request(
             data={"questId": "quest-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         )
@@ -89,8 +92,8 @@ class TestSubmitReview:
     def test_allows_a_separate_review_for_a_different_occurrence_in_same_series(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
-        seed_attendance(fake_firestore, "occ-2", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
+        seed_attendance(fake_firestore, "occ-2", "user-1")
 
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Loved the first one"}, uid="user-1", role="user",
@@ -108,7 +111,7 @@ class TestSubmitReview:
 
     def test_rejects_quest_with_no_organization(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId=None, isDefault=True)
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
 
         with pytest.raises(https_fn.HttpsError) as exc_info:
             call(main.submit_review, make_request(
@@ -120,7 +123,7 @@ class TestSubmitReview:
     @pytest.mark.parametrize("bad_rating", [0, 6, -1, 3.5, "5", True, None])
     def test_rejects_invalid_rating(self, fake_firestore, make_request, call, bad_rating):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
 
         with pytest.raises(https_fn.HttpsError) as exc_info:
             call(main.submit_review, make_request(
@@ -132,7 +135,7 @@ class TestSubmitReview:
     @pytest.mark.parametrize("bad_body", ["", "   ", None])
     def test_rejects_empty_body(self, fake_firestore, make_request, call, bad_body):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
 
         with pytest.raises(https_fn.HttpsError) as exc_info:
             call(main.submit_review, make_request(
@@ -152,7 +155,7 @@ class TestGetMyReview:
 
     def test_returns_own_review_after_submitting(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "quest-1", "rating": 4, "body": "Solid event"}, uid="user-1", role="user",
         ))
@@ -165,7 +168,7 @@ class TestGetMyReview:
     def test_scoped_to_the_specific_occurrence_not_the_whole_series(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great first date"}, uid="user-1", role="user",
         ))
@@ -181,8 +184,8 @@ class TestGetMyReview:
 class TestListQuestReviews:
     def test_owning_org_sees_all_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1", "user-2"], orgId="org-1")
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
-        seed_attendance(fake_firestore, "quest-1", "user-2", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
+        seed_attendance(fake_firestore, "quest-1", "user-2")
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
         seed_user(fake_firestore, "user-2", "Bo", "bo@example.com")
         call(main.submit_review, make_request(
@@ -207,7 +210,7 @@ class TestListQuestReviews:
         # help prospective attendees decide whether to go, so a member
         # who's never RSVP'd, and even a non-owning org, can both read them.
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId="org-1")
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
         call(main.submit_review, make_request(
             data={"questId": "quest-1", "rating": 5, "body": "Loved it"}, uid="user-1", role="user",
@@ -222,7 +225,7 @@ class TestListQuestReviews:
 
     def test_admin_can_list_any_orgs_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId="org-1")
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
         call(main.submit_review, make_request(
             data={"questId": "quest-1", "rating": 5, "body": "Loved it"}, uid="user-1", role="user",
@@ -237,7 +240,7 @@ class TestListQuestReviews:
     def test_reviews_visible_from_any_occurrence_in_series(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great first date"}, uid="user-1", role="user",
@@ -253,8 +256,8 @@ class TestListQuestReviews:
     def test_shows_a_separate_entry_per_date_a_member_reviewed(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
-        seed_attendance(fake_firestore, "occ-2", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
+        seed_attendance(fake_firestore, "occ-2", "user-1")
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Loved the first one"}, uid="user-1", role="user",

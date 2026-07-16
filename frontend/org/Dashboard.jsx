@@ -15,7 +15,6 @@ import { TagStamp } from '@shared/TagStamp.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
-import { QuestScanner } from '@shared/QuestScanner.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import {
   IconPlus,
@@ -154,9 +153,20 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         <StampButton type="button" onClick={a.toggleReviews} disabled={a.busy}>
           {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
         </StampButton>
-        <StampButton type="button" onClick={() => a.setScanning((v) => !v)}>
-          {a.scanning ? 'Close scanner' : 'Scan to check in'}
-        </StampButton>
+        {!selected.qrToken ? (
+          <StampButton type="button" onClick={a.generateQr} disabled={a.qrBusy}>
+            {a.qrBusy ? 'Generating...' : 'Generate QR Code'}
+          </StampButton>
+        ) : (
+          <>
+            <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
+              {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
+            </StampButton>
+            <StampButton type="button" onClick={a.refreshQr} disabled={a.qrBusy}>
+              Refresh QR Code
+            </StampButton>
+          </>
+        )}
         {!isSeries && (
           <StampButton type="button" onClick={() => a.setRecurring((v) => !v)}>
             {a.recurring ? 'Cancel' : 'Make recurring'}
@@ -240,7 +250,13 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           </StampButton>
         </form>
       )}
-      {a.scanning && <QuestScanner questId={selected.id} onCheckedIn={a.handleScanResult} />}
+      {a.qrError && <p className="box-danger">{a.qrError}</p>}
+      {a.qrOpen && a.qr && (
+        <div className="ink-card event-qr-display">
+          <img src={a.qr} alt="Event check-in QR code" />
+          <p className="data-stat">Attendees scan this from the app's Check In screen.</p>
+        </div>
+      )}
       {a.attendeesOpen && a.attendees && (
         <ul className="data-sublist">
           {a.attendees.length === 0 && <li>No RSVPs yet.</li>}

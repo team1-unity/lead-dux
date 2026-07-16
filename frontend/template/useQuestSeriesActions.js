@@ -5,16 +5,20 @@ import {
   callDeleteQuestSeries,
   callListQuestAttendees,
   callListQuestReviews,
+  callGenerateEventQrCode,
+  callGetEventQrCode,
+  callRefreshEventQrCode,
 } from './fetch.jsx';
 
 // All the state/handlers a quest series row needs (attendees, reviews,
-// QR scanning, recurring, delete) — factored out of QuestSeriesRow so two
-// different presentations (the dense single-row used by the admin
-// dashboard, and the org dashboard's list-row/detail-pane split) can share
-// one implementation instead of drifting apart. Every action here targets
-// whichever occurrence is currently selected, since those are inherently
-// per-date (see functions/main.py — nothing about the underlying data
-// model changed, only how many dates are visually surfaced at once).
+// event QR generate/view/refresh, recurring, delete) — factored out of
+// QuestSeriesRow so two different presentations (the dense single-row used
+// by the admin dashboard, and the org dashboard's list-row/detail-pane
+// split) can share one implementation instead of drifting apart. Every
+// action here targets whichever occurrence is currently selected, since
+// those are inherently per-date (see functions/main.py — nothing about the
+// underlying data model changed, only how many dates are visually
+// surfaced at once).
 export function useQuestSeriesActions(series, onChanged) {
   const { occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
@@ -26,7 +30,10 @@ export function useQuestSeriesActions(series, onChanged) {
   const [attendees, setAttendees] = useState(null);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [reviews, setReviews] = useState(null);
-  const [scanning, setScanning] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qr, setQr] = useState(null);
+  const [qrBusy, setQrBusy] = useState(false);
+  const [qrError, setQrError] = useState('');
   const [recurring, setRecurring] = useState(false);
   const [recurFrequency, setRecurFrequency] = useState('weekly');
   const [recurUntil, setRecurUntil] = useState('');
@@ -39,7 +46,9 @@ export function useQuestSeriesActions(series, onChanged) {
     setSelectedId(id);
     setAttendeesOpen(false);
     setReviewsOpen(false);
-    setScanning(false);
+    setQrOpen(false);
+    setQr(null);
+    setQrError('');
     setDeleteAction(null);
   }
 
@@ -71,8 +80,60 @@ export function useQuestSeriesActions(series, onChanged) {
     }
   }
 
-  async function handleScanResult() {
-    if (attendeesOpen) setAttendees(await callListQuestAttendees(selected.id));
+  // "View QR Code" — toggles a closed panel open (fetching the quest's
+  // current code without minting or rotating it) the same way toggleAttendees/
+  // toggleReviews do, or just closes it if already open.
+  async function viewQr() {
+    if (qrOpen) {
+      setQrOpen(false);
+      return;
+    }
+    setQrBusy(true);
+    setQrError('');
+    try {
+      const result = await callGetEventQrCode(selected.id);
+      setQr(result.qr);
+      setQrOpen(true);
+    } catch (err) {
+      setQrError(err.message || 'Could not load the QR code.');
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
+  // "Generate QR Code" — only shown when this occurrence has no qrToken
+  // yet (see selected.qrToken); mints one and opens the panel showing it.
+  async function generateQr() {
+    setQrBusy(true);
+    setQrError('');
+    try {
+      const result = await callGenerateEventQrCode(selected.id);
+      setQr(result.qr);
+      setQrOpen(true);
+      await onChanged();
+    } catch (err) {
+      setQrError(err.message || 'Could not generate a QR code.');
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
+  // "Refresh QR Code" — rotates the token, invalidating whatever's
+  // currently posted/displayed. Existing attendance records aren't
+  // affected (see refresh_event_qr_code, functions/main.py).
+  async function refreshQr() {
+    setQrBusy(true);
+    setQrError('');
+    try {
+      const result = await callRefreshEventQrCode(selected.id);
+      setQr(result.qr);
+      setQrOpen(true);
+      await onChanged();
+    } catch (err) {
+      setQrError(err.message || 'Could not refresh the QR code.');
+    } finally {
+      setQrBusy(false);
+    }
   }
 
   async function makeRecurring(e) {
@@ -133,9 +194,13 @@ export function useQuestSeriesActions(series, onChanged) {
     reviewsOpen,
     reviews,
     toggleReviews,
-    scanning,
-    setScanning,
-    handleScanResult,
+    qrOpen,
+    qr,
+    qrBusy,
+    qrError,
+    viewQr,
+    generateQr,
+    refreshQr,
     recurring,
     setRecurring,
     recurFrequency,

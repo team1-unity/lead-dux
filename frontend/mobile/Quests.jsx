@@ -7,7 +7,6 @@ import { useAuth } from '@shared/AuthContext.jsx';
 import {
   callRsvpToQuest,
   callCancelRsvp,
-  callGetQuestQr,
   callGetMyReview,
   callSubmitReview,
   callListQuestReviews,
@@ -31,38 +30,6 @@ function formatEventDate(isoOrTimestamp) {
 function formatStars(rating) {
   const whole = Math.round(rating);
   return '★'.repeat(whole) + '☆'.repeat(5 - whole);
-}
-
-// The member's own check-in QR code for a quest they've RSVP'd to. Fetched
-// lazily (only once the detail is shown) rather than alongside the quest
-// list itself, since most quests in the list aren't ones this member
-// RSVP'd to.
-function QuestQrCode({ questId }) {
-  const [state, setState] = useState({ loading: true, qr: null, expired: false, error: null });
-
-  useEffect(() => {
-    let cancelled = false;
-    callGetQuestQr(questId)
-      .then((data) => {
-        if (!cancelled) setState({ loading: false, qr: data.qr, expired: data.expired, error: null });
-      })
-      .catch((err) => {
-        if (!cancelled) setState({ loading: false, qr: null, expired: false, error: err.message });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [questId]);
-
-  if (state.loading) return <LoadingSpinner label="Loading your check-in code..." />;
-  if (state.error) return <p className="box-danger">{state.error}</p>;
-
-  return (
-    <div className="quest-qr" style={{ textAlign: 'center', marginTop: 12 }}>
-      <img src={state.qr} alt="Your check-in QR code" style={{ maxWidth: 220, width: '100%' }} />
-      {state.expired && <p className="box-warning">This code has expired.</p>}
-    </div>
-  );
 }
 
 // A member's own review for a quest they've RSVP'd to. Shows the existing
@@ -207,7 +174,6 @@ function QuestReviewsList({ questId }) {
 export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTitle = false }) {
   const { primary, occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
-  const [showQr, setShowQr] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showReviewsList, setShowReviewsList] = useState(false);
   const reduce = useReducedMotion();
@@ -217,7 +183,6 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
   // reuses this same mounted component rather than remounting it).
   useEffect(() => {
     setSelectedId(occurrences[0].id);
-    setShowQr(false);
     setShowReview(false);
     setShowReviewsList(false);
   }, [series.seriesId]);
@@ -251,7 +216,6 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
             value={selectedId}
             onChange={(e) => {
               setSelectedId(e.target.value);
-              setShowQr(false);
               setShowReview(false);
               setShowReviewsList(false);
             }}
@@ -297,10 +261,7 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
           <StampButton
             type="button"
             variant={isRsvpd ? 'danger' : 'primary'}
-            onClick={() => {
-              setShowQr(false);
-              onToggleRsvp(selected);
-            }}
+            onClick={() => onToggleRsvp(selected)}
             disabled={busyId === selected.id || isFull}
           >
             {busyId === selected.id ? 'Saving...' : isFull ? 'Full' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
@@ -320,11 +281,6 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
           )}
         </AnimatePresence>
         {canRsvp && isRsvpd && (
-          <StampButton type="button" onClick={() => setShowQr((v) => !v)}>
-            {showQr ? 'Hide my check-in code' : 'Show my check-in code'}
-          </StampButton>
-        )}
-        {canRsvp && isRsvpd && (
           <StampButton type="button" onClick={() => setShowReview((v) => !v)}>
             {showReview ? 'Hide review' : 'Leave a review'}
           </StampButton>
@@ -334,7 +290,6 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
         </StampButton>
         <AddToCalendar quest={selected} />
       </div>
-      {isRsvpd && showQr && <QuestQrCode questId={selected.id} />}
       {isRsvpd && showReview && <QuestReview questId={selected.id} />}
       {showReviewsList && <QuestReviewsList questId={selected.id} />}
     </div>

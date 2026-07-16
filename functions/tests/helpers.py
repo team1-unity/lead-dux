@@ -21,11 +21,18 @@ def seed_quest(fake_firestore, quest_id, **overrides):
 
 
 def seed_attendance(fake_firestore, quest_id, uid, **overrides):
+    """Seeds a checked-in attendance record — this collection now only ever
+    holds people who've actually checked in (see check_in_to_event), so
+    calling this at all means "this user has attended". Tests that need a
+    user who's RSVP'd but NOT yet attended should simply not call this."""
     attendance = {
-        "token": "valid-token",
-        "status": "rsvpd",
-        "qrExpiresAt": dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1),
-        "checkedInAt": None,
+        "userId": uid,
+        "orgId": "org-1",
+        "eventId": quest_id,
+        "checkedInAt": dt.datetime.now(dt.timezone.utc),
+        "pointsAwarded": 20,
+        "qrToken": "valid-token",
+        "createdAt": dt.datetime.now(dt.timezone.utc),
     }
     attendance.update(overrides)
     main._attendance_ref(fake_firestore.client(), quest_id, uid).set(attendance)

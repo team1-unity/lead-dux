@@ -44,20 +44,24 @@ service cloud.firestore {
 
     // Any signed-in user can read the quest list to see it sorted by their
     // own interests client-side. No quest-authoring UI exists yet, so
-    // there's no write path to allow.
+    // there's no write path to allow. A quest's qrToken/qrTokenVersion
+    // fields ride along on this same doc (see generate_event_qr_code) —
+    // they're never read directly by a client either way, only ever
+    // returned baked into a QR image over the callable-function channel,
+    // same as the rest of this doc's write-only-via-Cloud-Function shape.
     match /quests/{questId} {
       allow read: if request.auth != null;
       allow write: if false;
+    }
 
-      // Check-in tokens. Nobody reads or writes these directly — the
-      // member gets their QR code as an image from rsvp_to_quest/
-      // get_quest_qr, and the organization validates a scan through
-      // check_in_attendee. Explicitly denied (rather than just relying on
-      // "no rule matches") so it's clear this is deliberate, the same as
-      // config/** below.
-      match /attendance/{uid} {
-        allow read, write: if false;
-      }
+    // Attendance records — one per successful check-in (see
+    // check_in_to_event in functions/main.py). Nobody reads or writes these
+    // directly: an org sees who's checked in via list_quest_attendees, a
+    // member checks themself in via check_in_to_event, both through the
+    // Admin SDK. Explicitly denied (rather than relying on "no rule
+    // matches") so it's clear this is deliberate, same as config/** below.
+    match /attendance/{docId} {
+      allow read, write: if false;
     }
 
     // Reviews and their aggregate rating live at the series level, not

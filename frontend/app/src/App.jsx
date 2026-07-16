@@ -14,6 +14,7 @@ import { ForgotPassword } from './ForgotPassword.jsx';
 import { ResetPassword } from './ResetPassword.jsx';
 import { Settings } from './Settings.jsx';
 import { Profile } from './Profile.jsx';
+import { CheckIn } from './CheckIn.jsx';
 import { Certificate } from './Certificate.jsx';
 import { OrganizationProfile } from './OrganizationProfile.jsx';
 import { QuestDetails } from './QuestDetails.jsx';
@@ -134,6 +135,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/check-in" element={<CheckIn />} />
             <Route path="/certificate" element={<Certificate />} />
             <Route path="/organizations/:orgId" element={<OrganizationProfile />} />
             <Route path="/quests/:seriesId" element={<QuestDetails />} />
