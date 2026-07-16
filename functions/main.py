@@ -534,6 +534,27 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "reason": request_data.get("reason"),
         "ltag": [],
         "etag": [],
+        # Getting approved here IS the vetting pass (see the two-step
+        # application/manual-review process in the proposal) — there's no
+        # separate "mark verified" admin action, approval already implies it.
+        "verified": True,
+        # Profile fields an org fills in later from its own Profile page
+        # (see update_organization_profile) — all optional, defaulted here
+        # so every approved org has a consistent doc shape from day one.
+        "logoUrl": None,
+        "category": None,
+        "missionStatement": None,
+        "city": None,
+        "state": None,
+        "website": None,
+        "contactEmail": None,
+        "socialLinks": {},
+        "photos": [],
+        # Trust Score rollup (see _record_review) — raw sum/count rather
+        # than a derived average, so both the average and the "needs at
+        # least 3 reviews" cutoff can be recomputed without replaying history.
+        "ratingSum": 0,
+        "ratingCount": 0,
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
@@ -1520,7 +1541,7 @@ MIN_RATING = 1
 MAX_RATING = 5
 
 
-def _record_review(transaction, series_ref, review_ref, rating, body, uid, quest_id, event_date):
+def _record_review(transaction, series_ref, review_ref, org_ref, rating, body, uid, quest_id, event_date):
     series_snap = series_ref.get(transaction=transaction)
     review_snap = review_ref.get(transaction=transaction)
     if review_snap.exists:
@@ -1549,6 +1570,20 @@ def _record_review(transaction, series_ref, review_ref, rating, body, uid, quest
     # (reviewCount/avgRating are its only fields today) but merge is the
     # right instinct if this doc ever grows more fields later.
     transaction.set(series_ref, {"reviewCount": new_count, "avgRating": new_avg}, merge=True)
+
+    # Organization Trust Score — a straight running sum/count (not a
+    # derived average like the series aggregate above) so both the average
+    # and the "needs at least 3 reviews before it's shown" cutoff (see
+    # OrganizationProfile) can be recomputed from these two raw numbers
+    # without replaying every review ever left across all of an org's
+    # quests. Every quest this transaction can reach always has an orgId
+    # (submit_review rejects orgless quests before calling this), so
+    # org_ref always points at a real approved organization doc.
+    org = org_ref.get(transaction=transaction).to_dict() or {}
+    transaction.set(org_ref, {
+        "ratingSum": org.get("ratingSum", 0) + rating,
+        "ratingCount": org.get("ratingCount", 0) + 1,
+    }, merge=True)
 
 
 @https_fn.on_call()
@@ -1610,12 +1645,13 @@ def submit_review(req: https_fn.CallableRequest) -> dict:
     series_id = quest.get("seriesId") or quest_id
     series_ref = db.collection("questSeries").document(series_id)
     review_ref = _review_ref(db, series_id, req.auth.uid, quest_id)
+    org_ref = db.collection("organizations").document(quest["orgId"])
     # firestore.transactional is applied here, at call time, rather than as
     # a decorator on _record_review's def — a decorator would bind to
     # whichever `firestore` module is in scope at import time, permanently,
     # which breaks swapping in the fake Firestore client tests use.
     firestore.transactional(_record_review)(
-        db.transaction(), series_ref, review_ref, rating, body.strip(), req.auth.uid, quest_id, quest.get("eventDate"),
+        db.transaction(), series_ref, review_ref, org_ref, rating, body.strip(), req.auth.uid, quest_id, quest.get("eventDate"),
     )
 
     return {"success": True}
@@ -1732,6 +1768,64 @@ def update_organization_tags(req: https_fn.CallableRequest) -> dict:
         "etag": etag,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
+    return {"success": True}
+
+
+SOCIAL_LINK_KEYS = {"instagram", "facebook", "twitter", "linkedin", "tiktok", "youtube"}
+# Every field here is optional — an org fills these in whenever it wants
+# from its own Profile page (see OrgProfileEditor), separate from ltag/etag
+# above and from the minimal name/phone/location/reason collected at
+# signup (see submit_organization_request). Only a field actually present
+# in req.data gets validated/written, so a partial edit (e.g. just adding a
+# website) doesn't require resending every other field.
+def _validate_social_links(value):
+    if not isinstance(value, dict):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "socialLinks must be an object.",
+        )
+    unknown = set(value) - SOCIAL_LINK_KEYS
+    if unknown:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"socialLinks has unknown keys: {sorted(unknown)}. Allowed: {sorted(SOCIAL_LINK_KEYS)}.",
+        )
+    if not all(isinstance(v, str) for v in value.values()):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Every socialLinks value must be a string.",
+        )
+    return {k: v for k, v in value.items() if v}
+
+
+# Callable from the org's own Profile page — the public-facing fields
+# rendered on OrganizationProfile (logo, mission, location, contact,
+# socials). Organization Profile itself is otherwise a public-within-app
+# read (see the loosened organizations/{uid} read rule in firestore.rules);
+# writing any of it is still Cloud-Function-only, same as every other
+# collection.
+_SIMPLE_PROFILE_FIELDS = ("logoUrl", "category", "missionStatement", "city", "state", "website", "contactEmail")
+
+@https_fn.on_call()
+def update_organization_profile(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization")
+
+    update = {"updatedAt": firestore.SERVER_TIMESTAMP}
+    for field in _SIMPLE_PROFILE_FIELDS:
+        if field not in req.data:
+            continue
+        value = req.data.get(field)
+        if value is not None and not isinstance(value, str):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"{field} must be a string or null.",
+            )
+        update[field] = value
+
+    if "socialLinks" in req.data:
+        update["socialLinks"] = _validate_social_links(req.data.get("socialLinks"))
+
+    firestore.client().collection("organizations").document(req.auth.uid).update(update)
     return {"success": True}
 
 

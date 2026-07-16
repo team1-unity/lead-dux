@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callUpdateInterests, callUpdateOrganizationTags } from '@shared/fetch.jsx';
+import { callUpdateInterests, callUpdateOrganizationTags, callUpdateOrganizationProfile } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -194,6 +194,133 @@ function OrgTags({ org, onSaved }) {
   );
 }
 
+const SOCIAL_LINK_FIELDS = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'twitter', label: 'X / Twitter' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'tiktok', label: 'TikTok' },
+  { key: 'youtube', label: 'YouTube' },
+];
+
+// Everything an organization's public OrganizationProfile page shows
+// beyond name/reason/location/phone/ltag/etag (all already editable
+// elsewhere) — mission statement, city/state, website, a separate public
+// contact email, a logo URL, and social links. Same view/edit-toggle shape
+// as OrgTags above, just a longer form.
+function OrgProfileEditor({ org, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [fields, setFields] = useState({
+    logoUrl: org.logoUrl || '',
+    category: org.category || '',
+    missionStatement: org.missionStatement || '',
+    city: org.city || '',
+    state: org.state || '',
+    website: org.website || '',
+    contactEmail: org.contactEmail || '',
+  });
+  const [social, setSocial] = useState({ ...org.socialLinks });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const payload = Object.fromEntries(
+        Object.entries(fields).map(([k, v]) => [k, v.trim() || null]),
+      );
+      await callUpdateOrganizationProfile({ ...payload, socialLinks: social });
+      onSaved({ ...payload, socialLinks: social });
+      setEditing(false);
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <section className="ink-card">
+        <div className="section-heading">
+          <h2 style={{ margin: 0 }}>Public Profile</h2>
+          <StampButton type="button" onClick={() => setEditing(true)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+            Edit
+          </StampButton>
+        </div>
+        {!org.missionStatement && !org.website && !org.city ? (
+          <p className="data-stat" style={{ margin: '10px 0 0' }}>Not set yet.</p>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            {org.missionStatement && <p style={{ margin: 0 }}>{org.missionStatement}</p>}
+            {(org.city || org.state) && (
+              <p className="data-stat" style={{ marginTop: 8 }}>{[org.city, org.state].filter(Boolean).join(', ')}</p>
+            )}
+            {org.website && <p className="data-stat">{org.website}</p>}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="ink-card">
+      <h2 style={{ marginTop: 0 }}>Public Profile</h2>
+      <form onSubmit={save} className="flex flex-col gap-md">
+        <label>
+          Logo URL
+          <input value={fields.logoUrl} onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." />
+        </label>
+        <label>
+          Category
+          <input value={fields.category} onChange={(e) => setFields((f) => ({ ...f, category: e.target.value }))} placeholder="Youth center, sports league, etc." />
+        </label>
+        <label>
+          Mission statement
+          <textarea value={fields.missionStatement} onChange={(e) => setFields((f) => ({ ...f, missionStatement: e.target.value }))} />
+        </label>
+        <label>
+          City
+          <input value={fields.city} onChange={(e) => setFields((f) => ({ ...f, city: e.target.value }))} />
+        </label>
+        <label>
+          State
+          <input value={fields.state} onChange={(e) => setFields((f) => ({ ...f, state: e.target.value }))} />
+        </label>
+        <label>
+          Website
+          <input value={fields.website} onChange={(e) => setFields((f) => ({ ...f, website: e.target.value }))} placeholder="https://..." />
+        </label>
+        <label>
+          Public contact email (optional)
+          <input value={fields.contactEmail} onChange={(e) => setFields((f) => ({ ...f, contactEmail: e.target.value }))} />
+        </label>
+        {SOCIAL_LINK_FIELDS.map(({ key, label }) => (
+          <label key={key}>
+            {label}
+            <input
+              value={social[key] || ''}
+              onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
+              placeholder="https://..."
+            />
+          </label>
+        ))}
+        {error && <p className="box-danger">{error}</p>}
+        <div className="flex gap-sm">
+          <StampButton type="submit" variant="primary" disabled={submitting}>
+            {submitting ? 'Saving...' : 'Save'}
+          </StampButton>
+          <StampButton type="button" onClick={() => setEditing(false)} disabled={submitting}>
+            Cancel
+          </StampButton>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 // No profile photo upload exists in this app (users have no avatar field) —
 // the duck mascot in a brand-mustard ring is the deliberate placeholder for
 // every account, rather than an initial-based tile (which would make this
@@ -312,6 +439,7 @@ export function Profile() {
               <p className="data-stat">{org.phone}</p>
             </section>
             <OrgTags org={org} onSaved={(t) => setOrg((prev) => ({ ...prev, ...t }))} />
+            <OrgProfileEditor org={org} onSaved={(t) => setOrg((prev) => ({ ...prev, ...t }))} />
           </>
         )}
       </div>

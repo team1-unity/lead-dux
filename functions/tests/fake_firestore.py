@@ -28,6 +28,11 @@ class ArrayRemove:
         self.values = values
 
 
+class Increment:
+    def __init__(self, value):
+        self.value = value
+
+
 SERVER_TIMESTAMP = object()
 
 
@@ -89,6 +94,8 @@ class FakeDocRef:
             elif isinstance(value, ArrayRemove):
                 existing = list(current.get(key, []))
                 current[key] = [item for item in existing if item not in value.values]
+            elif isinstance(value, Increment):
+                current[key] = current.get(key, 0) + value.value
             else:
                 current[key] = _resolve(value)
 
@@ -212,12 +219,13 @@ class FakeFirestoreClient:
 class FakeFirestoreModule:
     """Substitutes for the `firestore` name main.py imports from
     firebase_admin — main.py calls firestore.client()/.SERVER_TIMESTAMP/
-    .ArrayUnion/.ArrayRemove/.transactional, and this provides fakes for
-    all of them."""
+    .ArrayUnion/.ArrayRemove/.Increment/.transactional, and this provides
+    fakes for all of them."""
 
     SERVER_TIMESTAMP = SERVER_TIMESTAMP
     ArrayUnion = ArrayUnion
     ArrayRemove = ArrayRemove
+    Increment = Increment
     transactional = staticmethod(transactional)
 
     def __init__(self):
