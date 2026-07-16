@@ -11,29 +11,38 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
-import { IconChevron } from '@shared/icons.jsx';
+import { IconCheck, IconChevron, IconLock } from '@shared/icons.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
 import { hashTone } from '@shared/tagTones.js';
-import { rankForPoints, pointsToNextRank } from '@shared/rank.js';
+import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from '@shared/rank.js';
 
-// Points/rank are read straight off the user's own doc (self-readable, see
-// firestore.rules) — no dedicated Cloud Function needed just to display
-// them. Rank itself is never stored; see rank.js for why.
+// Points/rank/certificateIssued are read straight off the user's own doc
+// (self-readable, see firestore.rules) — no dedicated Cloud Function needed
+// just to display them; get_user_rank exists for the admin dashboard to
+// look up someone ELSE's rank instead. Rank itself IS now stored
+// server-side (kept in sync by functions/main.py's _award_points) so it can
+// be queried across users (see list_diamond_users) — see rank.js for why
+// it's still recomputed here too rather than trusted blindly.
 function ProgressCard() {
   const { user } = useAuth();
-  const [points, setPoints] = useState(null);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     if (!user) return;
     getDoc(doc(db, 'users', user.uid)).then((snap) => {
-      setPoints(snap.exists() ? snap.data().points || 0 : 0);
+      const data = snap.exists() ? snap.data() : {};
+      setProfile({ points: data.points || 0, certificateIssued: Boolean(data.certificateIssued) });
     });
   }, [user]);
 
-  if (points === null) return null;
+  if (profile === null) return null;
 
+  const { points, certificateIssued } = profile;
   const rank = rankForPoints(points);
   const toNext = pointsToNextRank(points);
+  const percent = progressPercent(points);
+  const rankOrder = allRanks();
+  const currentIndex = rankOrder.indexOf(rank);
 
   return (
     <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -45,6 +54,38 @@ function ProgressCard() {
         {points} point{points === 1 ? '' : 's'}
         {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
       </p>
+
+      <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
+        <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
+      </div>
+
+      <div className="rank-milestones">
+        {rankOrder.map((name, i) => {
+          const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
+          const tone = name.toLowerCase();
+          return (
+            <div className="rank-milestone" key={name} data-state={state}>
+              <span
+                className="rank-milestone-dot"
+                style={{ '--rank-color': `var(--rank-${tone})`, '--rank-ink': `var(--rank-${tone}-ink)` }}
+              >
+                {state === 'done' && <IconCheck width={14} height={14} />}
+                {state === 'locked' && <IconLock width={14} height={12} />}
+              </span>
+              <span className="rank-milestone-label">{name}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {certificateIssued && (
+        <div className="rank-certificate-banner">
+          <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
+          <Link to="/certificate">
+            <StampButton type="button" variant="primary">View certificate</StampButton>
+          </Link>
+        </div>
+      )}
     </section>
   );
 }

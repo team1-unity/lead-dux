@@ -166,7 +166,7 @@ class TestCreateRecurringQuest:
 
     def test_admin_creates_a_recurring_default_quest(self, fake_firestore, make_request, call):
         result = call(main.create_recurring_quest, make_request(
-            data=create_quest_payload(frequency="weekly", until="2026-07-22T00:00"),
+            data=create_quest_payload(frequency="weekly", until="2026-07-22T00:00", tier="iron"),
             uid="admin-1", role="admin",
         ))
 
@@ -232,7 +232,7 @@ class TestMakeQuestRecurring:
 
     def test_admin_can_convert_a_default_quest(self, fake_firestore, make_request, call):
         created = call(main.create_default_quest, make_request(
-            data=create_quest_payload(eventDate="2026-07-01T14:00"), uid="admin-1", role="admin",
+            data=create_quest_payload(eventDate="2026-07-01T14:00", tier="iron"), uid="admin-1", role="admin",
         ))
 
         result = call(main.make_quest_recurring, make_request(

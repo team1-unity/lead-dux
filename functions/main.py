@@ -69,18 +69,51 @@ DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
 
 # Point System & Feedback (see AI_README.md) ---------------------------------
 #
-# Two sources count toward a user's points today: a flat amount for
-# completing an organization quest (awarded at check-in, below), and a
-# bonus from organization feedback (see submit_quest_feedback_batch further
-# down). Side-quest tiered points (10-20 depending on difficulty tier) and
-# rank-gated unlocking aren't implemented yet — quests have no tier concept
-# in the schema — so isDefault (neighborhood) quests don't award points
-# here; that's a separate follow-up. Rank itself (Iron/Bronze/Silver/Gold/
-# Diamond, 100 points each) is derived client-side from `points` alone
-# (see frontend/template/rank.js) rather than stored, since nothing server-
-# side needs the rank name today.
+# Three sources count toward a user's points: a flat amount for completing
+# an organization quest, a tiered amount for completing a side/neighborhood
+# quest (isDefault, see _validate_tier and the quest-creation functions
+# below), both awarded at check-in, and a bonus from organization feedback
+# (see submit_quest_feedback_batch further down). Rank (Iron/Bronze/Silver/
+# Gold/Diamond, 100 points each) is derived from `points` by _rank_for_points
+# below and kept in sync on `users/{uid}.rank` by _award_points every time
+# points change — the ladder itself is defined twice on purpose (here and in
+# frontend/template/rank.js), once for each side that needs it; keep the
+# RANKS/POINTS_PER_RANK values in the two files in sync by hand if they ever
+# change.
 ORG_QUEST_BASE_POINTS = 20
 FEEDBACK_BONUS_BY_RATING = {10: 20, 9: 18, 8: 15, 7: 12, 6: 10, 5: 8, 4: 6, 3: 4, 2: 2, 1: 0}
+TIER_BASE_POINTS = {"iron": 10, "bronze": 12, "silver": 15, "gold": 18, "diamond": 20}
+
+RANKS = ["Iron", "Bronze", "Silver", "Gold", "Diamond"]
+POINTS_PER_RANK = 100
+
+
+def _rank_for_points(points: int) -> str:
+    index = min(max(points, 0) // POINTS_PER_RANK, len(RANKS) - 1)
+    return RANKS[index]
+
+
+def _points_to_next_rank(points: int):
+    index = min(max(points, 0) // POINTS_PER_RANK, len(RANKS) - 1)
+    if index == len(RANKS) - 1:
+        return None
+    return (index + 1) * POINTS_PER_RANK - max(points, 0)
+
+
+def _apply_points(transaction, user_ref, amount):
+    snap = user_ref.get(transaction=transaction)
+    points = (snap.to_dict().get("points", 0) if snap.exists else 0) + amount
+    transaction.update(user_ref, {"points": points, "rank": _rank_for_points(points)})
+
+
+# Awards `amount` points to a user and keeps `rank` in sync with it, as one
+# atomic step — a plain read-then-Increment would leave a window where
+# another award (e.g. a check-in and a feedback bonus landing close
+# together) could compute rank from a stale points value.
+def _award_points(db, uid: str, amount: int):
+    if amount <= 0:
+        return
+    firestore.transactional(_apply_points)(db.transaction(), db.collection("users").document(uid), amount)
 
 
 def _to_utc(value: datetime) -> datetime:
@@ -236,6 +269,19 @@ def _validate_frequency(value) -> str:
     return value
 
 
+# Every side/neighborhood (isDefault) quest must declare a difficulty tier —
+# that's what its check-in base points come from (see TIER_BASE_POINTS).
+# Organization quests never have a tier; they're always the flat
+# ORG_QUEST_BASE_POINTS instead.
+def _validate_tier(value) -> str:
+    if value not in TIER_BASE_POINTS:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"tier must be one of {sorted(TIER_BASE_POINTS)}.",
+        )
+    return value
+
+
 # `until` is compared by calendar date in the series' own timezone, not by
 # exact instant — otherwise an occurrence later in the day on the "until"
 # date itself would be incorrectly excluded (e.g. "until Dec 1" should
@@ -269,7 +315,7 @@ def _generate_series_dates(first_event_date: datetime, frequency: str, until: da
 def _quest_doc_fields(
     *, title, description, tags, location, tz, capacity, series_id,
     recurrence_frequency, recurrence_until, event_date, event_end_time,
-    org_id, org_name, is_default,
+    org_id, org_name, is_default, tier,
 ):
     return {
         "title": title,
@@ -286,6 +332,7 @@ def _quest_doc_fields(
         "orgId": org_id,
         "orgName": org_name,
         "isDefault": is_default,
+        "tier": tier,
         "rsvpd": [],
         "createdAt": firestore.SERVER_TIMESTAMP,
     }
@@ -664,7 +711,7 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
         title=title, description=description, tags=tags, location=location, tz=tz,
         capacity=capacity, series_id=doc_ref.id, recurrence_frequency=None, recurrence_until=None,
         event_date=event_date, event_end_time=event_end_time,
-        org_id=req.auth.uid, org_name=org_name, is_default=False,
+        org_id=req.auth.uid, org_name=org_name, is_default=False, tier=None,
     ))
     return {"success": True, "questId": doc_ref.id}
 
@@ -713,9 +760,11 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
     is_admin = req.auth.token.get("role") == "admin"
     if is_admin:
         org_id, org_name, is_default = None, "Neighborhood", True
+        tier = _validate_tier(req.data.get("tier"))
     else:
         org_snap = db.collection("organizations").document(req.auth.uid).get()
         org_id, org_name, is_default = req.auth.uid, (org_snap.to_dict().get("name") if org_snap.exists else None), False
+        tier = None
 
     batch = db.batch()
     series_id = None
@@ -730,7 +779,7 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
             capacity=capacity, series_id=series_id,
             recurrence_frequency=frequency, recurrence_until=until,
             event_date=occurrence_date, event_end_time=occurrence_end,
-            org_id=org_id, org_name=org_name, is_default=is_default,
+            org_id=org_id, org_name=org_name, is_default=is_default, tier=tier,
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()
@@ -809,6 +858,7 @@ def make_quest_recurring(req: https_fn.CallableRequest) -> dict:
             series_id=series_id, recurrence_frequency=frequency, recurrence_until=until,
             event_date=occurrence_date, event_end_time=occurrence_end,
             org_id=quest.get("orgId"), org_name=quest.get("orgName"), is_default=quest.get("isDefault", False),
+            tier=quest.get("tier"),
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()
@@ -845,13 +895,14 @@ def create_default_quest(req: https_fn.CallableRequest) -> dict:
             "eventEndTime must be after eventDate.",
         )
     capacity = _validate_capacity(req.data.get("capacity"))
+    tier = _validate_tier(req.data.get("tier"))
 
     doc_ref = firestore.client().collection("quests").document()
     doc_ref.set(_quest_doc_fields(
         title=title, description=description, tags=tags, location=location, tz=tz,
         capacity=capacity, series_id=doc_ref.id, recurrence_frequency=None, recurrence_until=None,
         event_date=event_date, event_end_time=event_end_time,
-        org_id=None, org_name="Neighborhood", is_default=True,
+        org_id=None, org_name="Neighborhood", is_default=True, tier=tier,
     ))
     return {"success": True, "questId": doc_ref.id}
 
@@ -1155,11 +1206,13 @@ def check_in_attendee(req: https_fn.CallableRequest) -> dict:
         return {"success": True, "alreadyCheckedIn": True, "attendee": attendee}
 
     attendance_ref.update({"status": "checked_in", "checkedInAt": firestore.SERVER_TIMESTAMP})
-    # Base points only for organization quests — see the Point System note
-    # above _attendance_ref's DEFAULT_EVENT_WINDOW_HOURS for why default/
-    # neighborhood quests are excluded for now.
-    if quest_snap.to_dict().get("orgId"):
-        db.collection("users").document(uid).update({"points": firestore.Increment(ORG_QUEST_BASE_POINTS)})
+    # Flat points for an organization quest, tiered points for a side/
+    # neighborhood one — see the Point System note above ORG_QUEST_BASE_POINTS.
+    # A pre-existing side quest with no tier on file (predates this field)
+    # simply awards 0, same as before this field existed.
+    quest = quest_snap.to_dict()
+    base_points = ORG_QUEST_BASE_POINTS if quest.get("orgId") else TIER_BASE_POINTS.get(quest.get("tier"), 0)
+    _award_points(db, uid, base_points)
     return {"success": True, "alreadyCheckedIn": False, "attendee": attendee}
 
 
@@ -1356,8 +1409,13 @@ def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
     }
     already_given = set(quest.get("feedbackGivenUids") or [])
 
-    batch = db.batch()
-    sent_uids = []
+    # Validate every entry before writing anything — a malformed entry must
+    # fail the whole request with nothing persisted (see the module note
+    # above), including no points awarded. Points are applied via
+    # _award_points (its own transaction, for the same points+rank atomicity
+    # as check_in_attendee) only after the feedback-doc batch below has
+    # actually committed.
+    valid_entries = []
     for entry in feedback_list:
         uid = entry.get("uid")
         if uid not in checked_in_uids or uid in already_given:
@@ -1380,7 +1438,11 @@ def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
                 https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
                 f"message must be at most {FEEDBACK_MESSAGE_MAX_LENGTH} characters.",
             )
+        valid_entries.append((uid, rating, message.strip()))
 
+    batch = db.batch()
+    sent_uids = []
+    for uid, rating, message in valid_entries:
         bonus = FEEDBACK_BONUS_BY_RATING[rating]
         feedback_ref = db.collection("users").document(uid).collection("feedback").document(quest_id)
         batch.set(feedback_ref, {
@@ -1390,7 +1452,7 @@ def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
             "orgId": quest.get("orgId"),
             "orgName": quest.get("orgName"),
             "rating": rating,
-            "message": message.strip(),
+            "message": message,
             "pointsAwarded": bonus,
             "notified": False,
             "read": False,
@@ -1398,12 +1460,13 @@ def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
             "reflectionUpdatedAt": None,
             "createdAt": firestore.SERVER_TIMESTAMP,
         })
-        batch.update(db.collection("users").document(uid), {"points": firestore.Increment(bonus)})
         sent_uids.append(uid)
 
     if sent_uids:
         batch.update(quest_ref, {"feedbackGivenUids": firestore.ArrayUnion(sent_uids)})
         batch.commit()
+        for uid, rating, _ in valid_entries:
+            _award_points(db, uid, FEEDBACK_BONUS_BY_RATING[rating])
 
     return {"success": True, "sentUids": sent_uids}
 
@@ -1846,6 +1909,96 @@ def update_interests(req: https_fn.CallableRequest) -> dict:
         "interests": interests,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
+    return {"success": True}
+
+
+# Rank progression -------------------------------------------------------
+#
+# Points themselves are only ever touched by _award_points (check-in,
+# feedback bonus); everything below just reads/reports off of them, or
+# (issue_certificate) manages the one piece of state that isn't derived
+# from points at all.
+
+# Callable from Profile. Self by default; targetUid lets the admin
+# dashboard's Diamond panel look up someone else's rank without exposing
+# every user's points to every other user via firestore.rules. Recomputes
+# from `points` rather than trusting the stored `rank` field, so this stays
+# correct even if `rank` were ever missing or stale.
+@https_fn.on_call()
+def get_user_rank(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    target_uid = req.data.get("targetUid") or req.auth.uid
+    if target_uid != req.auth.uid and req.auth.token.get("role") != "admin":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only look up your own rank.",
+        )
+
+    snap = firestore.client().collection("users").document(target_uid).get()
+    points = snap.to_dict().get("points", 0) if snap.exists else 0
+    return {
+        "points": points,
+        "rank": _rank_for_points(points),
+        "pointsToNextRank": _points_to_next_rank(points),
+    }
+
+
+# Callable from the admin dashboard's Diamond Certifications panel — the
+# "admin can see once a user reaches the last rank" requirement. Reads off
+# the `rank` field itself (rather than recomputing per-user, get_user_rank
+# style) since that's the whole reason `rank` is persisted at all: no other
+# way to ask Firestore "which users are at Diamond" without one.
+@https_fn.on_call()
+def list_diamond_users(req: https_fn.CallableRequest) -> dict:
+    _require_admin(req)
+
+    users = []
+    for doc in firestore.client().collection("users").where("rank", "==", "Diamond").stream():
+        data = doc.to_dict()
+        users.append({
+            "uid": doc.id,
+            "name": data.get("name"),
+            "email": data.get("email"),
+            "points": data.get("points", 0),
+            "certificateIssued": bool(data.get("certificateIssued")),
+            "certificateIssuedAt": data.get("certificateIssuedAt"),
+        })
+    return {"users": users}
+
+
+# Callable from the admin dashboard's "Issue Certificate" button — per the
+# proposal, certificates are never issued automatically, only by an admin
+# choosing to for a specific person. Idempotent: re-issuing (e.g. the admin
+# double-clicks) never moves certificateIssuedAt once it's set, so the
+# certificate's own displayed award date stays stable.
+@https_fn.on_call()
+def issue_certificate(req: https_fn.CallableRequest) -> dict:
+    _require_admin(req)
+
+    target_uid = req.data.get("targetUid")
+    if not target_uid:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "targetUid is required.",
+        )
+
+    user_ref = firestore.client().collection("users").document(target_uid)
+    snap = user_ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, f"No user {target_uid}.")
+
+    data = snap.to_dict()
+    if _rank_for_points(data.get("points", 0)) != "Diamond":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This user hasn't reached Diamond rank yet.",
+        )
+
+    update = {"certificateIssued": True}
+    if not data.get("certificateIssuedAt"):
+        update["certificateIssuedAt"] = firestore.SERVER_TIMESTAMP
+    user_ref.update(update)
     return {"success": True}
 
 

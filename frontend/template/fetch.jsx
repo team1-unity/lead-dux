@@ -117,7 +117,9 @@ export async function callCreateQuest({ title, description, tags, eventDate, eve
 
 // organization: creates a whole recurring series in one call — every
 // occurrence up to (and including) `until`, spaced by `frequency`
-// ('daily' | 'weekly' | 'monthly'). Returns { seriesId, questIds }.
+// ('daily' | 'weekly' | 'monthly'). Returns { seriesId, questIds }. `tier`
+// only matters when an admin calls this to create a recurring default
+// (side/neighborhood) quest — see callCreateDefaultQuest.
 export async function callCreateRecurringQuest({
   title,
   description,
@@ -129,6 +131,7 @@ export async function callCreateRecurringQuest({
   capacity,
   frequency,
   until,
+  tier,
 }) {
   const fn = httpsCallable(functions, 'create_recurring_quest');
   const result = await fn({
@@ -142,6 +145,7 @@ export async function callCreateRecurringQuest({
     capacity,
     frequency,
     until,
+    tier,
   });
   return result.data;
 }
@@ -156,9 +160,12 @@ export async function callMakeQuestRecurring({ questId, frequency, until }) {
 }
 
 // admin: creates a quest with no owning organization, shown to everyone.
-export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity }) {
+// `tier` (iron/bronze/silver/gold/diamond) is required — it's what the
+// quest's check-in base points come from (see TIER_BASE_POINTS,
+// functions/main.py).
+export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity, tier }) {
   const fn = httpsCallable(functions, 'create_default_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity, tier });
   return result.data;
 }
 
@@ -320,5 +327,30 @@ export async function callUpdateInterests({ interests }) {
 export async function callDeleteAccount() {
   const fn = httpsCallable(functions, 'delete_account');
   const result = await fn();
+  return result.data;
+}
+
+// Self by default; admin can pass targetUid to look up someone else's rank
+// (used by the admin dashboard's Diamond Certifications panel). Returns
+// { points, rank, pointsToNextRank }, recomputed server-side from `points`.
+export async function callGetUserRank(targetUid) {
+  const fn = httpsCallable(functions, 'get_user_rank');
+  const result = await fn(targetUid ? { targetUid } : {});
+  return result.data;
+}
+
+// admin: every user who has reached Diamond rank, with whether they've
+// already been issued a certificate.
+export async function callListDiamondUsers() {
+  const fn = httpsCallable(functions, 'list_diamond_users');
+  const result = await fn();
+  return result.data.users;
+}
+
+// admin: manually issues a Diamond certificate to a user (never automatic —
+// see the proposal's Admin Dashboard section). Idempotent.
+export async function callIssueCertificate(targetUid) {
+  const fn = httpsCallable(functions, 'issue_certificate');
+  const result = await fn({ targetUid });
   return result.data;
 }

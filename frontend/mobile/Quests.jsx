@@ -285,6 +285,7 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
       </p>
       <p className="quest-description">{primary.description}</p>
       <div className="quest-tags">
+        {primary.isDefault && <TierBadge tier={primary.tier} />}
         {(primary.tags || []).map((tag) => (
           <TagStamp key={tag} tone={tag}>
             {tag}
@@ -361,6 +362,9 @@ function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
         <button type="button" className="quest-card-head" onClick={onSelect} aria-expanded={isOpen || isActive}>
           <div className="quest-card-titles">
             <p className="quest-title">{primary.title}</p>
+            {primary.isDefault && primary.tier && (
+              <p className="quest-org-line"><TierBadge tier={primary.tier} /></p>
+            )}
             {/* Plain text, not a Link — this whole row is already inside a
                 <button onClick={onSelect}> to expand the card, and an <a>
                 can't nest inside a <button>. The org name IS a link once

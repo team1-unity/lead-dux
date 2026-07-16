@@ -189,6 +189,18 @@
   --tag-verified: #cfead9;
   --tag-verified-ink: #1e5c3c;
 
+  /* rank ladder — one pair per side-quest tier / leadership rank name */
+  --rank-iron: #dfe3e6;
+  --rank-iron-ink: #454c52;
+  --rank-bronze: #ecd2b3;
+  --rank-bronze-ink: #6b3d10;
+  --rank-silver: #e6e9ec;
+  --rank-silver-ink: #454c52;
+  --rank-gold: #f7e8a8;
+  --rank-gold-ink: #6b4e05;
+  --rank-diamond: #d3ecf5;
+  --rank-diamond-ink: #144a63;
+
   /* semantic */
   --accent: var(--brand-green-deep);
   --accent-contrast: #ffffff;
@@ -246,6 +258,17 @@
     --tag-arts-ink: #dcc4f0;
     --tag-verified: #23422f;
     --tag-verified-ink: #a9e0bc;
+
+    --rank-iron: #3a4147;
+    --rank-iron-ink: #cdd3d6;
+    --rank-bronze: #4a3319;
+    --rank-bronze-ink: #edc79c;
+    --rank-silver: #3d4348;
+    --rank-silver-ink: #d6dadd;
+    --rank-gold: #4a3d10;
+    --rank-gold-ink: #f3d873;
+    --rank-diamond: #1c3c48;
+    --rank-diamond-ink: #a6dcef;
 
     --accent-soft: #223a29;
     --secondary-ink: #f3d873;
@@ -323,6 +346,18 @@
   --tag-arts-ink: #48276e;
   --tag-verified: #cfead9;
   --tag-verified-ink: #1e5c3c;
+
+  /* rank ladder — one pair per side-quest tier / leadership rank name */
+  --rank-iron: #dfe3e6;
+  --rank-iron-ink: #454c52;
+  --rank-bronze: #ecd2b3;
+  --rank-bronze-ink: #6b3d10;
+  --rank-silver: #e6e9ec;
+  --rank-silver-ink: #454c52;
+  --rank-gold: #f7e8a8;
+  --rank-gold-ink: #6b4e05;
+  --rank-diamond: #d3ecf5;
+  --rank-diamond-ink: #144a63;
 
   --accent-soft: #e3efe6;
   --secondary-ink: #6b4e05;
@@ -2085,6 +2120,130 @@ button.data-row:active:not(:disabled) {
 }
 .ink-card[data-muted='true'] {
   background: var(--paper-well);
+}
+
+/* ---------- rank progression (Profile's ProgressCard, Certificate, admin
+   Diamond Certifications panel, and side-quest tier badges) ----------
+   The five rank/tier tones (--rank-iron/-bronze/-silver/-gold/-diamond,
+   each with an -ink pair) are the same "one rack, pick a tone" pattern the
+   9-tone tag rack uses (see tagTones.js/TagStamp) — a milestone or tier
+   badge sets --rank-color/--rank-ink inline from its own tier name. */
+
+.rank-progress-track {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--paper-well);
+  overflow: hidden;
+  margin: 10px 0 18px;
+}
+.rank-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
+.rank-milestones {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+.rank-milestone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.rank-milestone-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.rank-milestone[data-state='done'] .rank-milestone-dot {
+  background: var(--rank-color);
+  border: 2px solid var(--rank-ink);
+  color: var(--rank-ink);
+}
+.rank-milestone[data-state='current'] .rank-milestone-dot {
+  background: var(--rank-color);
+  border: 2px solid var(--rank-ink);
+  color: var(--rank-ink);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.rank-milestone[data-state='locked'] .rank-milestone-dot {
+  background: var(--paper-well);
+  border: 2px solid transparent;
+  color: var(--line-soft);
+}
+.rank-milestone-label {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--line-soft);
+}
+.rank-milestone[data-state='current'] .rank-milestone-label {
+  color: var(--line);
+}
+
+.rank-certificate-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-top: 4px;
+}
+
+.quest-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--rank-color);
+  color: var(--rank-ink);
+  white-space: nowrap;
+}
+
+/* ---------- Diamond certificate (Certificate.jsx) ---------- */
+
+.certificate-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.certificate-canvas-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+.certificate-canvas-wrap canvas {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px var(--shadow);
 }
 
 /* ---------- Landing page (the signed-out root, see Landing.jsx) ---------- */
