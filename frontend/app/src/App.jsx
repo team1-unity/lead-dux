@@ -14,6 +14,8 @@ import { ForgotPassword } from './ForgotPassword.jsx';
 import { ResetPassword } from './ResetPassword.jsx';
 import { Settings } from './Settings.jsx';
 import { Profile } from './Profile.jsx';
+import { OrganizationProfile } from './OrganizationProfile.jsx';
+import { QuestDetails } from './QuestDetails.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
@@ -131,6 +133,8 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/organizations/:orgId" element={<OrganizationProfile />} />
+            <Route path="/quests/:seriesId" element={<QuestDetails />} />
             <Route path="/badges" element={<Badges />} />
             <Route path="/journal" element={<Journal />} />
             <Route

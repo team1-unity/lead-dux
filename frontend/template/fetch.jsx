@@ -296,6 +296,16 @@ export async function callUpdateOrganizationTags({ ltag, etag }) {
   return result.data;
 }
 
+// organization: sets the public-facing profile fields shown on
+// OrganizationProfile (logo, mission, city/state, website, contact email,
+// social links). Only send the fields actually being changed — omitted
+// keys are left untouched server-side.
+export async function callUpdateOrganizationProfile(fields) {
+  const fn = httpsCallable(functions, 'update_organization_profile');
+  const result = await fn(fields);
+  return result.data;
+}
+
 // user: changes their interests after onboarding (onboarding only sets
 // them once).
 export async function callUpdateInterests({ interests }) {
