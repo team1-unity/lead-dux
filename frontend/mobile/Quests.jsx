@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
@@ -11,7 +12,7 @@ import {
   callSubmitReview,
   callListQuestReviews,
 } from '@shared/fetch.jsx';
-import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, formatRecurrence, isUpcoming } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
@@ -20,43 +21,6 @@ import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch } from '@shared/icons.jsx';
-
-const DEFAULT_EVENT_WINDOW_HOURS = 6; // mirrors functions/main.py's DEFAULT_EVENT_WINDOW_HOURS
-
-// Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
-// (isDefault) quests carry a tier; organization quests never do.
-const TIER_LABELS = { iron: 'Iron', bronze: 'Bronze', silver: 'Silver', gold: 'Gold', diamond: 'Diamond' };
-const TIER_POINTS = { iron: 10, bronze: 12, silver: 15, gold: 18, diamond: 20 };
-
-function TierBadge({ tier }) {
-  if (!tier || !TIER_LABELS[tier]) return null;
-  return (
-    <span
-      className="quest-tier-badge"
-      style={{ '--rank-color': `var(--rank-${tier})`, '--rank-ink': `var(--rank-${tier}-ink)` }}
-    >
-      {TIER_LABELS[tier]} &middot; {TIER_POINTS[tier]} pts
-    </span>
-  );
-}
-
-function toDate(value) {
-  return value.toDate ? value.toDate() : new Date(value);
-}
-
-// A quest is still "upcoming" until its own end window has passed — the
-// same effective end used to compute QR expiry (eventEndTime, or
-// eventDate + the default window when no end time was set). Past
-// occurrences are hidden from the main browsing list rather than deleted,
-// so RSVP history/reviews/attendance for them are still reachable by
-// anyone who already has the link, just not front-and-center for browsing.
-function isUpcoming(quest) {
-  if (!quest.eventDate) return true;
-  const end = quest.eventEndTime
-    ? toDate(quest.eventEndTime)
-    : new Date(toDate(quest.eventDate).getTime() + DEFAULT_EVENT_WINDOW_HOURS * 60 * 60 * 1000);
-  return end.getTime() >= Date.now();
-}
 
 function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
@@ -237,8 +201,10 @@ function QuestReviewsList({ questId }) {
 // The full body of a quest's detail: date/location/capacity, description,
 // tags, and the RSVP/QR/review actions. Rendered exactly once at a time —
 // inline under its row on mobile, or in the side panel on desktop — so its
-// own lazily-fetched sub-state (QR, review) never double-fetches.
-function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTitle = false }) {
+// own lazily-fetched sub-state (QR, review) never double-fetches. Exported
+// so the standalone Quest Details page (see frontend/app/src/QuestDetails.jsx)
+// can reuse this exact body instead of duplicating it.
+export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTitle = false }) {
   const { primary, occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
   const [showQr, setShowQr] = useState(false);
@@ -266,7 +232,15 @@ function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTi
       {showTitle && (
         <div>
           <p className="quest-title" style={{ fontSize: '1.25rem' }}>{primary.title}</p>
-          {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
+          {primary.orgName && (
+            <p className="quest-org-line">
+              {primary.orgId ? (
+                <Link to={`/organizations/${primary.orgId}`}>{primary.orgName}</Link>
+              ) : (
+                primary.orgName
+              )}
+            </p>
+          )}
         </div>
       )}
       {formatRecurrence(primary) && <p className="quest-org-line">{formatRecurrence(primary)}</p>}
@@ -391,6 +365,10 @@ function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
             {primary.isDefault && primary.tier && (
               <p className="quest-org-line"><TierBadge tier={primary.tier} /></p>
             )}
+            {/* Plain text, not a Link — this whole row is already inside a
+                <button onClick={onSelect}> to expand the card, and an <a>
+                can't nest inside a <button>. The org name IS a link once
+                the card is expanded (see QuestDetailBody above). */}
             {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
             {primary.location && (
               <p className="quest-org-line">

@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import main as main_module  # noqa: E402
 from tests.fake_firestore import FakeFirestoreModule  # noqa: E402
+from tests.fake_auth import FakeAuthModule  # noqa: E402
 
 
 class FakeAuthContext:
@@ -35,6 +36,18 @@ def fake_firestore(monkeypatch):
     connection. Fresh store per test — nothing persists between tests."""
     fake_module = FakeFirestoreModule()
     monkeypatch.setattr(main_module, "firestore", fake_module)
+    return fake_module
+
+
+@pytest.fixture
+def fake_auth(monkeypatch):
+    """Swaps the `auth` name main.py imported from firebase_admin for an
+    in-memory fake — only needed by tests that exercise a function calling
+    auth.set_custom_user_claims/delete_user/list_users (e.g.
+    approve_organization, set_user_role), which would otherwise need a real
+    initialized Firebase project."""
+    fake_module = FakeAuthModule()
+    monkeypatch.setattr(main_module, "auth", fake_module)
     return fake_module
 
 

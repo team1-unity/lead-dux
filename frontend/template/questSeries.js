@@ -3,8 +3,27 @@
 // see functions/main.py's module note above _generate_series_dates), so
 // grouping by seriesId naturally handles both cases with no special case
 // for "this one isn't part of a series."
-function toDate(value) {
+export function toDate(value) {
   return value.toDate ? value.toDate() : new Date(value);
+}
+
+// Mirrors functions/main.py's DEFAULT_EVENT_WINDOW_HOURS — used when a
+// quest has no explicit eventEndTime, to compute when it should stop being
+// treated as "still happening" for browsing/filtering purposes.
+export const DEFAULT_EVENT_WINDOW_HOURS = 6;
+
+// A quest is still "upcoming" until its own end window has passed — the
+// same effective end functions/main.py uses to compute QR/attendance
+// expiry (eventEndTime, or eventDate + the default window when no end time
+// was set). Past occurrences are hidden from browsing lists rather than
+// deleted, so RSVP history/reviews/attendance for them are still reachable
+// by anyone who already has the link, just not front-and-center for browsing.
+export function isUpcoming(quest) {
+  if (!quest.eventDate) return true;
+  const end = quest.eventEndTime
+    ? toDate(quest.eventEndTime)
+    : new Date(toDate(quest.eventDate).getTime() + DEFAULT_EVENT_WINDOW_HOURS * 60 * 60 * 1000);
+  return end.getTime() >= Date.now();
 }
 
 // `primary` (the earliest occurrence) carries the fields that are
