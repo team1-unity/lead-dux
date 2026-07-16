@@ -169,6 +169,10 @@ export function IconQrCode(props) {
       <rect x="14" y="3.5" width="6.5" height="6.5" rx="1" />
       <rect x="3.5" y="14" width="6.5" height="6.5" rx="1" />
       <path d="M14 14h3v3M20.5 14v3.5M17 20.5h3.5" />
+    </svg>
+  );
+}
+
 export function IconGlobe(props) {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>

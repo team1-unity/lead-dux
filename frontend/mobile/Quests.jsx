@@ -21,6 +21,23 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch } from '@shared/icons.jsx';
 
+// Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
+// (isDefault) quests carry a tier; organization quests never do.
+const TIER_LABELS = { iron: 'Iron', bronze: 'Bronze', silver: 'Silver', gold: 'Gold', diamond: 'Diamond' };
+const TIER_POINTS = { iron: 10, bronze: 12, silver: 15, gold: 18, diamond: 20 };
+
+function TierBadge({ tier }) {
+  if (!tier || !TIER_LABELS[tier]) return null;
+  return (
+    <span
+      className="quest-tier-badge"
+      style={{ '--rank-color': `var(--rank-${tier})`, '--rank-ink': `var(--rank-${tier}-ink)` }}
+    >
+      {TIER_LABELS[tier]} &middot; {TIER_POINTS[tier]} pts
+    </span>
+  );
+}
+
 function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
   const date = isoOrTimestamp.toDate ? isoOrTimestamp.toDate() : new Date(isoOrTimestamp);

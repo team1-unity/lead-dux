@@ -1248,13 +1248,14 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     if existing.exists:
         return {"success": True, "alreadyCheckedIn": True, "pointsAwarded": existing.to_dict().get("pointsAwarded", 0)}
 
-    # Base points only for organization quests today — default/neighborhood
-    # quests (isDefault) have no tier concept in the schema yet, matching
-    # check_in_attendee's behavior before this redesign; that's a separate
-    # follow-up, not something this ticket changes.
-    base_points = ORG_QUEST_BASE_POINTS if quest.get("orgId") else 0
-    if base_points:
-        db.collection("users").document(uid).update({"points": firestore.Increment(base_points)})
+    # Flat points for an organization quest, tiered points for a side/
+    # neighborhood one — see the Point System note above ORG_QUEST_BASE_POINTS.
+    # A pre-existing side quest with no tier on file (predates that field)
+    # simply awards 0. _award_points is the same atomic points+rank helper
+    # check_in_attendee used before this redesign — keeps rank in sync with
+    # points in one transaction rather than a bare Increment.
+    base_points = ORG_QUEST_BASE_POINTS if quest.get("orgId") else TIER_BASE_POINTS.get(quest.get("tier"), 0)
+    _award_points(db, uid, base_points)
 
     attendance_ref.set({
         "userId": uid,
@@ -1267,15 +1268,6 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     })
 
     return {"success": True, "alreadyCheckedIn": False, "pointsAwarded": base_points}
-    attendance_ref.update({"status": "checked_in", "checkedInAt": firestore.SERVER_TIMESTAMP})
-    # Flat points for an organization quest, tiered points for a side/
-    # neighborhood one — see the Point System note above ORG_QUEST_BASE_POINTS.
-    # A pre-existing side quest with no tier on file (predates this field)
-    # simply awards 0, same as before this field existed.
-    quest = quest_snap.to_dict()
-    base_points = ORG_QUEST_BASE_POINTS if quest.get("orgId") else TIER_BASE_POINTS.get(quest.get("tier"), 0)
-    _award_points(db, uid, base_points)
-    return {"success": True, "alreadyCheckedIn": False, "attendee": attendee}
 
 
 # Organization feedback & reflections journal --------------------------------
@@ -1370,12 +1362,15 @@ def generate_quest_feedback_drafts(req: https_fn.CallableRequest) -> dict:
 
     already_given = set(quest.get("feedbackGivenUids") or [])
     attendees = []
-    for doc in db.collection("quests").document(quest_id).collection("attendance").stream():
-        if doc.to_dict().get("status") != "checked_in" or doc.id in already_given:
+    # Attendance lives in its own top-level collection now (see
+    # check_in_to_event) — existence for (eventId, uid) means checked-in.
+    for doc in db.collection("attendance").where("eventId", "==", quest_id).stream():
+        uid = doc.to_dict()["userId"]
+        if uid in already_given:
             continue
-        user_snap = db.collection("users").document(doc.id).get()
+        user_snap = db.collection("users").document(uid).get()
         name = (user_snap.to_dict().get("name") if user_snap.exists else None) or "there"
-        attendees.append({"uid": doc.id, "name": name})
+        attendees.append({"uid": uid, "name": name})
 
     if not attendees:
         return {"questTitle": quest.get("title"), "attendees": []}
@@ -1464,10 +1459,12 @@ def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
     quest = _get_quest_or_404(db, quest_id)
     _require_owning_org_or_admin(req, quest, "submit feedback")
 
+    # Attendance now lives in its own top-level collection (see
+    # check_in_to_event) — its mere existence for (eventId, uid) means
+    # checked-in, there's no separate status field to filter on anymore.
     checked_in_uids = {
-        doc.id
-        for doc in quest_ref.collection("attendance").stream()
-        if doc.to_dict().get("status") == "checked_in"
+        doc.to_dict()["userId"]
+        for doc in db.collection("attendance").where("eventId", "==", quest_id).stream()
     }
     already_given = set(quest.get("feedbackGivenUids") or [])
 
