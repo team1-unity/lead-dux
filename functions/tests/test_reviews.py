@@ -2,11 +2,15 @@ import pytest
 from firebase_functions import https_fn
 
 import main
-from tests.helpers import seed_attendance, seed_quest, seed_user
+from tests.helpers import seed_attendance, seed_org, seed_quest, seed_user
 
 
 def get_series(fake_firestore, series_id):
     return fake_firestore.client().collection("questSeries").document(series_id).get().to_dict()
+
+
+def get_org(fake_firestore, uid):
+    return fake_firestore.client().collection("organizations").document(uid).get().to_dict()
 
 
 class TestSubmitReview:
@@ -269,3 +273,50 @@ class TestListQuestReviews:
         assert len(result["reviews"]) == 2
         bodies = {r["body"] for r in result["reviews"]}
         assert bodies == {"Loved the first one", "This one was meh"}
+
+
+class TestOrganizationTrustScoreRollup:
+    def test_first_review_rolls_up_onto_the_organization(self, fake_firestore, make_request, call):
+        seed_org(fake_firestore, "org-1", ratingSum=0, ratingCount=0)
+        seed_quest(fake_firestore, "quest-1", orgId="org-1", rsvpd=["user-1"])
+        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+
+        call(main.submit_review, make_request(
+            data={"questId": "quest-1", "rating": 4, "body": "Solid event"}, uid="user-1", role="user",
+        ))
+
+        org = get_org(fake_firestore, "org-1")
+        assert org["ratingSum"] == 4
+        assert org["ratingCount"] == 1
+
+    def test_reviews_across_different_quests_accumulate_on_the_same_org(self, fake_firestore, make_request, call):
+        seed_org(fake_firestore, "org-1")
+        seed_quest(fake_firestore, "quest-1", orgId="org-1", rsvpd=["user-1"])
+        seed_quest(fake_firestore, "quest-2", orgId="org-1", rsvpd=["user-2"])
+        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-2", "user-2", status="checked_in")
+
+        call(main.submit_review, make_request(
+            data={"questId": "quest-1", "rating": 5, "body": "Loved it"}, uid="user-1", role="user",
+        ))
+        call(main.submit_review, make_request(
+            data={"questId": "quest-2", "rating": 3, "body": "It was fine"}, uid="user-2", role="user",
+        ))
+
+        org = get_org(fake_firestore, "org-1")
+        assert org["ratingSum"] == 8
+        assert org["ratingCount"] == 2
+
+    def test_rolls_up_even_when_the_org_doc_has_no_rating_fields_yet(self, fake_firestore, make_request, call):
+        # No seed_org call at all here — mirrors an org doc that predates
+        # this rollup (e.g. never had ratingSum/ratingCount initialized).
+        seed_quest(fake_firestore, "quest-1", orgId="org-1", rsvpd=["user-1"])
+        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+
+        call(main.submit_review, make_request(
+            data={"questId": "quest-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
+        ))
+
+        org = get_org(fake_firestore, "org-1")
+        assert org["ratingSum"] == 5
+        assert org["ratingCount"] == 1

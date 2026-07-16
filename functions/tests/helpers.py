@@ -41,3 +41,21 @@ def seed_attendance(fake_firestore, quest_id, uid, **overrides):
 
 def seed_user(fake_firestore, uid, name, email):
     fake_firestore.client().collection("users").document(uid).set({"name": name, "email": email})
+
+
+def seed_org(fake_firestore, uid, **overrides):
+    org = {
+        "name": "Trail Org",
+        "email": "org@example.com",
+        "phone": "555-0100",
+        "location": "Riverside",
+        "reason": "We clean up trails.",
+        "ltag": [],
+        "etag": [],
+        "verified": True,
+        "ratingSum": 0,
+        "ratingCount": 0,
+    }
+    org.update(overrides)
+    fake_firestore.client().collection("organizations").document(uid).set(org)
+    return org

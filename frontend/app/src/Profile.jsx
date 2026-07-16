@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callUpdateInterests, callUpdateOrganizationTags } from '@shared/fetch.jsx';
+import { callUpdateInterests, callUpdateOrganizationTags, callUpdateOrganizationProfile } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -11,29 +11,38 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
-import { IconChevron } from '@shared/icons.jsx';
+import { IconCheck, IconChevron, IconLock } from '@shared/icons.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
 import { hashTone } from '@shared/tagTones.js';
-import { rankForPoints, pointsToNextRank } from '@shared/rank.js';
+import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from '@shared/rank.js';
 
-// Points/rank are read straight off the user's own doc (self-readable, see
-// firestore.rules) — no dedicated Cloud Function needed just to display
-// them. Rank itself is never stored; see rank.js for why.
+// Points/rank/certificateIssued are read straight off the user's own doc
+// (self-readable, see firestore.rules) — no dedicated Cloud Function needed
+// just to display them; get_user_rank exists for the admin dashboard to
+// look up someone ELSE's rank instead. Rank itself IS now stored
+// server-side (kept in sync by functions/main.py's _award_points) so it can
+// be queried across users (see list_diamond_users) — see rank.js for why
+// it's still recomputed here too rather than trusted blindly.
 function ProgressCard() {
   const { user } = useAuth();
-  const [points, setPoints] = useState(null);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     if (!user) return;
     getDoc(doc(db, 'users', user.uid)).then((snap) => {
-      setPoints(snap.exists() ? snap.data().points || 0 : 0);
+      const data = snap.exists() ? snap.data() : {};
+      setProfile({ points: data.points || 0, certificateIssued: Boolean(data.certificateIssued) });
     });
   }, [user]);
 
-  if (points === null) return null;
+  if (profile === null) return null;
 
+  const { points, certificateIssued } = profile;
   const rank = rankForPoints(points);
   const toNext = pointsToNextRank(points);
+  const percent = progressPercent(points);
+  const rankOrder = allRanks();
+  const currentIndex = rankOrder.indexOf(rank);
 
   return (
     <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -45,6 +54,38 @@ function ProgressCard() {
         {points} point{points === 1 ? '' : 's'}
         {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
       </p>
+
+      <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
+        <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
+      </div>
+
+      <div className="rank-milestones">
+        {rankOrder.map((name, i) => {
+          const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
+          const tone = name.toLowerCase();
+          return (
+            <div className="rank-milestone" key={name} data-state={state}>
+              <span
+                className="rank-milestone-dot"
+                style={{ '--rank-color': `var(--rank-${tone})`, '--rank-ink': `var(--rank-${tone}-ink)` }}
+              >
+                {state === 'done' && <IconCheck width={14} height={14} />}
+                {state === 'locked' && <IconLock width={14} height={12} />}
+              </span>
+              <span className="rank-milestone-label">{name}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {certificateIssued && (
+        <div className="rank-certificate-banner">
+          <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
+          <Link to="/certificate">
+            <StampButton type="button" variant="primary">View certificate</StampButton>
+          </Link>
+        </div>
+      )}
     </section>
   );
 }
@@ -194,6 +235,133 @@ function OrgTags({ org, onSaved }) {
   );
 }
 
+const SOCIAL_LINK_FIELDS = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'twitter', label: 'X / Twitter' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'tiktok', label: 'TikTok' },
+  { key: 'youtube', label: 'YouTube' },
+];
+
+// Everything an organization's public OrganizationProfile page shows
+// beyond name/reason/location/phone/ltag/etag (all already editable
+// elsewhere) — mission statement, city/state, website, a separate public
+// contact email, a logo URL, and social links. Same view/edit-toggle shape
+// as OrgTags above, just a longer form.
+function OrgProfileEditor({ org, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [fields, setFields] = useState({
+    logoUrl: org.logoUrl || '',
+    category: org.category || '',
+    missionStatement: org.missionStatement || '',
+    city: org.city || '',
+    state: org.state || '',
+    website: org.website || '',
+    contactEmail: org.contactEmail || '',
+  });
+  const [social, setSocial] = useState({ ...org.socialLinks });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const payload = Object.fromEntries(
+        Object.entries(fields).map(([k, v]) => [k, v.trim() || null]),
+      );
+      await callUpdateOrganizationProfile({ ...payload, socialLinks: social });
+      onSaved({ ...payload, socialLinks: social });
+      setEditing(false);
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <section className="ink-card">
+        <div className="section-heading">
+          <h2 style={{ margin: 0 }}>Public Profile</h2>
+          <StampButton type="button" onClick={() => setEditing(true)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+            Edit
+          </StampButton>
+        </div>
+        {!org.missionStatement && !org.website && !org.city ? (
+          <p className="data-stat" style={{ margin: '10px 0 0' }}>Not set yet.</p>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            {org.missionStatement && <p style={{ margin: 0 }}>{org.missionStatement}</p>}
+            {(org.city || org.state) && (
+              <p className="data-stat" style={{ marginTop: 8 }}>{[org.city, org.state].filter(Boolean).join(', ')}</p>
+            )}
+            {org.website && <p className="data-stat">{org.website}</p>}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="ink-card">
+      <h2 style={{ marginTop: 0 }}>Public Profile</h2>
+      <form onSubmit={save} className="flex flex-col gap-md">
+        <label>
+          Logo URL
+          <input value={fields.logoUrl} onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." />
+        </label>
+        <label>
+          Category
+          <input value={fields.category} onChange={(e) => setFields((f) => ({ ...f, category: e.target.value }))} placeholder="Youth center, sports league, etc." />
+        </label>
+        <label>
+          Mission statement
+          <textarea value={fields.missionStatement} onChange={(e) => setFields((f) => ({ ...f, missionStatement: e.target.value }))} />
+        </label>
+        <label>
+          City
+          <input value={fields.city} onChange={(e) => setFields((f) => ({ ...f, city: e.target.value }))} />
+        </label>
+        <label>
+          State
+          <input value={fields.state} onChange={(e) => setFields((f) => ({ ...f, state: e.target.value }))} />
+        </label>
+        <label>
+          Website
+          <input value={fields.website} onChange={(e) => setFields((f) => ({ ...f, website: e.target.value }))} placeholder="https://..." />
+        </label>
+        <label>
+          Public contact email (optional)
+          <input value={fields.contactEmail} onChange={(e) => setFields((f) => ({ ...f, contactEmail: e.target.value }))} />
+        </label>
+        {SOCIAL_LINK_FIELDS.map(({ key, label }) => (
+          <label key={key}>
+            {label}
+            <input
+              value={social[key] || ''}
+              onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
+              placeholder="https://..."
+            />
+          </label>
+        ))}
+        {error && <p className="box-danger">{error}</p>}
+        <div className="flex gap-sm">
+          <StampButton type="submit" variant="primary" disabled={submitting}>
+            {submitting ? 'Saving...' : 'Save'}
+          </StampButton>
+          <StampButton type="button" onClick={() => setEditing(false)} disabled={submitting}>
+            Cancel
+          </StampButton>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 // No profile photo upload exists in this app (users have no avatar field) —
 // the duck mascot in a brand-mustard ring is the deliberate placeholder for
 // every account, rather than an initial-based tile (which would make this
@@ -312,6 +480,7 @@ export function Profile() {
               <p className="data-stat">{org.phone}</p>
             </section>
             <OrgTags org={org} onSaved={(t) => setOrg((prev) => ({ ...prev, ...t }))} />
+            <OrgProfileEditor org={org} onSaved={(t) => setOrg((prev) => ({ ...prev, ...t }))} />
           </>
         )}
       </div>
