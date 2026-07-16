@@ -4,7 +4,7 @@ import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/fire
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
-import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconPlus } from './icons.jsx';
+import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus } from './icons.jsx';
 import { Logo } from './Logo.jsx';
 import { getInitials } from './initials.js';
 
@@ -41,10 +41,12 @@ const PRIMARY_BY_ROLE = {
 // surfaces on its FAB circle even though it's no longer a standalone tab.
 const FEATURES_BY_ROLE = {
   user: [
+    { to: '/check-in', icon: IconQrCode, label: 'Check In' },
     { to: '/badges', icon: IconTrophy, label: 'Badges' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],
   pending_org: [
+    { to: '/check-in', icon: IconQrCode, label: 'Check In' },
     { to: '/badges', icon: IconTrophy, label: 'Badges' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],

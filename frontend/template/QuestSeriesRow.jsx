@@ -4,7 +4,6 @@ import { callGenerateQuestFeedbackDrafts, callSubmitQuestFeedbackBatch } from '.
 import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
-import { QuestScanner } from './QuestScanner.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
 
 const FEEDBACK_RATINGS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
@@ -213,9 +212,20 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             {feedbackOpen ? 'Hide feedback' : 'Give feedback'}
           </StampButton>
         )}
-        <StampButton type="button" variant="primary" onClick={() => a.setScanning((v) => !v)}>
-          {a.scanning ? 'Close scanner' : 'Scan to check in'}
-        </StampButton>
+        {!selected.qrToken ? (
+          <StampButton type="button" variant="primary" onClick={a.generateQr} disabled={a.qrBusy}>
+            {a.qrBusy ? 'Generating...' : 'Generate QR Code'}
+          </StampButton>
+        ) : (
+          <>
+            <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
+              {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
+            </StampButton>
+            <StampButton type="button" onClick={a.refreshQr} disabled={a.qrBusy}>
+              Refresh QR Code
+            </StampButton>
+          </>
+        )}
         {!isSeries && (
           <StampButton type="button" onClick={() => a.setRecurring((v) => !v)}>
             {a.recurring ? 'Cancel' : 'Make recurring'}
@@ -299,7 +309,13 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           </StampButton>
         </form>
       )}
-      {a.scanning && <QuestScanner questId={selected.id} onCheckedIn={a.handleScanResult} />}
+      {a.qrError && <p className="box-danger">{a.qrError}</p>}
+      {a.qrOpen && a.qr && (
+        <div className="ink-card event-qr-display">
+          <img src={a.qr} alt="Event check-in QR code" />
+          <p className="data-stat">Attendees scan this from the app's Check In screen.</p>
+        </div>
+      )}
       {feedbackOpen && <GiveFeedbackPanel key={selected.id} questId={selected.id} onSent={onChanged} />}
       {a.attendeesOpen && a.attendees && (
         <ul className="data-sublist">

@@ -195,19 +195,38 @@ export async function callCancelRsvp(questId) {
   return result.data;
 }
 
-// user: re-fetches the caller's own check-in QR code for a quest they've
-// already RSVP'd to (rsvp_to_quest returns the same shape the first time).
-export async function callGetQuestQr(questId) {
-  const fn = httpsCallable(functions, 'get_quest_qr');
+// organization (own quest) or admin (any quest): mints this quest's QR
+// code if it doesn't have one yet, or re-renders the existing one — never
+// rotates an existing token (see callRefreshEventQrCode for that).
+export async function callGenerateEventQrCode(questId) {
+  const fn = httpsCallable(functions, 'generate_event_qr_code');
   const result = await fn({ questId });
   return result.data;
 }
 
-// organization (own quests) or admin (any quest): validates a scanned QR
-// code's {questId, uid, token} payload and marks that attendee checked in.
-export async function callCheckInAttendee({ questId, uid, token }) {
-  const fn = httpsCallable(functions, 'check_in_attendee');
-  const result = await fn({ questId, uid, token });
+// organization (own quest) or admin (any quest): re-renders the quest's
+// current QR code image without minting or rotating anything.
+export async function callGetEventQrCode(questId) {
+  const fn = httpsCallable(functions, 'get_event_qr_code');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// organization (own quest) or admin (any quest): rotates the quest's QR
+// token, invalidating the previous one (any attendance already recorded
+// against the old token is untouched).
+export async function callRefreshEventQrCode(questId) {
+  const fn = httpsCallable(functions, 'refresh_event_qr_code');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// user: validates a scanned event QR's {questId, token} payload and checks
+// the CALLER themself in (self-service — this is the whole point of the
+// event-QR redesign, as opposed to an org scanning each attendee).
+export async function callCheckInToEvent({ questId, token }) {
+  const fn = httpsCallable(functions, 'check_in_to_event');
+  const result = await fn({ questId, token });
   return result.data;
 }
 

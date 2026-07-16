@@ -266,7 +266,7 @@ class TestDeleteQuest:
     def test_deleting_one_of_several_occurrences_keeps_series_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))
@@ -281,7 +281,7 @@ class TestDeleteQuest:
 
     def test_deleting_the_last_occurrence_still_keeps_its_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", orgId="org-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "quest-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))
@@ -349,7 +349,7 @@ class TestDeleteQuestSeries:
     def test_keep_quest_id_preserves_series_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))
@@ -370,7 +370,7 @@ class TestDeleteQuestSeries:
     def test_full_series_delete_cleans_up_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))
