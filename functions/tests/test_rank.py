@@ -33,15 +33,14 @@ class TestRankForPoints:
         assert main._points_to_next_rank(400) is None
 
 
-class TestCheckInAttendeeAwardsPoints:
+class TestCheckInToEventAwardsPoints:
     def test_org_quest_awards_flat_points_and_sets_rank(self, fake_firestore, make_request, call):
-        seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId="org-1")
-        seed_attendance(fake_firestore, "quest-1", "user-1", token="good-token")
+        seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId="org-1", qrToken="good-token", qrTokenVersion=0)
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
 
-        call(main.check_in_attendee, make_request(
-            data={"questId": "quest-1", "uid": "user-1", "token": "good-token"},
-            uid="org-1", role="organization",
+        call(main.check_in_to_event, make_request(
+            data={"questId": "quest-1", "token": "good-token"},
+            uid="user-1", role="user",
         ))
 
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
@@ -52,13 +51,15 @@ class TestCheckInAttendeeAwardsPoints:
         ("iron", 10), ("bronze", 12), ("silver", 15), ("gold", 18), ("diamond", 20),
     ])
     def test_side_quest_awards_tiered_points(self, fake_firestore, make_request, call, tier, expected_points):
-        seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId=None, isDefault=True, tier=tier)
-        seed_attendance(fake_firestore, "quest-1", "user-1", token="good-token")
+        seed_quest(
+            fake_firestore, "quest-1", rsvpd=["user-1"], orgId=None, isDefault=True, tier=tier,
+            qrToken="good-token", qrTokenVersion=0,
+        )
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
 
-        call(main.check_in_attendee, make_request(
-            data={"questId": "quest-1", "uid": "user-1", "token": "good-token"},
-            uid="admin-1", role="admin",
+        call(main.check_in_to_event, make_request(
+            data={"questId": "quest-1", "token": "good-token"},
+            uid="user-1", role="user",
         ))
 
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
@@ -66,13 +67,15 @@ class TestCheckInAttendeeAwardsPoints:
 
     def test_side_quest_with_no_tier_on_file_awards_nothing(self, fake_firestore, make_request, call):
         # Predates the tier field — no migration backfill, so this stays 0.
-        seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId=None, isDefault=True)
-        seed_attendance(fake_firestore, "quest-1", "user-1", token="good-token")
+        seed_quest(
+            fake_firestore, "quest-1", rsvpd=["user-1"], orgId=None, isDefault=True,
+            qrToken="good-token", qrTokenVersion=0,
+        )
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
 
-        call(main.check_in_attendee, make_request(
-            data={"questId": "quest-1", "uid": "user-1", "token": "good-token"},
-            uid="admin-1", role="admin",
+        call(main.check_in_to_event, make_request(
+            data={"questId": "quest-1", "token": "good-token"},
+            uid="user-1", role="user",
         ))
 
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
@@ -81,11 +84,13 @@ class TestCheckInAttendeeAwardsPoints:
     def test_rank_updates_as_points_accumulate_across_checkins(self, fake_firestore, make_request, call):
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
         for i in range(6):
-            seed_quest(fake_firestore, f"quest-{i}", rsvpd=["user-1"], orgId="org-1")
-            seed_attendance(fake_firestore, f"quest-{i}", "user-1", token="t")
-            call(main.check_in_attendee, make_request(
-                data={"questId": f"quest-{i}", "uid": "user-1", "token": "t"},
-                uid="org-1", role="organization",
+            seed_quest(
+                fake_firestore, f"quest-{i}", rsvpd=["user-1"], orgId="org-1",
+                qrToken="t", qrTokenVersion=0,
+            )
+            call(main.check_in_to_event, make_request(
+                data={"questId": f"quest-{i}", "token": "t"},
+                uid="user-1", role="user",
             ))
 
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
