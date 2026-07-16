@@ -9,6 +9,8 @@ import {
   callDeleteOrganization,
   callCreateDefaultQuest,
   callCreateRecurringQuest,
+  callListDiamondUsers,
+  callIssueCertificate,
 } from '@shared/fetch.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -37,6 +39,75 @@ function RoleStamp({ role }) {
     <StatusStamp tone={tone} muted={!tone}>
       {role}
     </StatusStamp>
+  );
+}
+
+// Every default/neighborhood quest must pick one of these — see
+// TIER_BASE_POINTS in functions/main.py, the source of truth these point
+// values mirror.
+const TIER_OPTIONS = [
+  { value: 'iron', label: 'Iron — 10 pts' },
+  { value: 'bronze', label: 'Bronze — 12 pts' },
+  { value: 'silver', label: 'Silver — 15 pts' },
+  { value: 'gold', label: 'Gold — 18 pts' },
+  { value: 'diamond', label: 'Diamond — 20 pts' },
+];
+
+// The "admin can see once a user reaches the last rank" requirement —
+// certificates are never issued automatically (see issue_certificate,
+// functions/main.py), only by an admin choosing to here.
+function DiamondCertifications() {
+  const [users, setUsers] = useState(null);
+  const [busyUid, setBusyUid] = useState(null);
+
+  async function load() {
+    setUsers(await callListDiamondUsers());
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function issue(uid) {
+    setBusyUid(uid);
+    try {
+      await callIssueCertificate(uid);
+      await load();
+    } finally {
+      setBusyUid(null);
+    }
+  }
+
+  if (!users) return <LoadingSpinner label="Loading Diamond members..." />;
+
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <h2>Diamond certifications</h2>
+      {users.length === 0 ? (
+        <p>No one has reached Diamond rank yet.</p>
+      ) : (
+        <div className="ink-card data-list">
+          {users.map((u) => (
+            <div key={u.uid} className="data-row">
+              <div className="data-row-head">
+                <p className="data-row-title">{u.name || u.email}</p>
+                <span className="data-stat">{u.points} points</span>
+              </div>
+              <p className="data-row-sub">{u.email}</p>
+              <div className="data-row-actions" style={{ alignItems: 'center', gap: 12 }}>
+                {u.certificateIssued ? (
+                  <StatusStamp tone="community">CERTIFICATE ISSUED</StatusStamp>
+                ) : (
+                  <StampButton type="button" variant="primary" onClick={() => issue(u.uid)} disabled={busyUid === u.uid}>
+                    {busyUid === u.uid ? 'Issuing...' : 'Issue certificate'}
+                  </StampButton>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -241,6 +312,7 @@ function QuestsAdmin() {
   const [timezone, setTimezone] = useState(detectTimezone());
   const [location, setLocation] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [tier, setTier] = useState('iron');
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState('weekly');
   const [until, setUntil] = useState('');
@@ -279,6 +351,7 @@ function QuestsAdmin() {
         timezone,
         location,
         capacity: capacity ? Number(capacity) : null,
+        tier,
       };
       if (isRecurring) {
         await callCreateRecurringQuest({ ...base, frequency, until });
@@ -292,6 +365,7 @@ function QuestsAdmin() {
       setEventEndTime('');
       setLocation('');
       setCapacity('');
+      setTier('iron');
       setIsRecurring(false);
       setUntil('');
       await load();
@@ -328,6 +402,12 @@ function QuestsAdmin() {
           <label>
             Capacity (optional)
             <input type="number" min="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="Unlimited" />
+          </label>
+          <label>
+            Difficulty tier
+            <select value={tier} onChange={(e) => setTier(e.target.value)}>
+              {TIER_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
           </label>
           <EventDateFields
             eventDate={eventDate}
@@ -384,6 +464,7 @@ export function Dashboard() {
       <PendingRequests />
       <AllUsers />
       <Organizations />
+      <DiamondCertifications />
       <QuestsAdmin />
     </PageMotion>
   );

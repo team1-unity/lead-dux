@@ -23,6 +23,23 @@ import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, Ic
 
 const DEFAULT_EVENT_WINDOW_HOURS = 6; // mirrors functions/main.py's DEFAULT_EVENT_WINDOW_HOURS
 
+// Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
+// (isDefault) quests carry a tier; organization quests never do.
+const TIER_LABELS = { iron: 'Iron', bronze: 'Bronze', silver: 'Silver', gold: 'Gold', diamond: 'Diamond' };
+const TIER_POINTS = { iron: 10, bronze: 12, silver: 15, gold: 18, diamond: 20 };
+
+function TierBadge({ tier }) {
+  if (!tier || !TIER_LABELS[tier]) return null;
+  return (
+    <span
+      className="quest-tier-badge"
+      style={{ '--rank-color': `var(--rank-${tier})`, '--rank-ink': `var(--rank-${tier}-ink)` }}
+    >
+      {TIER_LABELS[tier]} &middot; {TIER_POINTS[tier]} pts
+    </span>
+  );
+}
+
 function toDate(value) {
   return value.toDate ? value.toDate() : new Date(value);
 }
@@ -294,6 +311,7 @@ function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTi
       </p>
       <p className="quest-description">{primary.description}</p>
       <div className="quest-tags">
+        {primary.isDefault && <TierBadge tier={primary.tier} />}
         {(primary.tags || []).map((tag) => (
           <TagStamp key={tag} tone={tag}>
             {tag}
@@ -370,6 +388,9 @@ function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
         <button type="button" className="quest-card-head" onClick={onSelect} aria-expanded={isOpen || isActive}>
           <div className="quest-card-titles">
             <p className="quest-title">{primary.title}</p>
+            {primary.isDefault && primary.tier && (
+              <p className="quest-org-line"><TierBadge tier={primary.tier} /></p>
+            )}
             {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
             {primary.location && (
               <p className="quest-org-line">
