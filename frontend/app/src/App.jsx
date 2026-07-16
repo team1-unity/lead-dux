@@ -7,6 +7,8 @@ import { db } from '@shared/firebaseapp.jsx';
 import { BottomNav } from '@shared/BottomNav.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { FeedbackToast } from '@shared/FeedbackToast.jsx';
+import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
 import { ForgotPassword } from './ForgotPassword.jsx';
 import { ResetPassword } from './ResetPassword.jsx';
@@ -16,6 +18,7 @@ import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
 import { Badges } from '@mobile/Badges.jsx';
+import { Journal } from '@mobile/Journal.jsx';
 import { Register as RegisterOrganization } from '@org/Register.jsx';
 import { Dashboard as OrgDashboard } from '@org/Dashboard.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
@@ -61,6 +64,7 @@ function PublicHome({ role }) {
   return (
     <PageMotion>
       {role === 'pending_org' && <PendingBanner />}
+      <FeedbackToast />
       <Quests interests={profile?.interests || []} name={profile?.name} />
     </PageMotion>
   );
@@ -78,12 +82,14 @@ function AdminHome() {
 
 // The single place that decides, after auth, which interface someone
 // belongs in. Login/Register pages never branch on role themselves — they
-// just navigate('/') and let this sort it out.
+// just navigate('/') and let this sort it out. A signed-out visitor gets
+// the marketing Landing page here instead of bouncing straight to /login —
+// "/" is the actual front door, not a redirect.
 function Home() {
   const { user, role, loading } = useAuth();
 
   if (loading) return <LoadingSpinner />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Landing />;
   if (role === 'organization') return <Navigate to="/org" replace />;
   // Declared org intent but hasn't submitted the org-details form yet —
   // send them back to finish it instead of showing the quest list.
@@ -126,6 +132,7 @@ function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/badges" element={<Badges />} />
+            <Route path="/journal" element={<Journal />} />
             <Route
               path="/admin"
               element={

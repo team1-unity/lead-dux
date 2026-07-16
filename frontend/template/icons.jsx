@@ -152,3 +152,12 @@ export function IconLock(props) {
     </svg>
   );
 }
+
+export function IconJournal(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M12 6.2c-1.6-1.3-3.6-2-6-2v13.6c2.4 0 4.4.7 6 2 1.6-1.3 3.6-2 6-2V4.2c-2.4 0-4.4.7-6 2Z" />
+      <path d="M12 6.2v13.6" />
+    </svg>
+  );
+}

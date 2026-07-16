@@ -239,12 +239,6 @@ Optionally seed a handful of sample "default neighborhood" quests:
 python seed_quests.py
 ```
 
-Deploy the functions, Firestore rules, and indexes:
-
-```sh
-firebase deploy --only functions,firestore
-```
-
 ### 3. Frontend
 
 From the repo root (an npm workspace):
@@ -268,6 +262,17 @@ firebase emulators:start
 ```
 
 Auth, Firestore, and Functions must be either **all** emulated or **all** real together, the local Auth emulator issues unsigned tokens that only the local Firestore/Functions emulators trust.
+
+### 4. Deploy
+
+Hosting, Functions, and Firestore rules/indexes are all declared as one config in `firebase.json` — deploy them together, in one command, every time:
+
+```sh
+cd frontend/app && npm run build && cd ../..
+firebase deploy
+```
+
+There's no CI/CD for this project — deploying is always this manual two-step, run from whoever's machine has the latest `main` pulled. **Don't deploy `--only functions,firestore` (or `--only hosting`) as a habit** — `frontend/app/dist` is gitignored and only exists because you just built it, so a partial deploy is how the live site quietly falls behind the repo. If you only need to iterate on one piece while testing, scope it with `--only` for that one run, but do a full `firebase deploy` before considering a change actually shipped.
 
 ---
 

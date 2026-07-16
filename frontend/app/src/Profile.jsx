@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callStartOrganizationOnboarding, callUpdateInterests, callUpdateOrganizationTags } from '@shared/fetch.jsx';
+import { callUpdateInterests, callUpdateOrganizationTags } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -14,6 +14,40 @@ import { DuckMark } from '@shared/Logo.jsx';
 import { IconChevron } from '@shared/icons.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
 import { hashTone } from '@shared/tagTones.js';
+import { rankForPoints, pointsToNextRank } from '@shared/rank.js';
+
+// Points/rank are read straight off the user's own doc (self-readable, see
+// firestore.rules) — no dedicated Cloud Function needed just to display
+// them. Rank itself is never stored; see rank.js for why.
+function ProgressCard() {
+  const { user } = useAuth();
+  const [points, setPoints] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, 'users', user.uid)).then((snap) => {
+      setPoints(snap.exists() ? snap.data().points || 0 : 0);
+    });
+  }, [user]);
+
+  if (points === null) return null;
+
+  const rank = rankForPoints(points);
+  const toNext = pointsToNextRank(points);
+
+  return (
+    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <h2 style={{ marginBottom: 0 }}>Leadership Progress</h2>
+      <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.4rem', textTransform: 'uppercase' }}>
+        {rank}
+      </p>
+      <p className="data-stat" style={{ marginTop: 4 }}>
+        {points} point{points === 1 ? '' : 's'}
+        {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
+      </p>
+    </section>
+  );
+}
 
 // Lets a "user" change the interests they picked during onboarding —
 // onboarding only ever sets them once, this is the only way back in.
@@ -173,18 +207,19 @@ function UserAvatar() {
   );
 }
 
-// The "your account" hub: identity, interests (role "user" only), and
-// wherever the caller stands in the organization-registration flow — plus
-// signing out. Settings, by contrast, is purely display preferences and
-// account deletion; this split keeps "things about me" separate from
-// "things about how the app looks/whether I keep my account."
+// The "your account" hub: identity, rank progress + interests (role "user"
+// only), and wherever the caller stands in the organization-registration
+// flow — plus signing out. Settings, by contrast, is purely display
+// preferences and account deletion; this split keeps "things about me"
+// separate from "things about how the app looks/whether I keep my
+// account." Organizations now sign up directly from the landing page
+// rather than converting from a regular user account, so there's no
+// "become an organization" prompt here anymore — only the four states a
+// caller already in that pipeline (or already an org/admin) can be in.
 export function Profile() {
-  const { user, role, loading, logout, refreshRole } = useAuth();
+  const { user, role, loading, logout } = useAuth();
   const [name, setName] = useState(null);
   const [org, setOrg] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (!user) return;
@@ -205,20 +240,6 @@ export function Profile() {
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
 
-  async function registerAsOrganization() {
-    setError('');
-    setSubmitting(true);
-    try {
-      await callStartOrganizationOnboarding();
-      await refreshRole();
-      navigate('/register/organization');
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   return (
     <PageMotion>
       <div className="ink-card profile-identity">
@@ -233,62 +254,54 @@ export function Profile() {
       </div>
 
       <div className="profile-grid">
+        {role === 'user' && <ProgressCard />}
         {role === 'user' && <InterestsEditor />}
 
-        <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <h2 style={{ marginBottom: 0 }}>Organization</h2>
+        {role !== 'user' && (
+          <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <h2 style={{ marginBottom: 0 }}>Organization</h2>
 
-          {role === 'user' && (
-            <>
-              <p style={{ margin: 0 }}>Signed up as a regular member but meant to register an organization?</p>
-              <StampButton type="button" variant="primary" onClick={registerAsOrganization} disabled={submitting}>
-                {submitting ? 'Starting...' : 'Register your organization'}
-              </StampButton>
-            </>
-          )}
-
-          {role === 'onboarding_org' && (
-            <div className="flex justify-between items-center">
-              <div>
-                <StatusStamp muted>IN PROGRESS</StatusStamp>
-                <p style={{ margin: '8px 0 0' }}>You started registering an organization.</p>
+            {role === 'onboarding_org' && (
+              <div className="flex justify-between items-center">
+                <div>
+                  <StatusStamp muted>IN PROGRESS</StatusStamp>
+                  <p style={{ margin: '8px 0 0' }}>You started registering an organization.</p>
+                </div>
+                <Link to="/register/organization" aria-label="Finish your application">
+                  <IconChevron style={{ transform: 'rotate(-90deg)' }} />
+                </Link>
               </div>
-              <Link to="/register/organization" aria-label="Finish your application">
-                <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-              </Link>
-            </div>
-          )}
+            )}
 
-          {role === 'pending_org' && (
-            <div>
-              <StatusStamp tone="outdoors">UNDER REVIEW</StatusStamp>
-              <p style={{ margin: '8px 0 0' }}>Your organization application is awaiting admin review.</p>
-            </div>
-          )}
-
-          {role === 'organization' && (
-            <div className="flex justify-between items-center">
+            {role === 'pending_org' && (
               <div>
-                <StatusStamp tone="education">APPROVED</StatusStamp>
-                <p style={{ margin: '8px 0 0' }}>You already manage an organization.</p>
+                <StatusStamp tone="outdoors">UNDER REVIEW</StatusStamp>
+                <p style={{ margin: '8px 0 0' }}>Your organization application is awaiting admin review.</p>
               </div>
-              <Link to="/org" aria-label="Go to your organization dashboard">
-                <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-              </Link>
-            </div>
-          )}
+            )}
 
-          {role === 'admin' && (
-            <div>
-              <StatusStamp tone="community">FULL ACCESS</StatusStamp>
-              <p style={{ margin: '8px 0 0' }}>
-                You manage the whole platform from the <Link to="/admin">admin data page</Link>.
-              </p>
-            </div>
-          )}
+            {role === 'organization' && (
+              <div className="flex justify-between items-center">
+                <div>
+                  <StatusStamp tone="education">APPROVED</StatusStamp>
+                  <p style={{ margin: '8px 0 0' }}>You already manage an organization.</p>
+                </div>
+                <Link to="/org" aria-label="Go to your organization dashboard">
+                  <IconChevron style={{ transform: 'rotate(-90deg)' }} />
+                </Link>
+              </div>
+            )}
 
-          {error && <p className="box-danger">{error}</p>}
-        </section>
+            {role === 'admin' && (
+              <div>
+                <StatusStamp tone="community">FULL ACCESS</StatusStamp>
+                <p style={{ margin: '8px 0 0' }}>
+                  You manage the whole platform from the <Link to="/admin">admin data page</Link>.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
 
         {role === 'organization' && org && (
           <>

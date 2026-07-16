@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
-import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconPlus } from './icons.jsx';
+import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconPlus } from './icons.jsx';
 import { Logo } from './Logo.jsx';
 import { getInitials } from './initials.js';
 
@@ -36,18 +36,24 @@ const PRIMARY_BY_ROLE = {
 // Extra feature destinations beyond a role's primary tab — shown as a
 // normal nav pill on desktop (matching the wireframe's horizontal nav), but
 // tucked behind the mobile "+" FAB instead of crowding the tab bar (matching
-// the wireframe's Quests/+/Badges bottom nav). Badges is the only entry
-// today; a Journal entry is planned to join this same list later — nothing
-// else about the FAB needs to change to add it.
+// the wireframe's Quests/+/Badges bottom nav). Journal carries `badge: true`
+// so its unread-feedback count (see useUnreadFeedbackCount below) still
+// surfaces on its FAB circle even though it's no longer a standalone tab.
 const FEATURES_BY_ROLE = {
-  user: [{ to: '/badges', icon: IconTrophy, label: 'Badges' }],
-  pending_org: [{ to: '/badges', icon: IconTrophy, label: 'Badges' }],
+  user: [
+    { to: '/badges', icon: IconTrophy, label: 'Badges' },
+    { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
+  ],
+  pending_org: [
+    { to: '/badges', icon: IconTrophy, label: 'Badges' },
+    { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
+  ],
 };
 
 // Fans the FAB's popped-up circles out above it in a shallow arc (matching
 // the reference sketch) rather than stacking them in a straight line —
 // evenly spread across a fixed angle regardless of how many items end up in
-// the list, so adding a third (Journal) later needs no layout changes.
+// the list.
 const FAB_RADIUS = 60;
 const FAB_SPREAD_DEG = 80;
 function fabCircleStyle(i, n) {
@@ -58,12 +64,34 @@ function fabCircleStyle(i, n) {
   return { left: `calc(50% + ${x}px)`, bottom: `calc(100% + ${y}px)` };
 }
 
+// Unread count for the Journal badge — a live listener (not a one-time
+// fetch), so it updates the moment an organization sends feedback while
+// the app is open, same as the FeedbackToast popup. `read` (not
+// `notified`) is what this counts: see the module note in
+// functions/main.py's feedback section for why those two flags are kept
+// separate.
+function useUnreadFeedbackCount(user, role) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!user || (role !== 'user' && role !== 'pending_org')) {
+      setCount(0);
+      return undefined;
+    }
+    const q = query(collection(db, 'users', user.uid, 'feedback'), where('read', '==', false));
+    return onSnapshot(q, (snap) => setCount(snap.size));
+  }, [user, role]);
+
+  return count;
+}
+
 export function BottomNav() {
   const { role, user } = useAuth();
   const location = useLocation();
   const isDesktop = useIsDesktop();
   const [displayName, setDisplayName] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
+  const unreadFeedback = useUnreadFeedbackCount(user, role);
 
   // A route change (including one triggered by picking a FAB menu item)
   // always closes the menu — BottomNav stays mounted across navigations
@@ -97,10 +125,11 @@ export function BottomNav() {
   // that wireframe); the user view's avatar stands alone.
   const showNameNextToAvatar = role === 'organization';
   const features = FEATURES_BY_ROLE[role] || [];
-  // Settings joins Badges behind the mobile FAB for the user view specifically
-  // (matching the reference sketch: Quests stays left, Profile stays right,
-  // everything else tucks behind the +) — every other role, and the user
-  // view itself on desktop, keeps Settings as its own normal pill.
+  // Settings joins Badges/Journal behind the mobile FAB for the user view
+  // specifically (matching the reference sketch: Quests stays left, Profile
+  // stays right, everything else tucks behind the +) — every other role,
+  // and the user view itself on desktop, keeps Settings as its own normal
+  // pill.
   const settingsInFab = !isDesktop && (role === 'user' || role === 'pending_org');
   const fabMenuItems = !isDesktop
     ? [...features, ...(settingsInFab ? [{ to: '/settings', icon: IconGear, label: 'Settings' }] : [])]
@@ -135,7 +164,10 @@ export function BottomNav() {
               aria-current={current ? 'page' : undefined}
               title={item.label}
             >
-              <Icon />
+              <span className="bottom-nav-icon">
+                <Icon />
+                {item.badge && unreadFeedback > 0 && <span className="nav-badge">{unreadFeedback}</span>}
+              </span>
               <span>{item.label}</span>
             </Link>
           );
@@ -169,6 +201,7 @@ export function BottomNav() {
                           style={fabCircleStyle(fi, fabMenuItems.length)}
                         >
                           <FIcon />
+                          {f.badge && unreadFeedback > 0 && <span className="nav-badge">{unreadFeedback}</span>}
                           <span className="visually-hidden">{f.label}</span>
                         </Link>
                       );

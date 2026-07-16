@@ -9,20 +9,47 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebaseapp.jsx';
 
 // Called once, right after Firebase Auth account creation — the one signup
-// path. No admin gate — see functions/main.py for why this is safe to
-// expose (the admin-allowlist check happens server-side regardless of what
-// the client sends).
-export async function callCompleteSignup({ name }) {
+// path for both accountTypes ('individual', the default, or 'organization').
+// No admin gate — see functions/main.py for why this is safe to expose (the
+// admin-allowlist check happens server-side regardless of what the client
+// sends).
+export async function callCompleteSignup({ name, accountType }) {
   const fn = httpsCallable(functions, 'complete_signup');
-  const result = await fn({ name });
+  const result = await fn({ name, accountType });
   return result.data;
 }
 
 // Called once from the onboarding (interests) form. No targetUid — this
 // only ever writes the caller's own doc, so there's nothing to escalate.
-export async function callSubmitOnboarding({ name, age, interests }) {
+export async function callSubmitOnboarding({
+  name,
+  age,
+  interests,
+  experienceLevel,
+  experienceLevelOther,
+  timeAvailability,
+  timeAvailabilityOther,
+  groupPreference,
+  groupPreferenceOther,
+  motivation,
+  motivationOther,
+  leaderGoal,
+}) {
   const fn = httpsCallable(functions, 'submit_onboarding');
-  const result = await fn({ name, age, interests });
+  const result = await fn({
+    name,
+    age,
+    interests,
+    experienceLevel,
+    experienceLevelOther,
+    timeAvailability,
+    timeAvailabilityOther,
+    groupPreference,
+    groupPreferenceOther,
+    motivation,
+    motivationOther,
+    leaderGoal,
+  });
   return result.data;
 }
 
@@ -67,18 +94,9 @@ export async function callDeleteOrganization(targetUid) {
   return result.data;
 }
 
-// Settings: called by a "user" who wants to register an organization after
-// all — flips their role to onboarding_org so /register/organization shows
-// the org-details form.
-export async function callStartOrganizationOnboarding() {
-  const fn = httpsCallable(functions, 'start_organization_onboarding');
-  const result = await fn();
-  return result.data;
-}
-
 // The org-details form's submit, for an account currently onboarding_org
-// (whether that's a brand-new org signup or an existing "user" via
-// Settings). Creates the ORGREQ and moves the caller to pending_org.
+// (the state a brand-new org signup reaches directly). Creates the ORGREQ
+// and moves the caller to pending_org.
 export async function callSubmitOrganizationRequest({ name, phone, location, reason }) {
   const fn = httpsCallable(functions, 'submit_organization_request');
   const result = await fn({ name, phone, location, reason });
@@ -223,6 +241,51 @@ export async function callListQuestAttendees(questId) {
   const fn = httpsCallable(functions, 'list_quest_attendees');
   const result = await fn({ questId });
   return result.data.attendees;
+}
+
+// organization (own quests) or admin (any quest): AI-drafted feedback (a
+// default rating + a generated message) for every checked-in attendee who
+// doesn't already have feedback for this quest. Nothing is persisted by
+// this call — see callSubmitQuestFeedbackBatch for the actual send.
+export async function callGenerateQuestFeedbackDrafts(questId) {
+  const fn = httpsCallable(functions, 'generate_quest_feedback_drafts');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): persists the org's
+// (possibly edited) feedback for a batch of attendees at once — this is
+// what actually writes to each attendee's journal and awards their bonus
+// points.
+export async function callSubmitQuestFeedbackBatch({ questId, feedback }) {
+  const fn = httpsCallable(functions, 'submit_quest_feedback_batch');
+  const result = await fn({ questId, feedback });
+  return result.data;
+}
+
+// user: acknowledges the live "you got feedback" popup for one quest, so it
+// doesn't show again on a later page load. Doesn't affect the journal's
+// unread badge — see callMarkFeedbackRead for that.
+export async function callMarkFeedbackNotified(questId) {
+  const fn = httpsCallable(functions, 'mark_feedback_notified');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// user: marks a journal entry as read (opened), clearing its contribution
+// to the BottomNav badge count.
+export async function callMarkFeedbackRead(questId) {
+  const fn = httpsCallable(functions, 'mark_feedback_read');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// user: saves (or updates) the caller's own private reflection for a quest
+// they've already received organization feedback on.
+export async function callSubmitQuestReflection({ questId, body }) {
+  const fn = httpsCallable(functions, 'submit_quest_reflection');
+  const result = await fn({ questId, body });
+  return result.data;
 }
 
 // organization: sets the org's own location-area and activity-type tags

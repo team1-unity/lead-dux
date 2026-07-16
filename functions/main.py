@@ -7,6 +7,8 @@ from io import BytesIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import qrcode
+from google import genai
+from google.genai import types as genai_types
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import auth, firestore, initialize_app
@@ -21,10 +23,13 @@ set_global_options(max_instances=10)
 initialize_app()
 
 # The full role state machine:
-#   (no claim) -> onboarding_user -> user -> onboarding_org -> pending_org -> organization
-# Everyone signs up and onboards the same way; onboarding_org is only
-# reached afterward, via Settings (start_organization_onboarding). admin is
-# granted out-of-band (config/admins allowlist or set_user_role).
+#   individual: (no claim) -> onboarding_user -> user
+#   organization: (no claim) -> onboarding_org -> pending_org -> organization
+# Which branch a brand-new signup starts on is chosen at signup time (see
+# complete_signup's accountType) and is permanent — there's no in-app path
+# from one branch to the other. Someone who picks the wrong one has to
+# delete their account (delete_account) and sign up again. admin is granted
+# out-of-band (config/admins allowlist or set_user_role).
 ASSIGNABLE_ROLES = {"onboarding_user", "user", "onboarding_org", "pending_org", "organization", "admin"}
 
 
@@ -61,6 +66,21 @@ def _require_admin(req: https_fn.CallableRequest):
 # check_in_attendee.
 
 DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
+
+# Point System & Feedback (see AI_README.md) ---------------------------------
+#
+# Two sources count toward a user's points today: a flat amount for
+# completing an organization quest (awarded at check-in, below), and a
+# bonus from organization feedback (see submit_quest_feedback_batch further
+# down). Side-quest tiered points (10-20 depending on difficulty tier) and
+# rank-gated unlocking aren't implemented yet — quests have no tier concept
+# in the schema — so isDefault (neighborhood) quests don't award points
+# here; that's a separate follow-up. Rank itself (Iron/Bronze/Silver/Gold/
+# Diamond, 100 points each) is derived client-side from `points` alone
+# (see frontend/template/rank.js) rather than stored, since nothing server-
+# side needs the rank name today.
+ORG_QUEST_BASE_POINTS = 20
+FEEDBACK_BONUS_BY_RATING = {10: 20, 9: 18, 8: 15, 7: 12, 6: 10, 5: 8, 4: 6, 3: 4, 2: 2, 1: 0}
 
 
 def _to_utc(value: datetime) -> datetime:
@@ -294,9 +314,12 @@ def set_user_role(req: https_fn.CallableRequest) -> dict:
 
 
 # Callable from the frontend right after Firebase Auth account creation —
-# the one and only signup path. Everyone starts as onboarding_user; becoming
-# an organization is something a "user" opts into afterward, from Settings
-# (see start_organization_onboarding and submit_organization_request below).
+# the one and only signup path, for both accountTypes. accountType chooses
+# which branch of the role state machine a brand-new account starts on:
+# "organization" skips straight to onboarding_org (no users/{uid} profile —
+# organizations get their own doc later, at approve_organization) instead of
+# onboarding_user. That choice is permanent — see the state-machine note
+# above.
 @https_fn.on_call()
 def complete_signup(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -314,11 +337,24 @@ def complete_signup(req: https_fn.CallableRequest) -> dict:
         auth.set_custom_user_claims(uid, {"role": "admin"})
         return {"success": True, "role": "admin"}
 
+    if req.data.get("accountType") == "organization":
+        auth.set_custom_user_claims(uid, {"role": "onboarding_org"})
+        return {"success": True, "role": "onboarding_org"}
+
     db.collection("users").document(uid).set({
         "email": email,
         "name": req.data.get("name"),
         "age": None,
         "interests": [],
+        "experienceLevel": None,
+        "experienceLevelOther": "",
+        "timeAvailability": None,
+        "timeAvailabilityOther": "",
+        "groupPreference": None,
+        "groupPreferenceOther": "",
+        "motivation": None,
+        "motivationOther": "",
+        "leaderGoal": "",
         "isSuspended": False,
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
@@ -327,10 +363,52 @@ def complete_signup(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "role": "onboarding_user"}
 
 
-# Callable from the onboarding (interests) form, once, right after an
-# onboarding_user answers it. Writes to the caller's own doc only — there's
-# no targetUid here, unlike set_user_role, so there's nothing to escalate.
-# Graduates the caller straight to role "user".
+# The leadership-profile options submit_onboarding validates against — kept
+# server-side (not just in the frontend's leadershipProfile.js) so a
+# tampered client can't write a value the recommendation step won't
+# recognize. Keep these two vocabularies in sync by hand. "other" is always
+# additionally accepted on top of each set below — the frontend's
+# ChoiceField appends an "Other" pill to every question, which reveals a
+# free-text field (the {field}Other companion) for an answer that isn't one
+# of the presets.
+EXPERIENCE_LEVELS = {"new", "some", "experienced"}
+TIME_AVAILABILITY_OPTIONS = {"monthly", "weekly", "flexible"}
+GROUP_PREFERENCES = {"solo", "team", "leading"}
+MOTIVATIONS = {"experience", "community", "impact", "requirement"}
+MAX_OTHER_LENGTH = 120
+MAX_LEADER_GOAL_LENGTH = 280
+
+
+def _resolve_choice_with_other(value, other_value, known_values, field_name):
+    if value == "other":
+        if not isinstance(other_value, str) or not other_value.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f'{field_name}Other is required when {field_name} is "other".',
+            )
+        if len(other_value) > MAX_OTHER_LENGTH:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"{field_name}Other must be at most {MAX_OTHER_LENGTH} characters.",
+            )
+        return "other", other_value.strip()
+
+    if value not in known_values:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f'{field_name} must be one of {sorted(known_values)} or "other".',
+        )
+    return value, ""
+
+
+# Callable from the onboarding form, once, right after an onboarding_user
+# answers it. Writes to the caller's own doc only — there's no targetUid
+# here, unlike set_user_role, so there's nothing to escalate. Graduates the
+# caller straight to role "user". Beyond name/age/interests, this also
+# collects a short leadership profile (experience level, time availability,
+# group preference, motivation, and what kind of leader they want to
+# become) — richer signal for a future quest-recommendation step to match
+# quests to where someone actually is, not just their interest tags.
 @https_fn.on_call()
 def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "onboarding_user")
@@ -338,6 +416,7 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     interests = req.data.get("interests")
     age = req.data.get("age")
     name = req.data.get("name")
+    leader_goal = req.data.get("leaderGoal") or ""
 
     if not isinstance(interests, list) or not interests:
         raise https_fn.HttpsError(
@@ -345,31 +424,54 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
             "interests must be a non-empty list.",
         )
 
+    experience_level, experience_level_other = _resolve_choice_with_other(
+        req.data.get("experienceLevel"), req.data.get("experienceLevelOther"), EXPERIENCE_LEVELS, "experienceLevel",
+    )
+    time_availability, time_availability_other = _resolve_choice_with_other(
+        req.data.get("timeAvailability"), req.data.get("timeAvailabilityOther"), TIME_AVAILABILITY_OPTIONS, "timeAvailability",
+    )
+    group_preference, group_preference_other = _resolve_choice_with_other(
+        req.data.get("groupPreference"), req.data.get("groupPreferenceOther"), GROUP_PREFERENCES, "groupPreference",
+    )
+    motivation, motivation_other = _resolve_choice_with_other(
+        req.data.get("motivation"), req.data.get("motivationOther"), MOTIVATIONS, "motivation",
+    )
+
+    if not isinstance(leader_goal, str) or not leader_goal.strip():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "leaderGoal is required.",
+        )
+    if len(leader_goal) > MAX_LEADER_GOAL_LENGTH:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"leaderGoal must be at most {MAX_LEADER_GOAL_LENGTH} characters.",
+        )
+
     firestore.client().collection("users").document(req.auth.uid).update({
         "name": name,
         "age": age,
         "interests": interests,
+        "experienceLevel": experience_level,
+        "experienceLevelOther": experience_level_other,
+        "timeAvailability": time_availability,
+        "timeAvailabilityOther": time_availability_other,
+        "groupPreference": group_preference,
+        "groupPreferenceOther": group_preference_other,
+        "motivation": motivation,
+        "motivationOther": motivation_other,
+        "leaderGoal": leader_goal.strip(),
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
     auth.set_custom_user_claims(req.auth.uid, {"role": "user"})
     return {"success": True, "role": "user"}
 
 
-# Callable from Settings by an already-onboarded "user" who wants to
-# register an organization after all. Just flips the state to
-# onboarding_org — the same state a brand-new org signup passes through via
-# complete_signup — and the org-details form (submit_organization_request)
-# takes it from there.
-@https_fn.on_call()
-def start_organization_onboarding(req: https_fn.CallableRequest) -> dict:
-    _require_role(req, "user")
-    auth.set_custom_user_claims(req.auth.uid, {"role": "onboarding_org"})
-    return {"success": True, "role": "onboarding_org"}
-
-
 # Callable from the org-details form, for an account currently in
-# onboarding_org (reached either via a brand-new org signup or via Settings).
-# Creates the pending ORGREQ and graduates the caller to pending_org.
+# onboarding_org (the state a brand-new org signup reaches directly via
+# complete_signup). A "user" who meant to sign up as an organization has no
+# in-app conversion path — they delete their account (Settings) and sign up
+# again choosing the organization option.
 @https_fn.on_call()
 def submit_organization_request(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "onboarding_org")
@@ -1032,7 +1134,319 @@ def check_in_attendee(req: https_fn.CallableRequest) -> dict:
         return {"success": True, "alreadyCheckedIn": True, "attendee": attendee}
 
     attendance_ref.update({"status": "checked_in", "checkedInAt": firestore.SERVER_TIMESTAMP})
+    # Base points only for organization quests — see the Point System note
+    # above _attendance_ref's DEFAULT_EVENT_WINDOW_HOURS for why default/
+    # neighborhood quests are excluded for now.
+    if quest_snap.to_dict().get("orgId"):
+        db.collection("users").document(uid).update({"points": firestore.Increment(ORG_QUEST_BASE_POINTS)})
     return {"success": True, "alreadyCheckedIn": False, "attendee": attendee}
+
+
+# Organization feedback & reflections journal --------------------------------
+#
+# The reverse direction from a review: here the ORGANIZATION rates and
+# messages an individual attendee about their own performance on a specific
+# quest (1-10, see FEEDBACK_BONUS_BY_RATING above), rather than the attendee
+# reviewing the org. Feedback lives at users/{uid}/feedback/{questId} — one
+# doc per person per quest occurrence, self-readable directly via the client
+# SDK (see firestore.rules) since there's nothing sensitive in it, unlike
+# attendance tokens. Writing it is still Cloud-Function-only, same as every
+# other collection. `notified` gates the one-time "you got feedback" popup
+# (frontend/template/FeedbackToast.jsx); `read` gates the BottomNav journal
+# badge — the two are deliberately separate, since dismissing the popup
+# shouldn't itself mark the journal entry as read.
+#
+# Writing feedback is a two-step flow: generate_quest_feedback_drafts uses
+# Gemini (Google's free-tier-eligible API — see the GEMINI_API_KEY secret
+# below) to write a first-pass rating+message per checked-in attendee (so an
+# org with many attendees doesn't have to write N messages from scratch),
+# then the org reviews/edits in the frontend and submit_quest_feedback_batch
+# persists whatever it actually decided to send. Nothing is written to
+# Firestore until that second step.
+
+FEEDBACK_MESSAGE_MAX_LENGTH = 600
+DEFAULT_FEEDBACK_RATING = 10
+
+_FEEDBACK_DRAFT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "feedback": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "uid": {"type": "string"},
+                    "message": {"type": "string"},
+                },
+                "required": ["uid", "message"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["feedback"],
+    "additionalProperties": False,
+}
+
+
+def _require_owning_org_or_admin(req: https_fn.CallableRequest, quest: dict, action: str):
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and quest.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            f"You can only {action} for your own organization's quests.",
+        )
+
+
+def _get_quest_or_404(db, quest_id: str) -> dict:
+    snap = db.collection("quests").document(quest_id).get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, f"No quest {quest_id}.")
+    return snap.to_dict()
+
+
+# Callable from the org dashboard's "Give Feedback" button on a quest (own
+# quests only, or admin for any). Every checked-in attendee who doesn't
+# already have a feedback doc for this quest gets a draft — the org's own
+# name is never sent to Gemini, only the quest's title/description and each
+# attendee's name, so the model has nothing to invent specific actions from
+# and is told not to. Ratings default to the max (10); the org can lower
+# any of them, or edit any message, before anything is actually sent (see
+# submit_quest_feedback_batch). Nothing is persisted here — this only
+# returns a proposal.
+@https_fn.on_call(secrets=["GEMINI_API_KEY"])
+def generate_quest_feedback_drafts(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    quest_id = req.data.get("questId")
+    if not quest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
+
+    db = firestore.client()
+    quest = _get_quest_or_404(db, quest_id)
+    _require_owning_org_or_admin(req, quest, "generate feedback")
+
+    if not quest.get("orgId"):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This quest has no organization to give feedback as.",
+        )
+
+    already_given = set(quest.get("feedbackGivenUids") or [])
+    attendees = []
+    for doc in db.collection("quests").document(quest_id).collection("attendance").stream():
+        if doc.to_dict().get("status") != "checked_in" or doc.id in already_given:
+            continue
+        user_snap = db.collection("users").document(doc.id).get()
+        name = (user_snap.to_dict().get("name") if user_snap.exists else None) or "there"
+        attendees.append({"uid": doc.id, "name": name})
+
+    if not attendees:
+        return {"questTitle": quest.get("title"), "attendees": []}
+
+    people_lines = "\n".join(f'- uid "{a["uid"]}": {a["name"]}' for a in attendees)
+    prompt = (
+        f'Write a short (2-3 sentence), warm, encouraging feedback message for each of the '
+        f'following people, who each just completed the community quest "{quest.get("title")}" '
+        f'({quest.get("description")}).\n\n'
+        f"Vary the phrasing, structure, and opening line across people so the set doesn't read like "
+        f"a mail-merge template with names swapped in. You don't know what any specific person "
+        f"actually did during the quest — don't invent specific actions or achievements for them. "
+        f"Keep each message grounded in the quest itself and a genuine tone of thanks.\n\n"
+        f"People:\n{people_lines}\n\n"
+        f'Return one entry per person in `feedback`, each with that exact `uid` value copied back '
+        f"and your generated `message`."
+    )
+
+    # genai.Client() reads GEMINI_API_KEY from the environment on its own —
+    # created here, not at module level, so a missing/misconfigured secret
+    # only breaks this one function's cold start, not every function in
+    # this file (see the ORG_QUEST_BASE_POINTS module note for the same
+    # reasoning applied to Firestore access elsewhere).
+    #
+    # NOTE for whoever touches this next: ai.google.dev's own docs (as of
+    # this writing) describe a client.interactions.create(...) method that
+    # doesn't match what the google-genai SDK's own GitHub README documents
+    # (client.models.generate_content(...), used below) — sourced from the
+    # README since it's tied directly to the installed package version,
+    # not a docs page that may be ahead of or behind it. Worth
+    # re-verifying if this starts throwing AttributeErrors after a SDK
+    # upgrade.
+    client = genai.Client()
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=genai_types.GenerateContentConfig(
+            max_output_tokens=2048,
+            response_mime_type="application/json",
+            response_json_schema=_FEEDBACK_DRAFT_SCHEMA,
+        ),
+    )
+    text = response.text
+    if not text:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            "The AI didn't return any feedback drafts. Try again.",
+        )
+    messages_by_uid = {item["uid"]: item["message"] for item in json.loads(text).get("feedback", [])}
+
+    return {
+        "questTitle": quest.get("title"),
+        "attendees": [
+            {
+                "uid": a["uid"],
+                "name": a["name"],
+                "rating": DEFAULT_FEEDBACK_RATING,
+                "message": messages_by_uid.get(a["uid"], ""),
+            }
+            for a in attendees
+        ],
+    }
+
+
+# Callable from the org dashboard, once the org has reviewed (and possibly
+# edited) the drafts from generate_quest_feedback_drafts. Persists exactly
+# what's passed in — an entry for a uid that isn't actually a checked-in
+# attendee, or one that already has feedback for this quest, is silently
+# skipped (stale UI, not necessarily tampering) rather than failing the
+# whole batch; a malformed rating/message DOES fail the whole batch, since
+# that can only come from a broken client, not a stale one.
+@https_fn.on_call()
+def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    quest_id = req.data.get("questId")
+    feedback_list = req.data.get("feedback")
+    if not quest_id or not isinstance(feedback_list, list) or not feedback_list:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId and a non-empty feedback list are required.",
+        )
+
+    db = firestore.client()
+    quest_ref = db.collection("quests").document(quest_id)
+    quest = _get_quest_or_404(db, quest_id)
+    _require_owning_org_or_admin(req, quest, "submit feedback")
+
+    checked_in_uids = {
+        doc.id
+        for doc in quest_ref.collection("attendance").stream()
+        if doc.to_dict().get("status") == "checked_in"
+    }
+    already_given = set(quest.get("feedbackGivenUids") or [])
+
+    batch = db.batch()
+    sent_uids = []
+    for entry in feedback_list:
+        uid = entry.get("uid")
+        if uid not in checked_in_uids or uid in already_given:
+            continue
+
+        rating = entry.get("rating")
+        message = entry.get("message")
+        if isinstance(rating, bool) or not isinstance(rating, int) or rating not in FEEDBACK_BONUS_BY_RATING:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "rating must be an integer between 1 and 10.",
+            )
+        if not isinstance(message, str) or not message.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "message is required for every entry.",
+            )
+        if len(message) > FEEDBACK_MESSAGE_MAX_LENGTH:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"message must be at most {FEEDBACK_MESSAGE_MAX_LENGTH} characters.",
+            )
+
+        bonus = FEEDBACK_BONUS_BY_RATING[rating]
+        feedback_ref = db.collection("users").document(uid).collection("feedback").document(quest_id)
+        batch.set(feedback_ref, {
+            "questId": quest_id,
+            "questTitle": quest.get("title"),
+            "seriesId": quest.get("seriesId") or quest_id,
+            "orgId": quest.get("orgId"),
+            "orgName": quest.get("orgName"),
+            "rating": rating,
+            "message": message.strip(),
+            "pointsAwarded": bonus,
+            "notified": False,
+            "read": False,
+            "reflectionBody": "",
+            "reflectionUpdatedAt": None,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        })
+        batch.update(db.collection("users").document(uid), {"points": firestore.Increment(bonus)})
+        sent_uids.append(uid)
+
+    if sent_uids:
+        batch.update(quest_ref, {"feedbackGivenUids": firestore.ArrayUnion(sent_uids)})
+        batch.commit()
+
+    return {"success": True, "sentUids": sent_uids}
+
+
+# Callable from the frontend's live feedback popup, the moment it's shown —
+# flips `notified` so the same feedback doesn't pop up again on a later page
+# load. Deliberately separate from `read` (see module note above): dismissing
+# or acting on the popup shouldn't also clear the journal's unread badge for
+# an entry the user hasn't actually opened yet.
+@https_fn.on_call()
+def mark_feedback_notified(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+    quest_id = req.data.get("questId")
+    if not quest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
+    firestore.client().collection("users").document(req.auth.uid).collection("feedback").document(quest_id).update({
+        "notified": True,
+    })
+    return {"success": True}
+
+
+# Callable from the Journal page when a user opens a specific entry — clears
+# that entry's contribution to the BottomNav badge count.
+@https_fn.on_call()
+def mark_feedback_read(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+    quest_id = req.data.get("questId")
+    if not quest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
+    firestore.client().collection("users").document(req.auth.uid).collection("feedback").document(quest_id).update({
+        "read": True,
+    })
+    return {"success": True}
+
+
+REFLECTION_MAX_LENGTH = 4000
+
+
+# Callable from the Journal page's reflection textarea. Requires the
+# feedback doc to already exist — reflections are written in response to
+# organization feedback, not before it. Purely private (see firestore.rules:
+# only the owner or an admin can ever read it); doesn't affect rank.
+@https_fn.on_call()
+def submit_quest_reflection(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    quest_id = req.data.get("questId")
+    body = req.data.get("body")
+    if not quest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
+    if not isinstance(body, str) or len(body) > REFLECTION_MAX_LENGTH:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"body must be a string of at most {REFLECTION_MAX_LENGTH} characters.",
+        )
+
+    ref = firestore.client().collection("users").document(req.auth.uid).collection("feedback").document(quest_id)
+    if not ref.get().exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "No feedback found for this quest yet.",
+        )
+    ref.update({"reflectionBody": body.strip(), "reflectionUpdatedAt": firestore.SERVER_TIMESTAMP})
+    return {"success": True}
 
 
 # Callable from the org dashboard's "view attendees" button (own quests
