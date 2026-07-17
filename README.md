@@ -239,6 +239,15 @@ Optionally seed a handful of sample "default neighborhood" quests:
 python seed_quests.py
 ```
 
+Or seed a full presentation-ready demo dataset instead — verified organizations
+with complete profiles, a realistic spread of organization quests, demo users
+at every rank, reviews/Trust Scores, and the 6 default Iron neighborhood
+quests (prints every seeded login at the end):
+
+```sh
+python seed_demo_data.py
+```
+
 ### 3. Frontend
 
 From the repo root (an npm workspace):
@@ -290,6 +299,7 @@ lead-dux/
 │   ├── main.py                  # Every callable function + the role state machine
 │   ├── bootstrap_admin.py       # One-time: grant the first admin account (local only)
 │   ├── seed_quests.py           # One-time: seed sample default quests (local only)
+│   ├── seed_demo_data.py        # One-time: seed a full presentation-ready demo dataset (local only)
 │   └── requirements.txt
 │
 └── frontend/
