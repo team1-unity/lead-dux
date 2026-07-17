@@ -7,7 +7,7 @@ import { callCreateQuest, callCreateRecurringQuest } from '@shared/fetch.jsx';
 import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
-import { ConfirmBox, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
+import { ConfirmBox, ShareQuestBox, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
@@ -81,12 +81,16 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   const { primary, occurrences } = series;
   const a = useQuestSeriesActions(series, onChanged);
   const { selected, selectedId, isSeries } = a;
+  // Per-series, not per-date (see ShareQuestBox) — no reset needed when
+  // switchDate changes which occurrence is selected.
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Reset to the first occurrence and collapse any open sub-panels
   // whenever a different series is shown in this slot (desktop: clicking
   // a new row reuses this same mounted component rather than remounting).
   useEffect(() => {
     a.switchDate(occurrences[0].id);
+    setShareOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series.seriesId]);
 
@@ -152,6 +156,9 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         </StampButton>
         <StampButton type="button" onClick={a.toggleReviews} disabled={a.busy}>
           {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
+        </StampButton>
+        <StampButton type="button" onClick={() => setShareOpen((v) => !v)} disabled={a.busy}>
+          {shareOpen ? 'Hide share link' : 'Share quest'}
         </StampButton>
         {!selected.qrToken ? (
           <StampButton type="button" onClick={a.generateQr} disabled={a.qrBusy}>
@@ -257,6 +264,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           <p className="data-stat">Attendees scan this from the app's Check In screen.</p>
         </div>
       )}
+      {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
       {a.attendeesOpen && a.attendees && (
         <ul className="data-sublist">
           {a.attendees.length === 0 && <li>No RSVPs yet.</li>}

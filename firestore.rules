@@ -49,8 +49,18 @@ service cloud.firestore {
     // they're never read directly by a client either way, only ever
     // returned baked into a QR image over the callable-function channel,
     // same as the rest of this doc's write-only-via-Cloud-Function shape.
+    //
+    // `get` (a single doc by id) is additionally open to anyone at all,
+    // signed in or not — this is what SharedQuest.jsx's public "Share
+    // Quest" link relies on (see QuestSeriesRow.jsx's ShareQuestBox), the
+    // one place in the app meant to work for a visitor with no account.
+    // `list` (browsing/querying the whole collection) stays signed-in-only
+    // so the full catalog isn't publicly crawlable — only a quest whose
+    // exact id/seriesId someone already has (from a specific shared link)
+    // is reachable this way.
     match /quests/{questId} {
-      allow read: if request.auth != null;
+      allow get: if true;
+      allow list: if request.auth != null;
       allow write: if false;
     }
 
@@ -73,6 +83,10 @@ service cloud.firestore {
     match /questSeries/{seriesId} {
       // Just the aggregate reviewCount/avgRating — any signed-in user can
       // see a quest's rating while browsing, same as the quests collection.
+      // Unlike quests/{questId}, SharedQuest.jsx's public link doesn't
+      // read this doc (QuestDetailBody, which it reuses, doesn't render
+      // the rating), so this stays signed-in-only rather than opening a
+      // read path nothing actually uses yet.
       allow read: if request.auth != null;
       allow write: if false;
 

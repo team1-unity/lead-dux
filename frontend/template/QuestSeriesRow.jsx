@@ -140,6 +140,46 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
   );
 }
 
+// The stable public link is just `${origin}/share/{seriesId}` — seriesId
+// never changes once a quest is created (see _quest_doc_fields), and
+// SharedQuest.jsx is the signed-out-friendly page it points at. No backend
+// call needed to "generate" it: every quest doc already carries its own
+// seriesId, so there's nothing to fetch that isn't already on hand here.
+export function ShareQuestBox({ seriesId }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/share/${seriesId}`;
+
+  async function copy() {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="ink-card share-quest-box" style={{ marginTop: 12 }}>
+      <p style={{ marginTop: 0 }} className="data-stat">
+        Anyone with this link can view (and sign up to RSVP to) this quest, even without an account.
+      </p>
+      <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          readOnly
+          value={url}
+          onFocus={(e) => e.target.select()}
+          aria-label="Shareable quest link"
+          style={{ flex: '1 1 260px' }}
+        />
+        <StampButton type="button" variant="primary" onClick={copy}>
+          {copied ? 'Copied!' : 'Copy link'}
+        </StampButton>
+      </div>
+      <p aria-live="polite" className="visually-hidden">
+        {copied ? 'Link copied to clipboard' : ''}
+      </p>
+    </div>
+  );
+}
+
 // One row per series (not per date) — a recurring quest with 8 scheduled
 // occurrences shows as a single row with a date selector, rather than
 // flooding the list with 8 near-duplicate rows.
@@ -164,6 +204,10 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
   useEffect(() => {
     setFeedbackOpen(false);
   }, [selectedId]);
+  // Unlike feedback (per-date) or attendees, the share link is per-series
+  // (see ShareQuestBox) — it doesn't need to reset when switchDate changes
+  // which occurrence is selected.
+  const [shareOpen, setShareOpen] = useState(false);
   const rsvpCount = (selected.rsvpd || []).length;
 
   return (
@@ -210,6 +254,11 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
         {primary.orgId && (
           <StampButton type="button" onClick={() => setFeedbackOpen((v) => !v)} disabled={a.busy}>
             {feedbackOpen ? 'Hide feedback' : 'Give feedback'}
+          </StampButton>
+        )}
+        {primary.orgId && (
+          <StampButton type="button" onClick={() => setShareOpen((v) => !v)} disabled={a.busy}>
+            {shareOpen ? 'Hide share link' : 'Share quest'}
           </StampButton>
         )}
         {!selected.qrToken ? (
@@ -317,6 +366,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
         </div>
       )}
       {feedbackOpen && <GiveFeedbackPanel key={selected.id} questId={selected.id} onSent={onChanged} />}
+      {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
       {a.attendeesOpen && a.attendees && (
         <ul className="data-sublist">
           {a.attendees.length === 0 && <li>No RSVPs yet.</li>}

@@ -2451,3 +2451,25 @@ button.data-row:active:not(:disabled) {
   font-size: 0.85rem;
   color: var(--line-soft);
 }
+
+/* SharedQuest.jsx — the public "link is gone/expired" state, and the
+   signed-out RSVP call-to-action shown below an otherwise-normal quest
+   card. Centered like Landing's own hero rather than left-aligned like
+   the rest of the app, since this page has no surrounding nav/list to
+   anchor against. */
+.shared-quest-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 24px;
+}
+.shared-quest-cta {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
