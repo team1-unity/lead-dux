@@ -102,6 +102,24 @@ TIER_BASE_POINTS = {"iron": 10, "bronze": 12, "silver": 15, "gold": 18, "diamond
 RANKS = ["Iron", "Bronze", "Silver", "Gold", "Diamond"]
 POINTS_PER_RANK = 100
 
+# A side quest's tier only unlocks once a user's rank reaches it — TIER_BASE_
+# POINTS is already keyed iron/bronze/silver/gold/diamond in rank order, so
+# it doubles as the tier-unlock order (see _unlocked_tiers) rather than
+# needing a second list kept in sync by hand.
+#
+# Separately, only SIDE_QUEST_CONCURRENT_LIMIT side quests can be RSVP'd-but-
+# not-yet-checked-in at once — this nudges someone back toward organization
+# quests (the app's primary path) instead of stockpiling every unlocked side
+# quest. Completing (or cancelling) one frees a slot; see
+# _active_side_quest_ids.
+SIDE_QUEST_CONCURRENT_LIMIT = 2
+
+
+def _unlocked_tiers(rank: str) -> list:
+    tiers = list(TIER_BASE_POINTS)
+    index = RANKS.index(rank) if rank in RANKS else 0
+    return tiers[: index + 1]
+
 
 def _rank_for_points(points: int) -> str:
     index = min(max(points, 0) // POINTS_PER_RANK, len(RANKS) - 1)
@@ -162,6 +180,21 @@ def _attendance_doc_id(event_id: str, uid: str) -> str:
 
 def _attendance_ref(db, event_id: str, uid: str):
     return db.collection("attendance").document(_attendance_doc_id(event_id, uid))
+
+
+# A side quest counts as "active" (occupying one of the caller's
+# SIDE_QUEST_CONCURRENT_LIMIT slots) as long as they're RSVP'd to it and
+# haven't checked in yet — the same "attendance doc existence means
+# checked-in" rule check_in_to_event and submit_review already rely on.
+# Bounded by however many side quests this one person has ever RSVP'd to,
+# not the whole quests collection.
+def _active_side_quest_ids(db, uid: str) -> list:
+    active = []
+    query = db.collection("quests").where("isDefault", "==", True).where("rsvpd", "array_contains", uid)
+    for doc in query.stream():
+        if not _attendance_ref(db, doc.id, uid).get().exists:
+            active.append(doc.id)
+    return active
 
 
 def _review_ref(db, series_id: str, uid: str, quest_id: str):
@@ -1081,6 +1114,28 @@ def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
             "This quest has no event date on file and can't accept RSVPs. Ask the organization to recreate it.",
         )
+
+    # Side quests are additionally gated by rank (tier unlock) and by how
+    # many the caller already has in progress at once (see
+    # SIDE_QUEST_CONCURRENT_LIMIT) — neither applies to organization quests.
+    # Read-then-decide is fine here (unlike capacity below): both checks are
+    # about this one caller's own state, not a value multiple concurrent
+    # RSVPs could race over.
+    if quest.get("isDefault"):
+        user_snap = db.collection("users").document(req.auth.uid).get()
+        points = user_snap.to_dict().get("points", 0) if user_snap.exists else 0
+        if quest.get("tier") not in _unlocked_tiers(_rank_for_points(points)):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                "You haven't unlocked this side quest tier yet.",
+            )
+        already_rsvpd = req.auth.uid in (quest.get("rsvpd") or [])
+        if not already_rsvpd and len(_active_side_quest_ids(db, req.auth.uid)) >= SIDE_QUEST_CONCURRENT_LIMIT:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                f"You've reached your side quest limit ({SIDE_QUEST_CONCURRENT_LIMIT} at a time). "
+                "Complete one of your current side quests, or check out organization quests instead.",
+            )
 
     # Capacity has to be checked and the rsvpd array updated as one atomic
     # step — otherwise two people RSVPing for the last open spot at the
@@ -2002,6 +2057,30 @@ def get_user_rank(req: https_fn.CallableRequest) -> dict:
         "points": points,
         "rank": _rank_for_points(points),
         "pointsToNextRank": _points_to_next_rank(points),
+    }
+
+
+# Callable from the quest list — self-only (same shape as get_user_rank's
+# default case) so the frontend can gray out side quests the caller either
+# hasn't unlocked yet (tier above their rank) or can't take on right now
+# (already at SIDE_QUEST_CONCURRENT_LIMIT active ones), with a message
+# explaining which and a way back to organization quests. rsvp_to_quest
+# enforces the same two rules server-side — this just exposes the "why"
+# ahead of time instead of the frontend finding out from a failed RSVP.
+@https_fn.on_call()
+def get_side_quest_status(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    db = firestore.client()
+    snap = db.collection("users").document(req.auth.uid).get()
+    points = snap.to_dict().get("points", 0) if snap.exists else 0
+    active_ids = _active_side_quest_ids(db, req.auth.uid)
+
+    return {
+        "unlockedTiers": _unlocked_tiers(_rank_for_points(points)),
+        "activeSideQuestIds": active_ids,
+        "limit": SIDE_QUEST_CONCURRENT_LIMIT,
+        "atLimit": len(active_ids) >= SIDE_QUEST_CONCURRENT_LIMIT,
     }
 
 

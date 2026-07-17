@@ -202,6 +202,19 @@ export async function callCancelRsvp(questId) {
   return result.data;
 }
 
+// user: self-only. Returns { unlockedTiers, activeSideQuestIds, limit,
+// atLimit } — which side quest tiers the caller's rank has unlocked, which
+// of their side quests are still RSVP'd-but-not-checked-in (occupying one
+// of `limit` concurrent slots), and whether they're at that limit right
+// now. rsvp_to_quest enforces the same rules server-side; this just lets
+// the quest list gray out and explain locked/at-limit side quests ahead of
+// a failed RSVP attempt.
+export async function callGetSideQuestStatus() {
+  const fn = httpsCallable(functions, 'get_side_quest_status');
+  const result = await fn({});
+  return result.data;
+}
+
 // organization (own quest) or admin (any quest): mints this quest's QR
 // code if it doesn't have one yet, or re-renders the existing one — never
 // rotates an existing token (see callRefreshEventQrCode for that).

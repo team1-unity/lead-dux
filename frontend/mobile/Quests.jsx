@@ -10,6 +10,7 @@ import {
   callGetMyReview,
   callSubmitReview,
   callListQuestReviews,
+  callGetSideQuestStatus,
 } from '@shared/fetch.jsx';
 import { groupBySeries, attachSeriesRatings, formatRecurrence, isUpcoming } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
@@ -19,7 +20,7 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
-import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch } from '@shared/icons.jsx';
+import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch, IconLock } from '@shared/icons.jsx';
 
 // Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
 // (isDefault) quests carry a tier; organization quests never do.
@@ -188,7 +189,7 @@ function QuestReviewsList({ questId }) {
 // own lazily-fetched sub-state (QR, review) never double-fetches. Exported
 // so the standalone Quest Details page (see frontend/app/src/QuestDetails.jsx)
 // can reuse this exact body instead of duplicating it.
-export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, showTitle = false }) {
+export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, gate, onGoToOrgQuests, showTitle = false }) {
   const { primary, occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
   const [showReview, setShowReview] = useState(false);
@@ -273,15 +274,26 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
           </TagStamp>
         ))}
       </div>
+      {gate && (
+        <p className="side-quest-gate" id={`${selected.id}-gate`} role="status">
+          <IconLock /> {gate.message}
+        </p>
+      )}
       <div className="quest-actions">
         {canRsvp && (
           <StampButton
             type="button"
             variant={isRsvpd ? 'danger' : 'primary'}
             onClick={() => onToggleRsvp(selected)}
-            disabled={busyId === selected.id || isFull}
+            disabled={busyId === selected.id || isFull || !!gate}
+            aria-describedby={gate ? `${selected.id}-gate` : undefined}
           >
-            {busyId === selected.id ? 'Saving...' : isFull ? 'Full' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
+            {busyId === selected.id ? 'Saving...' : gate ? (gate.type === 'locked' ? 'Locked' : 'Limit reached') : isFull ? 'Full' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
+          </StampButton>
+        )}
+        {gate && onGoToOrgQuests && (
+          <StampButton type="button" variant="primary" onClick={onGoToOrgQuests}>
+            View organization quests
           </StampButton>
         )}
         <AnimatePresence>
@@ -318,7 +330,7 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
 // rather than flooding the list with 8 near-duplicate entries. RSVP only
 // happens once expanded (QuestDetailBody) — there's no quick-accept action
 // on the collapsed card.
-function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
+function QuestRow({ series, isLast, isOpen, isActive, gate, onSelect, children }) {
   const { primary, occurrences } = series;
 
   return (
@@ -330,12 +342,17 @@ function QuestRow({ series, isLast, isOpen, isActive, onSelect, children }) {
         {!isLast && <div className="quest-thread" />}
       </div>
 
-      <div className="ink-card quest-content-col" data-active={isActive ? 'true' : undefined}>
+      <div className="ink-card quest-content-col" data-active={isActive ? 'true' : undefined} data-gated={gate?.type}>
         <button type="button" className="quest-card-head" onClick={onSelect} aria-expanded={isOpen || isActive}>
           <div className="quest-card-titles">
             <p className="quest-title">{primary.title}</p>
             {primary.isDefault && primary.tier && (
               <p className="quest-org-line"><TierBadge tier={primary.tier} /></p>
+            )}
+            {gate && (
+              <p className="quest-gate-badge">
+                <IconLock /> {gate.type === 'locked' ? 'Locked' : 'Side quest limit reached'}
+              </p>
             )}
             {/* Plain text, not a Link — this whole row is already inside a
                 <button onClick={onSelect}> to expand the card, and an <a>
@@ -380,6 +397,32 @@ function relevanceScore(quest, interests) {
   return (quest.tags || []).filter((tag) => interests.includes(tag)).length;
 }
 
+// Side quests are gated two ways, independent of each other: a tier the
+// caller's rank hasn't reached yet (see unlockedTiers, sourced from
+// get_side_quest_status/_unlocked_tiers in functions/main.py), or being
+// full up on concurrent in-progress side quests (see atLimit/
+// activeSideQuestIds/SIDE_QUEST_CONCURRENT_LIMIT there). Both are
+// enforced again server-side in rsvp_to_quest — this only decides what to
+// show before someone tries. Returns null for anything not gated,
+// including every organization quest and every side quest already one of
+// the caller's own active ones (not "additional").
+function sideQuestGate(primary, status) {
+  if (!primary.isDefault || !status) return null;
+  if (primary.tier && !status.unlockedTiers.includes(primary.tier)) {
+    return {
+      type: 'locked',
+      message: `Reach ${TIER_LABELS[primary.tier] || primary.tier} rank to unlock this quest.`,
+    };
+  }
+  if (status.atLimit && !status.activeSideQuestIds.includes(primary.id)) {
+    return {
+      type: 'atLimit',
+      message: `You've reached your side quest limit (${status.limit} at a time). Complete one of your current side quests, or head over to organization quests to keep earning points.`,
+    };
+  }
+  return null;
+}
+
 export function Quests({ interests, name }) {
   const { user, role } = useAuth();
   const [seriesList, setSeriesList] = useState(null);
@@ -414,6 +457,17 @@ export function Quests({ interests, name }) {
 
   useEffect(load, [interests]);
 
+  // Only "user" accounts RSVP at all, so this is the only role that needs
+  // to know which side quests are locked/at-limit. Reloaded after every
+  // RSVP/cancel below since taking on or freeing a side quest slot changes
+  // whether the *next* one shows as gated.
+  const [sideQuestStatus, setSideQuestStatus] = useState(null);
+  function loadSideQuestStatus() {
+    if (role !== 'user') return;
+    callGetSideQuestStatus().then(setSideQuestStatus).catch(() => {});
+  }
+  useEffect(loadSideQuestStatus, [role]);
+
   async function toggleRsvp(quest) {
     setBusyId(quest.id);
     try {
@@ -423,6 +477,7 @@ export function Quests({ interests, name }) {
         await callRsvpToQuest(quest.id);
       }
       load();
+      loadSideQuestStatus();
     } finally {
       setBusyId(null);
     }
@@ -567,28 +622,34 @@ export function Quests({ interests, name }) {
           <p>No quests match that filter.</p>
         ) : (
           <motion.ul className="quest-list" variants={listVariants} initial={reduce ? false : 'hidden'} animate="show">
-            {visibleSeries.map((series, i) => (
-              <QuestRow
-                key={series.seriesId}
-                series={series}
-                isLast={i === visibleSeries.length - 1}
-                isOpen={!isDesktop && openSeriesId === series.seriesId}
-                isActive={isDesktop && activeSeriesId === series.seriesId}
-                onSelect={() =>
-                  setOpenSeriesId(!isDesktop && openSeriesId === series.seriesId ? null : series.seriesId)
-                }
-              >
-                {!isDesktop && openSeriesId === series.seriesId && (
-                  <QuestDetailBody
-                    series={series}
-                    userId={user?.uid}
-                    canRsvp={role === 'user'}
-                    busyId={busyId}
-                    onToggleRsvp={toggleRsvp}
-                  />
-                )}
-              </QuestRow>
-            ))}
+            {visibleSeries.map((series, i) => {
+              const gate = sideQuestGate(series.primary, sideQuestStatus);
+              return (
+                <QuestRow
+                  key={series.seriesId}
+                  series={series}
+                  isLast={i === visibleSeries.length - 1}
+                  isOpen={!isDesktop && openSeriesId === series.seriesId}
+                  isActive={isDesktop && activeSeriesId === series.seriesId}
+                  gate={gate}
+                  onSelect={() =>
+                    setOpenSeriesId(!isDesktop && openSeriesId === series.seriesId ? null : series.seriesId)
+                  }
+                >
+                  {!isDesktop && openSeriesId === series.seriesId && (
+                    <QuestDetailBody
+                      series={series}
+                      userId={user?.uid}
+                      canRsvp={role === 'user'}
+                      busyId={busyId}
+                      onToggleRsvp={toggleRsvp}
+                      gate={gate}
+                      onGoToOrgQuests={() => setSegment('org')}
+                    />
+                  )}
+                </QuestRow>
+              );
+            })}
           </motion.ul>
         )}
       </div>
@@ -602,6 +663,8 @@ export function Quests({ interests, name }) {
               canRsvp={role === 'user'}
               busyId={busyId}
               onToggleRsvp={toggleRsvp}
+              gate={sideQuestGate(activeSeries.primary, sideQuestStatus)}
+              onGoToOrgQuests={() => setSegment('org')}
               showTitle
             />
           ) : (
