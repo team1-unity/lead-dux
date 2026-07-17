@@ -2451,3 +2451,25 @@ button.data-row:active:not(:disabled) {
   font-size: 0.85rem;
   color: var(--line-soft);
 }
+
+/* SharedQuest.jsx — the public "link is gone/expired" state. Centered like
+   Landing's own hero rather than left-aligned like the rest of the app,
+   since this page has no surrounding nav/list to anchor against. Signed-
+   out visitors get a real-looking RSVP button (see onGuestRsvp in
+   Quests.jsx's QuestDetailBody) that sends them to sign up, plus this
+   small login link underneath for anyone who already has an account. */
+.shared-quest-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 24px;
+}
+.shared-quest-login-hint {
+  margin-top: 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--line-soft);
+}

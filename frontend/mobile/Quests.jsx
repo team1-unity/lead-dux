@@ -20,6 +20,7 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
+import { ShareQuestBox } from '@shared/QuestSeriesRow.jsx';
 import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch, IconLock } from '@shared/icons.jsx';
 
 // Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
@@ -189,11 +190,22 @@ function QuestReviewsList({ questId }) {
 // own lazily-fetched sub-state (QR, review) never double-fetches. Exported
 // so the standalone Quest Details page (see frontend/app/src/QuestDetails.jsx)
 // can reuse this exact body instead of duplicating it.
-export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp, gate, onGoToOrgQuests, showTitle = false }) {
+export function QuestDetailBody({
+  series,
+  userId,
+  canRsvp,
+  busyId,
+  onToggleRsvp,
+  gate,
+  onGoToOrgQuests,
+  onGuestRsvp,
+  showTitle = false,
+}) {
   const { primary, occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
   const [showReview, setShowReview] = useState(false);
   const [showReviewsList, setShowReviewsList] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const reduce = useReducedMotion();
 
   // Reset to the first occurrence and collapse any open sub-panels whenever
@@ -203,6 +215,7 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
     setSelectedId(occurrences[0].id);
     setShowReview(false);
     setShowReviewsList(false);
+    setShareOpen(false);
   }, [series.seriesId]);
 
   const selected = occurrences.find((o) => o.id === selectedId) || occurrences[0];
@@ -296,6 +309,11 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
             View organization quests
           </StampButton>
         )}
+        {!canRsvp && onGuestRsvp && (
+          <StampButton type="button" variant="primary" onClick={onGuestRsvp}>
+            RSVP
+          </StampButton>
+        )}
         <AnimatePresence>
           {canRsvp && isRsvpd && busyId !== selected.id && (
             <motion.span
@@ -317,10 +335,14 @@ export function QuestDetailBody({ series, userId, canRsvp, busyId, onToggleRsvp,
         <StampButton type="button" onClick={() => setShowReviewsList((v) => !v)}>
           {showReviewsList ? 'Hide reviews' : 'View reviews'}
         </StampButton>
+        <StampButton type="button" onClick={() => setShareOpen((v) => !v)}>
+          {shareOpen ? 'Hide share link' : 'Share quest'}
+        </StampButton>
         <AddToCalendar quest={selected} />
       </div>
       {isRsvpd && showReview && <QuestReview questId={selected.id} />}
       {showReviewsList && <QuestReviewsList questId={selected.id} />}
+      {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
     </div>
   );
 }

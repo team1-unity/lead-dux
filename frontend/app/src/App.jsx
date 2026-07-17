@@ -18,6 +18,7 @@ import { CheckIn } from './CheckIn.jsx';
 import { Certificate } from './Certificate.jsx';
 import { OrganizationProfile } from './OrganizationProfile.jsx';
 import { QuestDetails } from './QuestDetails.jsx';
+import { SharedQuest } from './SharedQuest.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
@@ -131,6 +132,11 @@ function App() {
           <Route path="/register/organization" element={<RegisterOrganization />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Deliberately outside AppShell — this is the one quest page that
+              has to work for a fully signed-out visitor (a share link
+              clicked from outside the app), so it can't sit behind the
+              same tree as routes that assume an authenticated role. */}
+          <Route path="/share/:seriesId" element={<SharedQuest />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<Home />} />
             <Route path="/settings" element={<Settings />} />
