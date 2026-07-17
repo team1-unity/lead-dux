@@ -1367,6 +1367,48 @@ button.quest-card-head:hover:not(:disabled) {
   }
 }
 
+/* A side quest the caller hasn't unlocked (rank below its tier) or can't
+   take on right now (already at their concurrent side quest limit) — see
+   sideQuestGate in Quests.jsx. Dimmed rather than hidden: the row stays
+   fully clickable/expandable so the explanatory message and CTA
+   (.side-quest-gate below) are still reachable, just visually
+   de-emphasized against quests the user can actually act on. */
+.quest-content-col[data-gated] {
+  opacity: 0.6;
+}
+.quest-gate-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--line-soft);
+  margin-top: 3px;
+}
+.quest-gate-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.side-quest-gate {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--line-soft);
+  background: var(--paper-well);
+  color: var(--line-soft);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.side-quest-gate svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 .quest-card-body {
   padding: 4px 16px 18px;
   display: flex;
