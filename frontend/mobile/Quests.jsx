@@ -387,7 +387,12 @@ export function Quests({ interests, name }) {
   const [busyId, setBusyId] = useState(null);
   const [activeTag, setActiveTag] = useState(null);
   const [openSeriesId, setOpenSeriesId] = useState(null);
-  const [segment, setSegment] = useState('org');
+  // Admin-created quests are always side/neighborhood quests (isDefault,
+  // never orgId) — landing an admin on the "org" segment by default means
+  // a quest they just created via the admin dashboard's "Add default
+  // neighborhood quest" form appears to have vanished until they notice
+  // there's a second tab. Every other role still defaults to "org".
+  const [segment, setSegment] = useState(role === 'admin' ? 'side-quests' : 'org');
   const [search, setSearch] = useState('');
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
