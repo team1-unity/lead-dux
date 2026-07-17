@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -25,6 +25,7 @@ import { QuestDetailBody } from '@mobile/Quests.jsx';
 // the normal browsing flow.
 export function SharedQuest() {
   const { seriesId } = useParams();
+  const navigate = useNavigate();
   const { user, role, loading: authLoading } = useAuth();
   const [quest, setQuest] = useState(null);
   const [notFound, setNotFound] = useState(false);
@@ -103,21 +104,20 @@ export function SharedQuest() {
           canRsvp={role === 'user'}
           busyId={busyId}
           onToggleRsvp={toggleRsvp}
+          // Signed out entirely (no account at all) — pressing what looks
+          // like the normal RSVP button sends them to create one instead,
+          // rather than showing a separate "sign up to RSVP" box below an
+          // otherwise inert card. Anyone signed in (even mid-onboarding, or
+          // an org/admin) already gets the normal canRsvp=false treatment
+          // elsewhere in the app, so this stays scoped to true guests.
+          onGuestRsvp={!user ? () => navigate('/register') : undefined}
           showTitle
         />
       </div>
       {!user && (
-        <div className="ink-card shared-quest-cta">
-          <p>Sign up or log in to RSVP to this quest and start earning leadership points.</p>
-          <div className="flex gap-md">
-            <StampButton as={Link} to="/register" variant="primary">
-              Sign up
-            </StampButton>
-            <StampButton as={Link} to="/login">
-              Log in
-            </StampButton>
-          </div>
-        </div>
+        <p className="shared-quest-login-hint">
+          Already have an account? <Link to="/login">Log in</Link>
+        </p>
       )}
     </PageMotion>
   );
