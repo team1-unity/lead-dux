@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getAdditionalUserInfo } from 'firebase/auth';
 import { registerWithEmail, signInWithGoogle } from '@shared/auth.jsx';
 import { callCompleteSignup } from '@shared/fetch.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -42,8 +41,8 @@ export function Register() {
     setError('');
     setSubmitting(true);
     try {
-      const credential = await signInWithGoogle();
-      if (getAdditionalUserInfo(credential)?.isNewUser) {
+      const { isNewUser } = await signInWithGoogle();
+      if (isNewUser) {
         await callCompleteSignup({ name });
         await refreshRole();
       } else {

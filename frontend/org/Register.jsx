@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
-import { getAdditionalUserInfo } from 'firebase/auth';
 import { registerWithEmail, signInWithGoogle } from '@shared/auth.jsx';
 import { callCompleteSignup, callSubmitOrganizationRequest } from '@shared/fetch.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -46,8 +45,8 @@ function SignupStep() {
     setError('');
     setSubmitting(true);
     try {
-      const credential = await signInWithGoogle();
-      if (getAdditionalUserInfo(credential)?.isNewUser) {
+      const { isNewUser } = await signInWithGoogle();
+      if (isNewUser) {
         await callCompleteSignup({ accountType: 'organization' });
       }
       // An existing account signing in here (isNewUser === false) keeps

@@ -8,11 +8,19 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithCredential,
+  getAdditionalUserInfo,
   signOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
   confirmPasswordReset,
 } from 'firebase/auth';
+
+// Only actually used on native platforms (see signInWithGoogle below) — a
+// plain web build never touches this import at runtime, but Capacitor/Vite
+// still need it resolvable at build time.
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 // authentication logic
 
@@ -28,21 +36,42 @@ export async function signInWithEmail(email, password) {
   return signInWithEmailAndPassword(auth, email, password);
 }
 
-// sign in with google (returns the full UserCredential)
+// sign in with google (returns { user, isNewUser })
 //
-// GoogleAuthProvider just describes *which* external login provider to use.
-// signInWithPopup opens a Google sign-in popup and, once the user approves,
-// resolves the same way email sign-in above does — except "sign in" and
-// "sign up" look identical here (unlike email/password, where creating an
-// account is a separate call). Callers that need to tell those apart — e.g.
-// org signup, which must never run its role-granting step against someone
-// who merely logged into an *existing* account — use
-// getAdditionalUserInfo(credential).isNewUser from 'firebase/auth' on the
-// value this returns. That's the whole reason this returns the credential
-// instead of just the user.
+// signInWithPopup doesn't work inside a Capacitor WebView at all — Google
+// blocks OAuth sign-in in embedded webviews outright, popup or redirect —
+// so this branches on platform:
+//
+// - Web: the usual GoogleAuthProvider + signInWithPopup flow.
+// - Native: @capacitor-firebase/authentication drives the actual on-device
+//   Google account picker. capacitor.config.json sets skipNativeAuth: true
+//   for this plugin specifically so it does *only* that handshake and hands
+//   back a Google ID token, rather than also silently signing into a
+//   separate native-only Firebase session — this line then completes the
+//   sign-in through the exact same firebase/auth JS `auth` instance the web
+//   path uses, via signInWithCredential. That keeps onAuthStateChanged,
+//   getIdTokenResult()'s custom claims, and every other AuthContext.jsx
+//   assumption identical across both platforms; nothing downstream needs to
+//   know or care that the credential came from a native picker.
+//
+// Callers get a normalized { user, isNewUser } back either way, instead of
+// each call site having to know that web calls need getAdditionalUserInfo()
+// on a UserCredential while native calls need the plugin's own differently
+// shaped result.
 export async function signInWithGoogle() {
+  if (Capacitor.isNativePlatform()) {
+    const result = await FirebaseAuthentication.signInWithGoogle();
+    const idToken = result.credential?.idToken;
+    if (!idToken) {
+      throw new Error('Google sign-in was cancelled.');
+    }
+    const jsResult = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+    return { user: jsResult.user, isNewUser: getAdditionalUserInfo(jsResult)?.isNewUser ?? false };
+  }
+
   const provider = new GoogleAuthProvider();
-  return signInWithPopup(auth, provider);
+  const jsResult = await signInWithPopup(auth, provider);
+  return { user: jsResult.user, isNewUser: getAdditionalUserInfo(jsResult)?.isNewUser ?? false };
 }
 
 // register a new user with email and password (returns the full UserCredential)

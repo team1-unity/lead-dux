@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Lead-Dux</string>
+    <string name="title_activity_main">Lead-Dux</string>
+    <string name="package_name">com.leaddux.app</string>
+    <string name="custom_url_scheme">com.leaddux.app</string>
+</resources>
