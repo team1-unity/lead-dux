@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "19713060365",
+    "project_id": "lead-dux",
+    "storage_bucket": "lead-dux.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:19713060365:android:13f79100afa8758c546f44",
+        "android_client_info": {
+          "package_name": "com.leaddux.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "19713060365-nefipigp0k6cdg64un804960hof9e76b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.leaddux.app",
+            "certificate_hash": "e70d7349d4bcbec4601b17197212b7a92c1502f9"
+          }
+        },
+        {
+          "client_id": "19713060365-n89i10vpork335asur7vnfniuheuueqv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqw-qVsR55K_pl-HmXqIA9ROyhWe_bzh8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "19713060365-n89i10vpork335asur7vnfniuheuueqv.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

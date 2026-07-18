@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { getAdditionalUserInfo } from 'firebase/auth';
 import { signInWithEmail, signInWithGoogle, signOutUser } from '@shared/auth.jsx';
 import { callCompleteSignup } from '@shared/fetch.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -54,15 +53,14 @@ export function Login() {
     setError('');
     setSubmitting(true);
     try {
-      const credential = await signInWithGoogle();
-      const { user } = credential;
-      if (getAdditionalUserInfo(credential)?.isNewUser) {
-        // signInWithPopup creates the Firebase Auth account on the fly for
-        // any Google identity it hasn't seen before — "Sign in with Google"
-        // here doubles as a signup path whether the account planned for
-        // that or not. Route it through the same completion step Register
-        // uses, so it doesn't end up a half-created account with no role
-        // claim and no profile doc.
+      const { user, isNewUser } = await signInWithGoogle();
+      if (isNewUser) {
+        // signInWithPopup/native sign-in creates the Firebase Auth account
+        // on the fly for any Google identity it hasn't seen before — "Sign
+        // in with Google" here doubles as a signup path whether the account
+        // planned for that or not. Route it through the same completion
+        // step Register uses, so it doesn't end up a half-created account
+        // with no role claim and no profile doc.
         await callCompleteSignup({ name: user.displayName || '' });
         await refreshRole();
       } else {
