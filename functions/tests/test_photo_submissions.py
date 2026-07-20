@@ -182,13 +182,14 @@ class TestApprovePhotoSubmission:
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
         assert user["points"] == main.PHOTO_BONUS_POINTS
 
-    def test_admin_approves_a_side_quest_submission_awards_tier_points_and_creates_attendance(
+    def test_admin_approves_a_side_quest_submission_awards_exactly_tier_points_and_creates_attendance(
         self, fake_firestore, make_request, call,
     ):
         # Side quests have no QR check-in — approving the photo IS the
-        # completion moment, so it awards the tier's base points on top of
-        # the flat photo bonus, and creates the attendance doc that frees
-        # this quest's SIDE_QUEST_CONCURRENT_LIMIT slot.
+        # completion moment, so it awards exactly the tier's base points
+        # (no separate +5 photo bonus stacked on top — that bonus is
+        # organization-quest-only), and creates the attendance doc that
+        # frees this quest's SIDE_QUEST_CONCURRENT_LIMIT slot.
         seed_quest(fake_firestore, "quest-1", orgId=None, isDefault=True, tier="bronze", rsvpd=["user-1"])
         seed_photo_submission(fake_firestore, "quest-1", "user-1", orgId=None, isDefault=True)
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
@@ -198,10 +199,9 @@ class TestApprovePhotoSubmission:
         assert result == {"success": True}
         submission = main._photo_submission_ref(fake_firestore.client(), "quest-1", "user-1").get().to_dict()
         assert submission["status"] == "approved"
-        expected_total = main.TIER_BASE_POINTS["bronze"] + main.PHOTO_BONUS_POINTS
-        assert submission["pointsAwarded"] == expected_total
+        assert submission["pointsAwarded"] == main.TIER_BASE_POINTS["bronze"]
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
-        assert user["points"] == expected_total
+        assert user["points"] == main.TIER_BASE_POINTS["bronze"]
         attendance = main._attendance_ref(fake_firestore.client(), "quest-1", "user-1").get().to_dict()
         assert attendance is not None
         assert attendance["pointsAwarded"] == main.TIER_BASE_POINTS["bronze"]
@@ -223,7 +223,8 @@ class TestApprovePhotoSubmission:
     def test_side_quest_already_checked_in_does_not_double_award_tier_points(self, fake_firestore, make_request, call):
         # Edge case: an admin generated a QR for this side quest and the
         # user already checked in through it (tier points already awarded
-        # there) before also getting their photo approved.
+        # there) before also getting their photo approved — approval should
+        # award nothing further, not even a bonus (side quests have none).
         seed_quest(fake_firestore, "quest-1", orgId=None, isDefault=True, tier="gold", rsvpd=["user-1"])
         seed_attendance(fake_firestore, "quest-1", "user-1", orgId=None, pointsAwarded=main.TIER_BASE_POINTS["gold"])
         seed_photo_submission(fake_firestore, "quest-1", "user-1", orgId=None, isDefault=True)
@@ -232,9 +233,9 @@ class TestApprovePhotoSubmission:
         _approve(fake_firestore, make_request, call, uid="admin-1", role="admin")
 
         submission = main._photo_submission_ref(fake_firestore.client(), "quest-1", "user-1").get().to_dict()
-        assert submission["pointsAwarded"] == main.PHOTO_BONUS_POINTS
+        assert submission["pointsAwarded"] == 0
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
-        assert user["points"] == main.TIER_BASE_POINTS["gold"] + main.PHOTO_BONUS_POINTS
+        assert user["points"] == main.TIER_BASE_POINTS["gold"]
 
     def test_non_owning_org_is_rejected(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", orgId="org-1")

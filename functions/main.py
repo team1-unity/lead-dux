@@ -1549,16 +1549,19 @@ def _record_photo_approval(transaction, ref, reviewer_uid):
 # Callable from the org dashboard's (own quests) or admin dashboard's (side
 # quests) pending-photo queue. Awarding points is a separate step after the
 # transaction above commits — same two-step "record, then award" shape
-# submit_quest_feedback_batch uses for its own bonus. For a side/default
-# quest with no existing attendance (the normal case — these have no QR
-# check-in at all, see the module note above submit_quest_photo), approval
-# IS the quest's completion moment: it creates the attendance doc (freeing
-# the submitter's SIDE_QUEST_CONCURRENT_LIMIT slot, see
-# _active_side_quest_ids) and awards the tier's base points on top of the
-# flat photo bonus, since there's no other way to earn either. If an admin
-# separately generated a QR for this side quest and the submitter already
-# checked in through it, base points were already awarded there — this
-# guards against awarding them a second time.
+# submit_quest_feedback_batch uses for its own bonus.
+#
+# The +5 photo bonus (PHOTO_BONUS_POINTS) only ever applies to organization
+# quests, which already earned their flat base points at check-in — the
+# photo there really is an extra bonus on top. Side/default quests have no
+# such bonus: they have no QR check-in at all (see the module note above
+# submit_quest_photo), so approving the photo IS the quest's completion
+# moment, and it awards exactly the tier's own base points (Iron = 10
+# total, not 10 + 5) — it also creates the attendance doc, freeing the
+# submitter's SIDE_QUEST_CONCURRENT_LIMIT slot (see _active_side_quest_ids).
+# If an admin separately generated a QR for this side quest and the
+# submitter already checked in through it, those points were already
+# awarded there, so approval awards nothing further (never double-counted).
 @https_fn.on_call()
 def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "organization", "admin")
@@ -1579,21 +1582,24 @@ def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
     submission = firestore.transactional(_record_photo_approval)(db.transaction(), ref, req.auth.uid)
     submitter_uid = submission["userId"]
 
-    attendance_ref = _attendance_ref(db, quest_id, submitter_uid)
-    base_points = 0
-    if quest.get("isDefault") and not attendance_ref.get().exists:
-        base_points = TIER_BASE_POINTS.get(quest.get("tier"), 0)
-        attendance_ref.set({
-            "userId": submitter_uid,
-            "orgId": None,
-            "eventId": quest_id,
-            "checkedInAt": firestore.SERVER_TIMESTAMP,
-            "pointsAwarded": base_points,
-            "qrToken": None,
-            "createdAt": firestore.SERVER_TIMESTAMP,
-        })
+    if quest.get("isDefault"):
+        attendance_ref = _attendance_ref(db, quest_id, submitter_uid)
+        if attendance_ref.get().exists:
+            total_points = 0
+        else:
+            total_points = TIER_BASE_POINTS.get(quest.get("tier"), 0)
+            attendance_ref.set({
+                "userId": submitter_uid,
+                "orgId": None,
+                "eventId": quest_id,
+                "checkedInAt": firestore.SERVER_TIMESTAMP,
+                "pointsAwarded": total_points,
+                "qrToken": None,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+            })
+    else:
+        total_points = PHOTO_BONUS_POINTS
 
-    total_points = PHOTO_BONUS_POINTS + base_points
     _award_points(db, submitter_uid, total_points)
     ref.update({"pointsAwarded": total_points})
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -159,6 +159,8 @@ const EXT_BY_CONTENT_TYPE = {
 function QuestPhotoSubmission({ questId, userId }) {
   const [submission, setSubmission] = useState(undefined); // undefined = loading, null = none yet
   const [file, setFile] = useState(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
+  const [submittedPhotoUrl, setSubmittedPhotoUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
@@ -175,6 +177,38 @@ function QuestPhotoSubmission({ questId, userId }) {
       },
     );
   }, [questId, userId]);
+
+  // A quick local preview of whichever file is currently selected, before
+  // it's even uploaded — lets someone confirm they picked the right photo.
+  useEffect(() => {
+    if (!file) {
+      setLocalPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setLocalPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  // Once a submission exists (pending/approved/rejected), fetch the actual
+  // uploaded photo itself so it's visible here too, not just its status.
+  useEffect(() => {
+    if (!submission?.storagePath) {
+      setSubmittedPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    getDownloadURL(storageRef(storage, submission.storagePath))
+      .then((url) => {
+        if (!cancelled) setSubmittedPhotoUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setSubmittedPhotoUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [submission?.storagePath]);
 
   async function submit(e) {
     e.preventDefault();
@@ -208,6 +242,13 @@ function QuestPhotoSubmission({ questId, userId }) {
     return (
       <div className="ink-card flex flex-col gap-sm" style={{ marginTop: 12 }}>
         <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
+        {submittedPhotoUrl && (
+          <img
+            src={submittedPhotoUrl}
+            alt="Your submitted proof"
+            style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
+          />
+        )}
         <StatusStamp tone={submission.status === 'approved' ? 'education' : 'outdoors'}>
           {submission.status === 'approved' ? 'Approved' : 'Pending review'}
         </StatusStamp>
@@ -223,6 +264,13 @@ function QuestPhotoSubmission({ questId, userId }) {
       <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
       {submission?.status === 'rejected' && (
         <>
+          {submittedPhotoUrl && (
+            <img
+              src={submittedPhotoUrl}
+              alt="Your rejected submission"
+              style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
+            />
+          )}
           <StatusStamp tone="rejected">Rejected</StatusStamp>
           {submission.rejectionReason && <p style={{ margin: 0 }}>{submission.rejectionReason}</p>}
         </>
@@ -235,6 +283,9 @@ function QuestPhotoSubmission({ questId, userId }) {
           onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
       </label>
+      {localPreviewUrl && (
+        <img src={localPreviewUrl} alt="Selected photo preview" style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }} />
+      )}
       {error && <p className="box-danger">{error}</p>}
       <StampButton type="submit" variant="primary" disabled={!file || uploading}>
         {uploading ? 'Uploading...' : 'Submit photo'}
