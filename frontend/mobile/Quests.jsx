@@ -212,7 +212,7 @@ function QuestPhotoSubmission({ questId, userId }) {
           {submission.status === 'approved' ? 'Approved' : 'Pending review'}
         </StatusStamp>
         {submission.status === 'approved' && (
-          <p style={{ margin: 0 }}>+{submission.pointsAwarded} bonus points</p>
+          <p style={{ margin: 0 }}>+{submission.pointsAwarded} points earned</p>
         )}
       </div>
     );

@@ -18,7 +18,7 @@ service firebase.storage {
       allow read: if request.auth != null && (
         request.auth.uid == questIdUid.split('_')[1] ||
         request.auth.token.role == 'admin' ||
-        (request.auth.token.role == 'organization' &&
+        (request.auth.token.role == 'organization' && resource != null &&
          request.auth.uid == resource.metadata.orgId)
       );
       // Create-only — a resubmission after rejection always uploads to a

@@ -39,8 +39,10 @@ def seed_attendance(fake_firestore, quest_id, uid, **overrides):
     return attendance
 
 
-def seed_user(fake_firestore, uid, name, email):
-    fake_firestore.client().collection("users").document(uid).set({"name": name, "email": email})
+def seed_user(fake_firestore, uid, name, email, **overrides):
+    user = {"name": name, "email": email}
+    user.update(overrides)
+    fake_firestore.client().collection("users").document(uid).set(user)
 
 
 def seed_blob(fake_storage, path, **overrides):

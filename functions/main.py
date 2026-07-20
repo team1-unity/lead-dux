@@ -1373,14 +1373,25 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
 
 # Quest photo submission & verification --------------------------------------
 #
-# Proof-of-participation photo, submitted after checking in (see
-# check_in_to_event above) — separate from organization feedback/reviews
+# Proof-of-participation photo — separate from organization feedback/reviews
 # below, and from the +5 bonus it can unlock. Doc id is the same
 # {questId}_{uid} composite _attendance_doc_id already uses, which is what
 # makes "one submission per completed quest" true at the data-model level:
 # only one photoSubmissions doc can ever exist for a given (quest, user)
 # pair, and a resubmission after rejection overwrites that same doc rather
 # than creating a new one.
+#
+# Eligibility differs by quest type, since only organization quests actually
+# have a QR check-in flow:
+#   - Organization quest: must already be checked in (an `attendance` doc
+#     exists — see check_in_to_event). The photo is extra proof on top of an
+#     already-completed quest.
+#   - Side/default quest: no QR ever exists for these, so RSVP alone is the
+#     gate, and approving the photo (see approve_photo_submission) is ITSELF
+#     what marks the side quest completed — it creates the `attendance` doc
+#     (freeing the caller's SIDE_QUEST_CONCURRENT_LIMIT slot, see
+#     _active_side_quest_ids) and awards the tier's base points, in addition
+#     to the +5 photo bonus, since there's no other path to earn either.
 #
 # The binary upload itself never passes through a callable — the client
 # uploads straight to Cloud Storage (storage.rules enforces the file-type/
@@ -1404,8 +1415,6 @@ def _photo_submission_ref(db, quest_id: str, uid: str):
 
 # Callable from the quest list's photo-upload form, once the file is
 # already sitting in Storage at storagePath (see QuestPhotoSubmission.jsx).
-# "Completed" means checked in via QR (see check_in_to_event) — RSVP alone
-# isn't enough, same attendance-existence gate submit_review uses.
 @https_fn.on_call()
 def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -1438,7 +1447,16 @@ def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
     db = firestore.client()
     quest = _get_quest_or_404(db, quest_id)
 
-    if not _attendance_ref(db, quest_id, uid).get().exists:
+    # Side/default quests have no QR check-in flow at all — RSVP is the
+    # whole gate, and the photo (once approved) is what completes it.
+    # Organization quests still require an actual check-in first.
+    if quest.get("isDefault"):
+        if uid not in (quest.get("rsvpd") or []):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                "RSVP to this side quest before submitting a photo.",
+            )
+    elif not _attendance_ref(db, quest_id, uid).get().exists:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
             "You can only submit a photo for a quest you've checked in to.",
@@ -1514,7 +1532,7 @@ def _record_photo_approval(transaction, ref, reviewer_uid):
     submission = snap.to_dict()
     # Re-checked inside the transaction (not just by the caller before
     # starting it) so two overlapping approve calls — a double-click, or
-    # two reviewers in different tabs — can't both award the bonus.
+    # two reviewers in different tabs — can't both award points.
     if submission.get("status") != "pending":
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
@@ -1522,17 +1540,25 @@ def _record_photo_approval(transaction, ref, reviewer_uid):
         )
     transaction.update(ref, {
         "status": "approved",
-        "pointsAwarded": PHOTO_BONUS_POINTS,
         "reviewedAt": firestore.SERVER_TIMESTAMP,
         "reviewedBy": reviewer_uid,
     })
-    return submission["userId"]
+    return submission
 
 
 # Callable from the org dashboard's (own quests) or admin dashboard's (side
-# quests) pending-photo queue. Awarding the bonus is a separate step after
-# the transaction above commits — same two-step "record, then award" shape
-# submit_quest_feedback_batch uses for its own bonus.
+# quests) pending-photo queue. Awarding points is a separate step after the
+# transaction above commits — same two-step "record, then award" shape
+# submit_quest_feedback_batch uses for its own bonus. For a side/default
+# quest with no existing attendance (the normal case — these have no QR
+# check-in at all, see the module note above submit_quest_photo), approval
+# IS the quest's completion moment: it creates the attendance doc (freeing
+# the submitter's SIDE_QUEST_CONCURRENT_LIMIT slot, see
+# _active_side_quest_ids) and awards the tier's base points on top of the
+# flat photo bonus, since there's no other way to earn either. If an admin
+# separately generated a QR for this side quest and the submitter already
+# checked in through it, base points were already awarded there — this
+# guards against awarding them a second time.
 @https_fn.on_call()
 def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "organization", "admin")
@@ -1550,8 +1576,26 @@ def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
     _require_owning_org_or_admin(req, quest, "review photo submissions")
 
     ref = _photo_submission_ref(db, quest_id, user_id)
-    submitter_uid = firestore.transactional(_record_photo_approval)(db.transaction(), ref, req.auth.uid)
-    _award_points(db, submitter_uid, PHOTO_BONUS_POINTS)
+    submission = firestore.transactional(_record_photo_approval)(db.transaction(), ref, req.auth.uid)
+    submitter_uid = submission["userId"]
+
+    attendance_ref = _attendance_ref(db, quest_id, submitter_uid)
+    base_points = 0
+    if quest.get("isDefault") and not attendance_ref.get().exists:
+        base_points = TIER_BASE_POINTS.get(quest.get("tier"), 0)
+        attendance_ref.set({
+            "userId": submitter_uid,
+            "orgId": None,
+            "eventId": quest_id,
+            "checkedInAt": firestore.SERVER_TIMESTAMP,
+            "pointsAwarded": base_points,
+            "qrToken": None,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        })
+
+    total_points = PHOTO_BONUS_POINTS + base_points
+    _award_points(db, submitter_uid, total_points)
+    ref.update({"pointsAwarded": total_points})
 
     return {"success": True}
 
