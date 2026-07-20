@@ -372,13 +372,20 @@ def _generate_series_dates(first_event_date: datetime, frequency: str, until: da
 def _quest_doc_fields(
     *, title, description, tags, location, tz, capacity, series_id,
     recurrence_frequency, recurrence_until, event_date, event_end_time,
-    org_id, org_name, is_default, tier,
+    org_id, org_name, is_default, tier, place_id=None,
 ):
     return {
         "title": title,
         "description": description,
         "tags": tags,
         "location": location,
+        # Google Place ID for `location`, when it came from Places
+        # Autocomplete (organization quests only — see create_quest/
+        # create_recurring_quest). Side/default quests never have one:
+        # "Your neighborhood" or "Any local park" isn't a specific place,
+        # so create_default_quest never collects or validates a location
+        # this way and this stays None for them.
+        "placeId": place_id,
         "timezone": tz,
         "capacity": capacity,
         "seriesId": series_id,
@@ -520,12 +527,23 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     interests = req.data.get("interests")
     age = req.data.get("age")
     name = req.data.get("name")
+    location = req.data.get("location")
+    place_id = req.data.get("placeId")
     leader_goal = req.data.get("leaderGoal") or ""
 
     if not isinstance(interests, list) or not interests:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "interests must be a non-empty list.",
+        )
+    # Places Autocomplete-backed, same as an organization's location — see
+    # create_quest's module note. Collected here for a future location-
+    # based recommendation step (see the AI Integration section of the
+    # project proposal), not read/displayed anywhere yet.
+    if not location or not place_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "A location must be selected from the suggestions.",
         )
 
     experience_level, experience_level_other = _resolve_choice_with_other(
@@ -555,6 +573,8 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     firestore.client().collection("users").document(req.auth.uid).update({
         "name": name,
         "age": age,
+        "location": location,
+        "placeId": place_id,
         "interests": interests,
         "experienceLevel": experience_level,
         "experienceLevelOther": experience_level_other,
@@ -583,12 +603,13 @@ def submit_organization_request(req: https_fn.CallableRequest) -> dict:
     name = req.data.get("name")
     phone = req.data.get("phone")
     location = req.data.get("location")
+    place_id = req.data.get("placeId")
     reason = req.data.get("reason")
 
-    if not all([name, phone, location, reason]):
+    if not all([name, phone, location, place_id, reason]):
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "name, phone, location, and reason are required.",
+            "name, phone, a location selected from the suggestions, and reason are required.",
         )
 
     uid = req.auth.uid
@@ -598,6 +619,7 @@ def submit_organization_request(req: https_fn.CallableRequest) -> dict:
         "email": email,
         "phone": phone,
         "location": location,
+        "placeId": place_id,
         "reason": reason,
         "status": "pending",
         "createdAt": firestore.SERVER_TIMESTAMP,
@@ -635,6 +657,7 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "email": request_data.get("email"),
         "phone": request_data.get("phone"),
         "location": request_data.get("location"),
+        "placeId": request_data.get("placeId"),
         "reason": request_data.get("reason"),
         "ltag": [],
         "etag": [],
@@ -739,11 +762,22 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
     description = req.data.get("description")
     tags = req.data.get("tags") or []
     location = req.data.get("location") or ""
+    place_id = req.data.get("placeId")
     tz = _validate_timezone(req.data.get("timezone"))
     if not title or not description:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "title and description are required.",
+        )
+    # Places Autocomplete is the only way the frontend's location field
+    # produces a value now — a placeId here means the location actually
+    # came from a selected place, not arbitrary free text. Organization
+    # quests only; create_default_quest never requires this (see its own
+    # module note).
+    if not place_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "A location must be selected from the suggestions.",
         )
 
     event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
@@ -768,7 +802,7 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
         title=title, description=description, tags=tags, location=location, tz=tz,
         capacity=capacity, series_id=doc_ref.id, recurrence_frequency=None, recurrence_until=None,
         event_date=event_date, event_end_time=event_end_time,
-        org_id=req.auth.uid, org_name=org_name, is_default=False, tier=None,
+        org_id=req.auth.uid, org_name=org_name, is_default=False, tier=None, place_id=place_id,
     ))
     return {"success": True, "questId": doc_ref.id}
 
@@ -795,6 +829,17 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
             "title and description are required.",
         )
 
+    is_admin = req.auth.token.get("role") == "admin"
+    # Same Places Autocomplete requirement as create_quest, org calls only —
+    # an admin using this to create a recurring default (neighborhood)
+    # quest never has (or needs) one, same as create_default_quest.
+    place_id = req.data.get("placeId")
+    if not is_admin and not place_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "A location must be selected from the suggestions.",
+        )
+
     first_event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
     event_end_time = (
         _parse_event_datetime(req.data.get("eventEndTime"), "eventEndTime", tz)
@@ -814,10 +859,10 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
     occurrence_dates = _generate_series_dates(first_event_date, frequency, until, tz)
 
     db = firestore.client()
-    is_admin = req.auth.token.get("role") == "admin"
     if is_admin:
         org_id, org_name, is_default = None, "Neighborhood", True
         tier = _validate_tier(req.data.get("tier"))
+        place_id = None
     else:
         org_snap = db.collection("organizations").document(req.auth.uid).get()
         org_id, org_name, is_default = req.auth.uid, (org_snap.to_dict().get("name") if org_snap.exists else None), False
@@ -836,7 +881,7 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
             capacity=capacity, series_id=series_id,
             recurrence_frequency=frequency, recurrence_until=until,
             event_date=occurrence_date, event_end_time=occurrence_end,
-            org_id=org_id, org_name=org_name, is_default=is_default, tier=tier,
+            org_id=org_id, org_name=org_name, is_default=is_default, tier=tier, place_id=place_id,
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()
@@ -915,7 +960,7 @@ def make_quest_recurring(req: https_fn.CallableRequest) -> dict:
             series_id=series_id, recurrence_frequency=frequency, recurrence_until=until,
             event_date=occurrence_date, event_end_time=occurrence_end,
             org_id=quest.get("orgId"), org_name=quest.get("orgName"), is_default=quest.get("isDefault", False),
-            tier=quest.get("tier"),
+            tier=quest.get("tier"), place_id=quest.get("placeId"),
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()

@@ -258,7 +258,7 @@ cd frontend/app
 npm run dev
 ```
 
-The dev server runs on Vite's default port. To point the frontend at the Firebase emulator suite instead of production, create `frontend/app/.env.local` with:
+The dev server runs on Vite's default port. To point the frontend at the Firebase emulator suite instead of production, add to `frontend/app/.env.local`:
 
 ```
 VITE_USE_FIREBASE_EMULATORS=true
@@ -269,6 +269,14 @@ and start the emulators from the repo root:
 ```sh
 firebase emulators:start
 ```
+
+Location fields (organization registration, organization quest creation, and the neighborhood/city field in user onboarding) use Google Places Autocomplete — add a Maps API key to `frontend/app/.env.local` too:
+
+```
+VITE_GOOGLE_MAPS_API_KEY=your-key-here
+```
+
+Get one from the [Google Cloud Console](https://console.cloud.google.com/) under the same project backing this app's Firebase project (`lead-dux`) — enable the **Places API**, create an API key under Credentials, and restrict it to your dev/prod domains (HTTP referrers). Without this key set, those location fields won't render (side/default quests created by an admin are unaffected — they keep a plain free-text location on purpose, since they don't have one specific physical place).
 
 Auth, Firestore, and Functions must be either **all** emulated or **all** real together, the local Auth emulator issues unsigned tokens that only the local Firestore/Functions emulators trust.
 
