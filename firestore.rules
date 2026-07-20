@@ -3,6 +3,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Pulls the uid back out of a {questId}_{uid} composite id (see
+    // photoSubmissions below) by taking the LAST '_'-separated segment, not
+    // a fixed index — a quest id can itself contain underscores (seed data
+    // uses slugs like "seed-jc-community-kitchen-near_full"), but a
+    // Firebase Auth uid never does, so the final segment is always the uid
+    // regardless of how many underscores came before it.
+    function submitterUid(docId) {
+      return docId.split('_')[docId.split('_').size() - 1];
+    }
+
     // Every profile/request/config write in this app happens via a Cloud
     // Function (Admin SDK, bypasses these rules) — complete_signup,
     // submit_onboarding, approve_organization, set_user_role. Nothing here
@@ -101,18 +111,18 @@ service cloud.firestore {
     // Photo submissions — proof of quest participation (see
     // submit_quest_photo/approve_photo_submission/reject_photo_submission
     // in functions/main.py). Doc id is {questId}_{uid} (_attendance_doc_id)
-    // — the owner's own uid is parsed straight out of the id, same as
-    // storage.rules' questIdUid.split('_')[1], rather than read off
-    // resource.data. That's deliberate: the client polls this doc BEFORE
-    // any submission exists yet (to show the upload form), and `resource`
-    // is null for a nonexistent doc — referencing resource.data.userId
-    // unconditionally would make that very first read error out and deny,
-    // rather than resolve to "no submission yet". The org branch still
-    // needs resource.data.orgId (denormalized at submit time), so it's
-    // guarded with `resource != null` first.
+    // — the owner's own uid is parsed straight out of the id (see
+    // submitterUid above), rather than read off resource.data. That's
+    // deliberate: the client polls this doc BEFORE any submission exists
+    // yet (to show the upload form), and `resource` is null for a
+    // nonexistent doc — referencing resource.data.userId unconditionally
+    // would make that very first read error out and deny, rather than
+    // resolve to "no submission yet". The org branch still needs
+    // resource.data.orgId (denormalized at submit time), so it's guarded
+    // with `resource != null` first.
     match /photoSubmissions/{docId} {
       allow read: if request.auth != null && (
-        request.auth.uid == docId.split('_')[1] ||
+        request.auth.uid == submitterUid(docId) ||
         request.auth.token.role == 'admin' ||
         (request.auth.token.role == 'organization' && resource != null && request.auth.uid == resource.data.orgId)
       );
