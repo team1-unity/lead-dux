@@ -278,6 +278,8 @@ VITE_GOOGLE_MAPS_API_KEY=your-key-here
 
 Get one from the [Google Cloud Console](https://console.cloud.google.com/) under the same project backing this app's Firebase project (`lead-dux`) — enable the **Places API**, create an API key under Credentials, and restrict it to your dev/prod domains (HTTP referrers). Without this key set, those location fields won't render (side/default quests created by an admin are unaffected — they keep a plain free-text location on purpose, since they don't have one specific physical place).
 
+Quest photo submissions (see the Cloud Functions table below) upload to Cloud Storage — no extra frontend config is needed, but if you're testing this locally against the emulator suite, export `STORAGE_EMULATOR_HOST=http://127.0.0.1:9199` before starting `firebase emulators:start` so `functions/main.py`'s server-side upload verification (`firebase_admin.storage`) talks to the local Storage emulator instead of real Cloud Storage — the emulator doesn't wire this up automatically the way it does for Firestore/Auth.
+
 Auth, Firestore, and Functions must be either **all** emulated or **all** real together, the local Auth emulator issues unsigned tokens that only the local Firestore/Functions emulators trust.
 
 ### 4. Deploy

@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// Quest photo submissions — proof of quest participation (see
+// submit_quest_photo/approve_photo_submission/reject_photo_submission in
+// functions/main.py). Path is photoSubmissions/{questId}_{uid}/{fileName},
+// the same {questId}_{uid} composite id _attendance_doc_id already uses.
+//
+// The read rule checks the blob's own custom metadata (orgId/isDefault)
+// rather than looking up the matching photoSubmissions Firestore doc —
+// that doc doesn't exist yet at upload time (submit_quest_photo creates it
+// AFTER re-verifying the upload), and reading a blob's own metadata avoids
+// a cross-service rules dependency entirely. submit_quest_photo patches
+// this metadata via the Admin SDK (bypasses these rules) once it has
+// verified the quest's real orgId/isDefault server-side.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /photoSubmissions/{questIdUid}/{fileName} {
+      allow read: if request.auth != null && (
+        request.auth.uid == questIdUid.split('_')[1] ||
+        request.auth.token.role == 'admin' ||
+        (request.auth.token.role == 'organization' &&
+         request.auth.uid == resource.metadata.orgId)
+      );
+      // Create-only — a resubmission after rejection always uploads to a
+      // fresh {timestampMillis}.{ext} path (see QuestPhotoSubmission.jsx),
+      // never overwriting an existing object, so update isn't needed.
+      allow create: if request.auth != null
+        && request.auth.uid == questIdUid.split('_')[1]
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+      allow update, delete: if false;
+    }
+  }
+}

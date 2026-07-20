@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main as main_module  # noqa: E402
 from tests.fake_firestore import FakeFirestoreModule  # noqa: E402
 from tests.fake_auth import FakeAuthModule  # noqa: E402
+from tests.fake_storage import FakeStorageModule  # noqa: E402
 
 
 class FakeAuthContext:
@@ -48,6 +49,16 @@ def fake_auth(monkeypatch):
     initialized Firebase project."""
     fake_module = FakeAuthModule()
     monkeypatch.setattr(main_module, "auth", fake_module)
+    return fake_module
+
+
+@pytest.fixture
+def fake_storage(monkeypatch):
+    """Swaps the `admin_storage` name main.py imported from firebase_admin
+    for an in-memory fake — only needed by submit_quest_photo, which
+    re-verifies an uploaded blob's size/content-type via the Admin SDK."""
+    fake_module = FakeStorageModule()
+    monkeypatch.setattr(main_module, "admin_storage", fake_module)
     return fake_module
 
 
