@@ -16,6 +16,7 @@ import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
+import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import {
   IconPlus,
   IconSearch,
@@ -309,6 +310,13 @@ function OrgQuests() {
   const [eventEndTime, setEventEndTime] = useState('');
   const [timezone, setTimezone] = useState(detectTimezone());
   const [location, setLocation] = useState('');
+  const [placeId, setPlaceId] = useState(null);
+  // Bumped after every successful submit to force a fresh
+  // PlaceAutocompleteInput instance — the widget owns its own shadow-DOM
+  // input, so there's no clean imperative "clear the displayed text" call;
+  // remounting is the straightforward way to reset it alongside the rest
+  // of the form.
+  const [placeKey, setPlaceKey] = useState(0);
   const [capacity, setCapacity] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState('weekly');
@@ -352,6 +360,10 @@ function OrgQuests() {
   async function createQuest(e) {
     e.preventDefault();
     setError('');
+    if (!placeId) {
+      setError('Select a location from the suggestions.');
+      return;
+    }
     setSubmitting(true);
     try {
       const base = {
@@ -362,6 +374,7 @@ function OrgQuests() {
         eventEndTime: eventEndTime || null,
         timezone,
         location,
+        placeId,
         capacity: capacity ? Number(capacity) : null,
       };
       if (isRecurring) {
@@ -375,6 +388,8 @@ function OrgQuests() {
       setEventDate('');
       setEventEndTime('');
       setLocation('');
+      setPlaceId(null);
+      setPlaceKey((k) => k + 1);
       setCapacity('');
       setIsRecurring(false);
       setUntil('');
@@ -408,7 +423,16 @@ function OrgQuests() {
       </label>
       <label>
         Location
-        <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="123 Main St or venue name" />
+        <PlaceAutocompleteInput
+          key={placeKey}
+          ariaLabel="Quest location"
+          placeholder="Search for an address or venue..."
+          onSelect={({ location: selectedLocation, placeId: selectedPlaceId }) => {
+            setLocation(selectedLocation);
+            setPlaceId(selectedPlaceId);
+          }}
+        />
+        {placeId && <p className="field-optional">{location}</p>}
       </label>
       <label>
         Capacity (optional)

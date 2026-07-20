@@ -7,6 +7,9 @@ from tests.helpers import seed_org
 
 class TestApproveOrganization:
     def test_sets_verified_and_default_profile_fields(self, fake_firestore, fake_auth, make_request, call):
+        # No placeId on this ORGREQ doc — simulates a request submitted
+        # before Places Autocomplete existed. approve_organization must
+        # still work, just carrying forward a None placeId.
         fake_firestore.client().collection("ORGREQ").document("org-1").set({
             "name": "Trail Org",
             "email": "org@example.com",
@@ -25,6 +28,23 @@ class TestApproveOrganization:
         assert org["photos"] == []
         assert org["socialLinks"] == {}
         assert org["logoUrl"] is None
+        assert org["placeId"] is None
+
+    def test_copies_place_id_from_the_request(self, fake_firestore, fake_auth, make_request, call):
+        fake_firestore.client().collection("ORGREQ").document("org-1").set({
+            "name": "Trail Org",
+            "email": "org@example.com",
+            "phone": "555-0100",
+            "location": "Riverside",
+            "placeId": "ChIJ_test_place_id",
+            "reason": "We clean up trails.",
+            "status": "pending",
+        })
+
+        call(main.approve_organization, make_request(data={"targetUid": "org-1"}, uid="admin-1", role="admin"))
+
+        org = fake_firestore.client().collection("organizations").document("org-1").get().to_dict()
+        assert org["placeId"] == "ChIJ_test_place_id"
 
 
 class TestUpdateOrganizationProfile:

@@ -24,6 +24,8 @@ export async function callCompleteSignup({ name, accountType }) {
 export async function callSubmitOnboarding({
   name,
   age,
+  location,
+  placeId,
   interests,
   experienceLevel,
   experienceLevelOther,
@@ -39,6 +41,8 @@ export async function callSubmitOnboarding({
   const result = await fn({
     name,
     age,
+    location,
+    placeId,
     interests,
     experienceLevel,
     experienceLevelOther,
@@ -97,9 +101,9 @@ export async function callDeleteOrganization(targetUid) {
 // The org-details form's submit, for an account currently onboarding_org
 // (the state a brand-new org signup reaches directly). Creates the ORGREQ
 // and moves the caller to pending_org.
-export async function callSubmitOrganizationRequest({ name, phone, location, reason }) {
+export async function callSubmitOrganizationRequest({ name, phone, location, placeId, reason }) {
   const fn = httpsCallable(functions, 'submit_organization_request');
-  const result = await fn({ name, phone, location, reason });
+  const result = await fn({ name, phone, location, placeId, reason });
   return result.data;
 }
 
@@ -109,9 +113,9 @@ export async function callSubmitOrganizationRequest({ name, phone, location, rea
 // the QR expiry to a few hours past eventDate when it's omitted. capacity
 // is optional (unlimited if omitted). See callCreateRecurringQuest for
 // creating a whole series of dates in one call.
-export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity }) {
+export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, capacity }) {
   const fn = httpsCallable(functions, 'create_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, capacity });
   return result.data;
 }
 
@@ -128,6 +132,7 @@ export async function callCreateRecurringQuest({
   eventEndTime,
   timezone,
   location,
+  placeId,
   capacity,
   frequency,
   until,
@@ -142,6 +147,7 @@ export async function callCreateRecurringQuest({
     eventEndTime,
     timezone,
     location,
+    placeId,
     capacity,
     frequency,
     until,

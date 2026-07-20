@@ -6,6 +6,7 @@ import { AuthShell } from '@shared/AuthShell.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
+import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { EXPERIENCE_LEVELS, TIME_AVAILABILITY, GROUP_PREFERENCES, MOTIVATIONS, LEADER_GOAL_OPTIONS } from '@shared/leadershipProfile.js';
 
 const OTHER_MAX_LENGTH = 120;
@@ -85,6 +86,8 @@ export function Onboarding({ name: initialName, onComplete }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(initialName || '');
   const [age, setAge] = useState('');
+  const [location, setLocation] = useState('');
+  const [placeId, setPlaceId] = useState(null);
   const [interests, setInterests] = useState([]);
   const [experienceLevel, setExperienceLevel] = useState('');
   const [experienceLevelOther, setExperienceLevelOther] = useState('');
@@ -123,6 +126,8 @@ export function Onboarding({ name: initialName, onComplete }) {
       await callSubmitOnboarding({
         name,
         age: Number(age),
+        location,
+        placeId,
         interests,
         experienceLevel,
         experienceLevelOther,
@@ -171,6 +176,10 @@ export function Onboarding({ name: initialName, onComplete }) {
         setError('Pick at least one interest.');
         return;
       }
+      if (!placeId) {
+        setError('Select your neighborhood or city from the suggestions.');
+        return;
+      }
       setStep(1);
       return;
     }
@@ -205,6 +214,18 @@ export function Onboarding({ name: initialName, onComplete }) {
           <label>
             Age
             <input type="number" required min="1" value={age} onChange={(e) => setAge(e.target.value)} />
+          </label>
+          <label>
+            Your neighborhood or city
+            <PlaceAutocompleteInput
+              ariaLabel="Your neighborhood or city"
+              placeholder="Search for a place..."
+              onSelect={({ location: selectedLocation, placeId: selectedPlaceId }) => {
+                setLocation(selectedLocation);
+                setPlaceId(selectedPlaceId);
+              }}
+            />
+            {placeId && <p className="field-optional">{location}</p>}
           </label>
           <fieldset>
             <legend>Interests</legend>

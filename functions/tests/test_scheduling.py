@@ -20,6 +20,13 @@ def create_quest_payload(**overrides):
         "eventEndTime": None,
         "timezone": "UTC",
         "location": "Riverside Park",
+        # Places Autocomplete-backed — every organization-quest test uses
+        # this same fake id unless a test is specifically exercising the
+        # "no place selected" rejection (see TestCreateQuest/
+        # TestCreateRecurringQuest's placeId-specific tests below). Admin
+        # calls (create_default_quest, or create_recurring_quest as admin)
+        # ignore this field entirely, so its presence there is harmless.
+        "placeId": "ChIJ_test_place_id",
     }
     payload.update(overrides)
     return payload
@@ -37,10 +44,21 @@ class TestCreateQuest:
         quest = fake_firestore.client().collection("quests").document(result["questId"]).get().to_dict()
         assert quest["timezone"] == "America/New_York"
         assert quest["location"] == "Riverside Park"
+        assert quest["placeId"] == "ChIJ_test_place_id"
         assert quest["capacity"] == 10
         # A standalone quest is its own series of one.
         assert quest["seriesId"] == result["questId"]
         assert quest["recurrenceFrequency"] is None
+
+    def test_rejects_missing_place_id(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.create_quest, make_request(
+                data=create_quest_payload(placeId=None), uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
 
     def test_localizes_naive_datetime_to_the_given_timezone(self, fake_firestore, make_request, call):
         make_org(fake_firestore, "org-1")
@@ -166,12 +184,29 @@ class TestCreateRecurringQuest:
 
     def test_admin_creates_a_recurring_default_quest(self, fake_firestore, make_request, call):
         result = call(main.create_recurring_quest, make_request(
+            # Deliberately still includes a placeId (create_quest_payload's
+            # default) to prove the admin path ignores/nulls it out rather
+            # than erroring on an unexpected field or storing it anyway.
             data=create_quest_payload(frequency="weekly", until="2026-07-22T00:00", tier="iron"),
             uid="admin-1", role="admin",
         ))
 
         docs = [fake_firestore.client().collection("quests").document(qid).get().to_dict() for qid in result["questIds"]]
-        assert all(d["orgId"] is None and d["orgName"] == "Neighborhood" and d["isDefault"] is True for d in docs)
+        assert all(
+            d["orgId"] is None and d["orgName"] == "Neighborhood" and d["isDefault"] is True and d["placeId"] is None
+            for d in docs
+        )
+
+    def test_rejects_missing_place_id_for_organization(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.create_recurring_quest, make_request(
+                data=create_quest_payload(placeId=None, frequency="weekly", until="2026-07-22T00:00"),
+                uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
 
     def test_rejects_non_admin_non_org_caller(self, fake_firestore, make_request, call):
         with pytest.raises(https_fn.HttpsError) as exc_info:
