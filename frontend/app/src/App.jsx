@@ -71,7 +71,11 @@ function PublicHome({ role }) {
     <PageMotion>
       {role === 'pending_org' && <PendingBanner />}
       <FeedbackToast />
-      <Quests interests={profile?.interests || []} name={profile?.name} />
+      <Quests
+        interests={profile?.interests || []}
+        name={profile?.name}
+        recommendedQuestOrder={profile?.recommendedQuestOrder}
+      />
     </PageMotion>
   );
 }

@@ -689,7 +689,7 @@ function sideQuestGate(primary, status) {
   return null;
 }
 
-export function Quests({ interests, name }) {
+export function Quests({ interests, name, recommendedQuestOrder }) {
   const { user, role } = useAuth();
   const [seriesList, setSeriesList] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -713,7 +713,24 @@ export function Quests({ interests, name }) {
         const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         const grouped = attachSeriesRatings(groupBySeries(all), seriesDocsById);
-        grouped.sort((a, b) => relevanceScore(b.primary, interests) - relevanceScore(a.primary, interests));
+        grouped.sort((a, b) => {
+          // Organization quests only — AI ranking is generated server-side
+          // from interests/experience/volunteer history, see
+          // _generate_quest_recommendations in functions/main.py. A quest
+          // not yet covered by a ranking (e.g. created after the user's
+          // last profile edit) falls back to the plain relevance sort
+          // below, same as every side quest always does.
+          if (!a.primary.isDefault && !b.primary.isDefault && recommendedQuestOrder?.length) {
+            const rankA = recommendedQuestOrder.indexOf(a.primary.id);
+            const rankB = recommendedQuestOrder.indexOf(b.primary.id);
+            if (rankA !== -1 || rankB !== -1) {
+              if (rankA === -1) return 1;
+              if (rankB === -1) return -1;
+              return rankA - rankB;
+            }
+          }
+          return relevanceScore(b.primary, interests) - relevanceScore(a.primary, interests);
+        });
         setSeriesList(grouped);
       })
       .catch((err) => {
@@ -721,7 +738,7 @@ export function Quests({ interests, name }) {
       });
   }
 
-  useEffect(load, [interests]);
+  useEffect(load, [interests, recommendedQuestOrder]);
 
   // Only "user" accounts RSVP at all, so this is the only role that needs
   // to know which side quests are locked/at-limit. Reloaded after every
