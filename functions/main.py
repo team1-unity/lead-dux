@@ -718,7 +718,8 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
             f"leaderGoal must be at most {MAX_LEADER_GOAL_LENGTH} characters.",
         )
 
-    firestore.client().collection("users").document(req.auth.uid).update({
+    db = firestore.client()
+    db.collection("users").document(req.auth.uid).update({
         "name": name,
         "age": age,
         "location": location,
@@ -739,6 +740,9 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
     auth.set_custom_user_claims(req.auth.uid, {"role": "user"})
+    # First time interests/location/accommodationNeeds exist for this user —
+    # see _refresh_quest_recommendations above.
+    _refresh_quest_recommendations(db, req.auth.uid)
     return {"success": True, "role": "user"}
 
 
@@ -2185,6 +2189,163 @@ def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "sentUids": sent_uids}
 
 
+# AI-ranked ordering of organization quests on the Quests page — not a
+# client-callable itself; the frontend never asks for a fresh ranking, it
+# only ever reads whatever's already on the user doc (recommendedQuestOrder,
+# below). Triggered as a side effect of submit_onboarding/update_interests/
+# update_accommodation_needs, the three places that change what this
+# ranking is based on — see _refresh_quest_recommendations, which every
+# call site actually calls, since it never raises. Only ranks organization
+# quests: side quests are generic/tier-based, not location- or
+# org-specific, so they keep the plain client-side tag-overlap sort (see
+# relevanceScore in Quests.jsx) instead.
+
+AI_RECOMMENDATION_CANDIDATE_LIMIT = 40  # keeps the prompt bounded regardless of catalog size
+
+_QUEST_RECOMMENDATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "recommendations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "questId": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["questId", "reason"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["recommendations"],
+    "additionalProperties": False,
+}
+
+
+def _generate_quest_recommendations(db, uid: str) -> None:
+    user_snap = db.collection("users").document(uid).get()
+    if not user_snap.exists:
+        return
+    user = user_snap.to_dict()
+
+    # Group upcoming, not-yet-joined org quests by seriesId, so a weekly
+    # recurring series is offered to Gemini once (its soonest occurrence)
+    # rather than as N near-duplicate rows — the eventual rank is expanded
+    # back across every occurrence below.
+    now = datetime.now(timezone.utc)
+    series = {}  # seriesId -> {"quest": soonest occurrence dict, "occurrences": [{"id","eventDate"}, ...]}
+    for doc in db.collection("quests").where("isDefault", "==", False).stream():
+        quest = doc.to_dict()
+        event_date = quest.get("eventDate")
+        if event_date is None or _to_utc(event_date) < now or uid in (quest.get("rsvpd") or []):
+            continue
+        quest["id"] = doc.id
+        series_id = quest.get("seriesId") or doc.id
+        entry = series.setdefault(series_id, {"quest": quest, "occurrences": []})
+        entry["occurrences"].append({"id": doc.id, "eventDate": event_date})
+        if _to_utc(event_date) < _to_utc(entry["quest"]["eventDate"]):
+            entry["quest"] = quest
+
+    ranked_series_ids = sorted(series, key=lambda sid: _to_utc(series[sid]["quest"]["eventDate"]))
+    ranked_series_ids = ranked_series_ids[:AI_RECOMMENDATION_CANDIDATE_LIMIT]
+    if not ranked_series_ids:
+        return
+
+    candidates = [series[sid]["quest"] for sid in ranked_series_ids]
+    series_id_by_candidate_id = dict(zip((c["id"] for c in candidates), ranked_series_ids))
+
+    # "Volunteer activity" signal — tags from quests this user has actually
+    # completed before, alongside their stated interests/profile.
+    attended_tags = set()
+    for doc in db.collection("attendance").where("userId", "==", uid).stream():
+        quest_snap = db.collection("quests").document(doc.to_dict()["eventId"]).get()
+        if quest_snap.exists:
+            attended_tags.update(quest_snap.to_dict().get("tags") or [])
+
+    candidate_lines = "\n".join(
+        f'- questId "{c["id"]}": "{c.get("title")}" ({c.get("description")}) — '
+        f'tags: {c.get("tags") or []}, location: {c.get("location")}, '
+        f'accessibility accommodations: {c.get("accommodationTags") or []}'
+        for c in candidates
+    )
+    prompt = (
+        "Rank the following volunteer quests for this specific person, most relevant first, based "
+        "on their profile below. Weigh their stated interests most heavily, then their experience "
+        "level, motivation, group preference, and leadership goal, and how well each quest's own "
+        "tags/description align with those.\n\n"
+        f"Interests: {user.get('interests') or []}\n"
+        f"Lives near: {user.get('location') or 'unspecified'}\n"
+        f"Experience level: {user.get('experienceLevel') or 'unspecified'}\n"
+        f"Motivation: {user.get('motivation') or 'unspecified'}\n"
+        f"Group preference: {user.get('groupPreference') or 'unspecified'}\n"
+        f"Leadership goal: {user.get('leaderGoal') or 'unspecified'}\n"
+        f"Accessibility needs: {user.get('accommodationNeeds') or []}\n"
+        f"Tags from quests they've completed before: {sorted(attended_tags) or 'none yet'}\n\n"
+        f"Quests to rank:\n{candidate_lines}\n\n"
+        "Return every questId listed above exactly once, ordered most-to-least relevant, each with "
+        "a brief (one sentence) reason."
+    )
+
+    # genai.Client() reads GEMINI_API_KEY from the environment on its own —
+    # see generate_quest_feedback_drafts above for why this is created here
+    # rather than at module level.
+    client = genai.Client()
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=genai_types.GenerateContentConfig(
+            max_output_tokens=4096,
+            response_mime_type="application/json",
+            response_json_schema=_QUEST_RECOMMENDATION_SCHEMA,
+        ),
+    )
+    text = response.text
+    if not text:
+        return
+    picks = json.loads(text).get("recommendations", [])
+
+    # A questId Gemini returns that isn't actually one we offered (or a
+    # repeat of a series already placed) is silently dropped rather than
+    # trusted — same "unrecognized entries are skipped" precedent as
+    # submit_quest_feedback_batch above.
+    order = []
+    reasons = {}
+    placed_series = set()
+    for pick in picks:
+        if not isinstance(pick, dict):
+            continue
+        series_id = series_id_by_candidate_id.get(pick.get("questId"))
+        if series_id is None or series_id in placed_series:
+            continue
+        placed_series.add(series_id)
+        reason = pick.get("reason") or ""
+        occurrences = sorted(series[series_id]["occurrences"], key=lambda o: _to_utc(o["eventDate"]))
+        for occurrence in occurrences:
+            order.append(occurrence["id"])
+            reasons[occurrence["id"]] = reason
+
+    if not order:
+        return
+
+    db.collection("users").document(uid).update({
+        "recommendedQuestOrder": order,
+        "recommendedQuestReasons": reasons,
+        "recommendedAt": firestore.SERVER_TIMESTAMP,
+    })
+
+
+def _refresh_quest_recommendations(db, uid: str) -> None:
+    # Never raises — a Gemini hiccup (or any other failure while generating
+    # recommendations) must never fail the onboarding/interests/
+    # accommodation-needs update that triggered it. Whatever ranking
+    # already existed, if any, is simply left as-is.
+    try:
+        _generate_quest_recommendations(db, uid)
+    except Exception:
+        pass
+
+
 # Callable from the frontend's live feedback popup, the moment it's shown —
 # flips `notified` so the same feedback doesn't pop up again on a later page
 # load. Deliberately separate from `read` (see module note above): dismissing
@@ -2621,10 +2782,12 @@ def update_interests(req: https_fn.CallableRequest) -> dict:
             "interests must be a non-empty list.",
         )
 
-    firestore.client().collection("users").document(req.auth.uid).update({
+    db = firestore.client()
+    db.collection("users").document(req.auth.uid).update({
         "interests": interests,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
+    _refresh_quest_recommendations(db, req.auth.uid)
     return {"success": True}
 
 
@@ -2668,7 +2831,9 @@ def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
             "Provide accommodationNeeds and/or a location to update.",
         )
 
-    firestore.client().collection("users").document(req.auth.uid).update(update)
+    db = firestore.client()
+    db.collection("users").document(req.auth.uid).update(update)
+    _refresh_quest_recommendations(db, req.auth.uid)
     return {"success": True}
 
 

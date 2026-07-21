@@ -62,6 +62,59 @@ def fake_storage(monkeypatch):
     return fake_module
 
 
+class _FakeGenaiResponse:
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeGenaiModels:
+    def __init__(self, module):
+        self._module = module
+
+    def generate_content(self, *, model, contents, config):
+        self._module.last_prompt = contents
+        if self._module.error is not None:
+            raise self._module.error
+        return _FakeGenaiResponse(self._module.queued_response)
+
+
+class _FakeGenaiClient:
+    def __init__(self, module):
+        self.models = _FakeGenaiModels(module)
+
+
+class FakeGenaiModule:
+    """Stands in for the `genai` name main.py imported from google.genai
+    (`from google import genai`) — lets tests drive Gemini's response (or
+    an API failure) without a real network call. Queue a JSON string via
+    queue_response(...) before invoking the function under test, or
+    queue_error(...) to simulate the API failing; last_prompt captures
+    whatever was actually sent, so a test can assert user-specific profile
+    data reached the prompt rather than just checking the output."""
+
+    def __init__(self):
+        self.queued_response = None
+        self.error = None
+        self.last_prompt = None
+
+    def queue_response(self, text):
+        self.queued_response = text
+        self.error = None
+
+    def queue_error(self, error):
+        self.error = error
+
+    def Client(self):
+        return _FakeGenaiClient(self)
+
+
+@pytest.fixture
+def fake_genai(monkeypatch):
+    fake_module = FakeGenaiModule()
+    monkeypatch.setattr(main_module, "genai", fake_module)
+    return fake_module
+
+
 @pytest.fixture
 def make_request():
     return FakeCallableRequest
