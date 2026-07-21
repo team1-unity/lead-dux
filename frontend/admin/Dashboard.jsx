@@ -11,6 +11,7 @@ import {
   callCreateRecurringQuest,
   callListDiamondUsers,
   callIssueCertificate,
+  callBackfillQuestCoordinates,
 } from '@shared/fetch.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -53,6 +54,54 @@ const TIER_OPTIONS = [
   { value: 'gold', label: 'Gold — 18 pts' },
   { value: 'diamond', label: 'Diamond — 20 pts' },
 ];
+
+// Re-runnable, not a one-shot migration screen — every quest that already
+// had a placeId (organization quests created before the map view existed)
+// is still missing lat/lng until this runs once; re-running it later is
+// harmless since backfill_quest_coordinates only ever touches quests still
+// missing coordinates (see functions/main.py). Side/default quests never
+// show up in failedQuestIds — they have no placeId to look up in the
+// first place, so they're never candidates here at all.
+function CoordinatesBackfill() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  async function run() {
+    setRunning(true);
+    setError('');
+    setResult(null);
+    try {
+      setResult(await callBackfillQuestCoordinates());
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <h2>Map coordinates</h2>
+      <div className="ink-card">
+        <p style={{ marginTop: 0 }}>
+          Fills in map coordinates for existing quests that have a location but were created before the map view
+          existed. Safe to run more than once — it only touches quests still missing coordinates.
+        </p>
+        <StampButton type="button" variant="primary" onClick={run} disabled={running}>
+          {running ? 'Backfilling...' : 'Backfill quest coordinates'}
+        </StampButton>
+        {error && <p className="box-danger" style={{ marginTop: 10 }}>{error}</p>}
+        {result && (
+          <p className="data-stat" style={{ marginTop: 10 }}>
+            {result.updated} quest{result.updated === 1 ? '' : 's'} updated.
+            {result.failedQuestIds.length > 0 && ` ${result.failedQuestIds.length} failed — check the logs.`}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
 
 // The "admin can see once a user reaches the last rank" requirement —
 // certificates are never issued automatically (see issue_certificate,
@@ -467,6 +516,7 @@ export function Dashboard() {
       <AllUsers />
       <Organizations />
       <DiamondCertifications />
+      <CoordinatesBackfill />
       <QuestsAdmin />
     </PageMotion>
   );

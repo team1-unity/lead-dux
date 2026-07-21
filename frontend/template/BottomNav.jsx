@@ -4,7 +4,7 @@ import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/fire
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
-import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus } from './icons.jsx';
+import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus, IconMap } from './icons.jsx';
 import { Logo } from './Logo.jsx';
 import { getInitials } from './initials.js';
 
@@ -39,17 +39,24 @@ const PRIMARY_BY_ROLE = {
 // the wireframe's Quests/+/Badges bottom nav). Journal carries `badge: true`
 // so its unread-feedback count (see useUnreadFeedbackCount below) still
 // surfaces on its FAB circle even though it's no longer a standalone tab.
+// Map is the one feature every role gets — check-in/badges/journal are
+// participant-only concepts, but "where is this happening" is useful to an
+// organization checking its own pin or an admin browsing what's live, too.
 const FEATURES_BY_ROLE = {
   user: [
     { to: '/check-in', icon: IconQrCode, label: 'Check In' },
+    { to: '/map', icon: IconMap, label: 'Map' },
     { to: '/badges', icon: IconTrophy, label: 'Badges' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],
   pending_org: [
     { to: '/check-in', icon: IconQrCode, label: 'Check In' },
+    { to: '/map', icon: IconMap, label: 'Map' },
     { to: '/badges', icon: IconTrophy, label: 'Badges' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],
+  organization: [{ to: '/map', icon: IconMap, label: 'Map' }],
+  admin: [{ to: '/map', icon: IconMap, label: 'Map' }],
 };
 
 // Fans the FAB's popped-up circles out above it in a shallow arc (matching
