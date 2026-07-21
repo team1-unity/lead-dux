@@ -74,6 +74,8 @@ export function PendingPhotoSubmissions({ scopeField, scopeValue, title = 'Pendi
                 <p className="data-row-title">{s.userName || 'Unnamed'}</p>
                 <span className="data-stat">{s.questTitle}</span>
               </div>
+              {/* Side quests only — organization submissions have no reflection field at all. */}
+              {s.reflection && <p className="data-row-sub" style={{ marginTop: 4 }}>{s.reflection}</p>}
               {urls[s.id] && (
                 <img
                   src={urls[s.id]}

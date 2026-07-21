@@ -1470,13 +1470,20 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
 # have a QR check-in flow:
 #   - Organization quest: must already be checked in (an `attendance` doc
 #     exists — see check_in_to_event). The photo is extra proof on top of an
-#     already-completed quest.
-#   - Side/default quest: no QR ever exists for these, so RSVP alone is the
+#     already-completed quest, so approval awards the flat +5 photo bonus —
+#     never the tier's base points, which don't apply to organization quests
+#     at all.
+#   - Side/default quest: no QR ever exists for these, so accepting the
+#     quest (RSVP under the hood — see rsvp_to_quest/cancel_rsvp) is the
 #     gate, and approving the photo (see approve_photo_submission) is ITSELF
 #     what marks the side quest completed — it creates the `attendance` doc
 #     (freeing the caller's SIDE_QUEST_CONCURRENT_LIMIT slot, see
-#     _active_side_quest_ids) and awards the tier's base points, in addition
-#     to the +5 photo bonus, since there's no other path to earn either.
+#     _active_side_quest_ids) and awards exactly the tier's base points,
+#     never an additional +5 on top (there's no separate "bonus" for side
+#     quests — the photo IS the completion mechanism, not an addition to
+#     it). A short written reflection is required alongside the photo for
+#     side quests only (see PHOTO_REFLECTION_MAX_LENGTH below); organization
+#     quests never require or store one.
 #
 # The binary upload itself never passes through a callable — the client
 # uploads straight to Cloud Storage (storage.rules enforces the file-type/
@@ -1492,6 +1499,11 @@ PHOTO_BONUS_POINTS = 5
 MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024
 ALLOWED_PHOTO_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 REJECTION_REASON_MAX_LENGTH = 300
+# Side/default quests require a short written reflection alongside the
+# photo (see submit_quest_photo below) — organization quests never do,
+# since the photo there is extra proof on top of an already-completed
+# (checked-in) quest, not the completion signal itself.
+PHOTO_REFLECTION_MAX_LENGTH = 1000
 
 
 def _photo_submission_ref(db, quest_id: str, uid: str):
@@ -1547,6 +1559,22 @@ def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
             "You can only submit a photo for a quest you've checked in to.",
         )
 
+    reflection = req.data.get("reflection")
+    if quest.get("isDefault"):
+        if not isinstance(reflection, str) or not reflection.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "A short reflection is required to submit a side quest completion.",
+            )
+        if len(reflection) > PHOTO_REFLECTION_MAX_LENGTH:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"reflection must be at most {PHOTO_REFLECTION_MAX_LENGTH} characters.",
+            )
+        reflection = reflection.strip()
+    else:
+        reflection = None
+
     blob = admin_storage.bucket().blob(storage_path)
     if not blob.exists():
         raise https_fn.HttpsError(
@@ -1596,6 +1624,7 @@ def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
         "userName": user_name,
         "storagePath": storage_path,
         "contentType": content_type,
+        "reflection": reflection,
         "status": "pending",
         "pointsAwarded": 0,
         "rejectionReason": None,

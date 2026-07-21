@@ -11,11 +11,20 @@ from tests.helpers import seed_attendance, seed_blob, seed_photo_submission, see
 # first, same as check_in_to_event's own points-awarding tests do.
 
 
-def _submit(fake_firestore, fake_storage, make_request, call, *, quest_id="quest-1", uid="user-1", **blob_overrides):
+DEFAULT_REFLECTION = "I introduced myself to a neighbor and we talked for twenty minutes."
+
+
+def _submit(
+    fake_firestore, fake_storage, make_request, call, *,
+    quest_id="quest-1", uid="user-1", reflection=DEFAULT_REFLECTION, **blob_overrides,
+):
     storage_path = f"photoSubmissions/{quest_id}_{uid}/1.jpg"
     seed_blob(fake_storage, storage_path, **blob_overrides)
     return call(main.submit_quest_photo, make_request(
-        data={"questId": quest_id, "storagePath": storage_path, "contentType": blob_overrides.get("content_type", "image/jpeg")},
+        data={
+            "questId": quest_id, "storagePath": storage_path,
+            "contentType": blob_overrides.get("content_type", "image/jpeg"), "reflection": reflection,
+        },
         uid=uid, role="user",
     ))
 
@@ -49,6 +58,48 @@ class TestSubmitQuestPhoto:
         submission = main._photo_submission_ref(fake_firestore.client(), "quest-1", "user-1").get().to_dict()
         assert submission["status"] == "pending"
         assert submission["isDefault"] is True
+
+    def test_side_quest_rejects_missing_reflection(self, fake_firestore, fake_storage, make_request, call):
+        seed_quest(fake_firestore, "quest-1", orgId=None, isDefault=True, tier="iron", rsvpd=["user-1"])
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            _submit(fake_firestore, fake_storage, make_request, call, reflection=None)
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_side_quest_rejects_blank_reflection(self, fake_firestore, fake_storage, make_request, call):
+        seed_quest(fake_firestore, "quest-1", orgId=None, isDefault=True, tier="iron", rsvpd=["user-1"])
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            _submit(fake_firestore, fake_storage, make_request, call, reflection="   ")
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_side_quest_rejects_reflection_over_max_length(self, fake_firestore, fake_storage, make_request, call):
+        seed_quest(fake_firestore, "quest-1", orgId=None, isDefault=True, tier="iron", rsvpd=["user-1"])
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            _submit(fake_firestore, fake_storage, make_request, call, reflection="x" * (main.PHOTO_REFLECTION_MAX_LENGTH + 1))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_side_quest_stores_the_reflection(self, fake_firestore, fake_storage, make_request, call):
+        seed_quest(fake_firestore, "quest-1", orgId=None, isDefault=True, tier="iron", rsvpd=["user-1"])
+
+        _submit(fake_firestore, fake_storage, make_request, call, reflection="  Talked to my neighbor about their garden.  ")
+
+        submission = main._photo_submission_ref(fake_firestore.client(), "quest-1", "user-1").get().to_dict()
+        assert submission["reflection"] == "Talked to my neighbor about their garden."
+
+    def test_org_quest_never_requires_or_stores_a_reflection(self, fake_firestore, fake_storage, make_request, call):
+        seed_quest(fake_firestore, "quest-1", orgId="org-1")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
+
+        result = _submit(fake_firestore, fake_storage, make_request, call, reflection=None)
+
+        assert result == {"success": True, "status": "pending"}
+        submission = main._photo_submission_ref(fake_firestore.client(), "quest-1", "user-1").get().to_dict()
+        assert submission["reflection"] is None
 
     def test_succeeds_once_checked_in(self, fake_firestore, fake_storage, make_request, call):
         seed_quest(fake_firestore, "quest-1", orgId="org-1", title="Trail Cleanup")

@@ -261,14 +261,16 @@ export async function callCheckInToEvent({ questId, token }) {
 }
 
 // user: submits a photo already uploaded to Storage (see
-// QuestPhotoSubmission.jsx) as proof of a completed (checked-in) quest.
-// storagePath must be under photoSubmissions/{questId}_{uid}/ — see
-// storage.rules. Rejects with FAILED_PRECONDITION if the caller hasn't
-// checked in, ALREADY_EXISTS if a pending/approved submission already
-// exists (resubmission is only allowed after a rejection).
-export async function callSubmitQuestPhoto({ questId, storagePath, contentType }) {
+// QuestPhotoSubmission.jsx) as proof of a completed quest. storagePath must
+// be under photoSubmissions/{questId}_{uid}/ — see storage.rules. Rejects
+// with FAILED_PRECONDITION if the caller hasn't accepted (side quest) or
+// checked in (organization quest), ALREADY_EXISTS if a pending/approved
+// submission already exists (resubmission is only allowed after a
+// rejection). reflection is required for side quests only — the Cloud
+// Function ignores/never stores it for organization quests.
+export async function callSubmitQuestPhoto({ questId, storagePath, contentType, reflection }) {
   const fn = httpsCallable(functions, 'submit_quest_photo');
-  const result = await fn({ questId, storagePath, contentType });
+  const result = await fn({ questId, storagePath, contentType, reflection });
   return result.data;
 }
 

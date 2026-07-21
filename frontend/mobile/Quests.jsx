@@ -151,23 +151,33 @@ const EXT_BY_CONTENT_TYPE = {
   'image/heif': 'heif',
 };
 
-// A member's proof-of-participation photo for a quest they've RSVP'd to.
-// Shows the current Pending/Approved/Rejected status if a submission
-// already exists, otherwise an upload form. Same "let the server's
-// FAILED_PRECONDITION surface inline" approach as QuestReview above — this
-// doesn't duplicate the "did you actually check in" check client-side.
-function QuestPhotoSubmission({ questId, userId }) {
+// A member's proof-of-completion (side quests: reflection + photo; org
+// quests: photo only) for a quest they've accepted/checked in to. Shows the
+// current Pending/Approved/Rejected status if a submission already exists,
+// otherwise an upload form. Same "let the server's FAILED_PRECONDITION
+// surface inline" approach as QuestReview above — this doesn't duplicate
+// the "have you actually accepted/checked in" check client-side.
+//
+// Side quests (isDefault) additionally gate the form behind an explicit
+// "Mark as complete" step and require a written reflection alongside the
+// photo — organization quests skip both (the form shows immediately, same
+// as before this existed, and there's no reflection field at all).
+function QuestPhotoSubmission({ questId, userId, isDefault }) {
   const [submission, setSubmission] = useState(undefined); // undefined = loading, null = none yet
   const [file, setFile] = useState(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
   const [submittedPhotoUrl, setSubmittedPhotoUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [showCompletionForm, setShowCompletionForm] = useState(false);
+  const [reflection, setReflection] = useState('');
 
   useEffect(() => {
     setSubmission(undefined);
     setFile(null);
     setError('');
+    setShowCompletionForm(false);
+    setReflection('');
     return onSnapshot(
       doc(db, 'photoSubmissions', `${questId}_${userId}`),
       (snap) => setSubmission(snap.exists() ? snap.data() : null),
@@ -214,6 +224,10 @@ function QuestPhotoSubmission({ questId, userId }) {
     e.preventDefault();
     if (!file) return;
     setError('');
+    if (isDefault && !reflection.trim()) {
+      setError('A short reflection is required to submit this side quest.');
+      return;
+    }
     if (!PHOTO_CONTENT_TYPES.includes(file.type)) {
       setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
       return;
@@ -227,8 +241,10 @@ function QuestPhotoSubmission({ questId, userId }) {
       const ext = EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
       const storagePath = `photoSubmissions/${questId}_${userId}/${Date.now()}.${ext}`;
       await uploadBytes(storageRef(storage, storagePath), file, { contentType: file.type });
-      await callSubmitQuestPhoto({ questId, storagePath, contentType: file.type });
+      await callSubmitQuestPhoto({ questId, storagePath, contentType: file.type, reflection: isDefault ? reflection.trim() : undefined });
       setFile(null);
+      setReflection('');
+      setShowCompletionForm(false);
     } catch (err) {
       setError(err.message || 'Something went wrong.');
     } finally {
@@ -249,6 +265,7 @@ function QuestPhotoSubmission({ questId, userId }) {
             style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
           />
         )}
+        {submission.reflection && <p style={{ margin: 0 }}>{submission.reflection}</p>}
         <StatusStamp tone={submission.status === 'approved' ? 'education' : 'outdoors'}>
           {submission.status === 'approved' ? 'Approved' : 'Pending review'}
         </StatusStamp>
@@ -259,9 +276,26 @@ function QuestPhotoSubmission({ questId, userId }) {
     );
   }
 
+  // Side quest, never submitted before, hasn't clicked "Mark as complete"
+  // yet — the reflection/photo form only appears once they do. A quest
+  // that's already been rejected skips this gate (falls through to the
+  // form directly below) since intent to complete it is already clear.
+  if (isDefault && !submission && !showCompletionForm) {
+    return (
+      <div className="ink-card flex flex-col gap-sm" style={{ marginTop: 12 }}>
+        <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Complete this side quest</p>
+        <StampButton type="button" variant="primary" onClick={() => setShowCompletionForm(true)}>
+          Mark as complete
+        </StampButton>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={submit} className="ink-card flex flex-col gap-md" style={{ marginTop: 12 }}>
-      <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
+      <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
+        {isDefault ? 'Reflection & photo' : 'Proof photo'}
+      </p>
       {submission?.status === 'rejected' && (
         <>
           {submittedPhotoUrl && (
@@ -271,9 +305,21 @@ function QuestPhotoSubmission({ questId, userId }) {
               style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
             />
           )}
+          {submission.reflection && <p style={{ margin: 0 }}>{submission.reflection}</p>}
           <StatusStamp tone="rejected">Rejected</StatusStamp>
           {submission.rejectionReason && <p style={{ margin: 0 }}>{submission.rejectionReason}</p>}
         </>
+      )}
+      {isDefault && (
+        <label>
+          Your reflection
+          <textarea
+            required
+            value={reflection}
+            onChange={(e) => setReflection(e.target.value)}
+            placeholder="What did you do, and how did it go?"
+          />
+        </label>
       )}
       <label>
         {submission?.status === 'rejected' ? 'Submit a new photo' : 'Upload a photo'}
@@ -287,8 +333,8 @@ function QuestPhotoSubmission({ questId, userId }) {
         <img src={localPreviewUrl} alt="Selected photo preview" style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }} />
       )}
       {error && <p className="box-danger">{error}</p>}
-      <StampButton type="submit" variant="primary" disabled={!file || uploading}>
-        {uploading ? 'Uploading...' : 'Submit photo'}
+      <StampButton type="submit" variant="primary" disabled={!file || uploading || (isDefault && !reflection.trim())}>
+        {uploading ? 'Uploading...' : isDefault ? 'Submit completion' : 'Submit photo'}
       </StampButton>
     </form>
   );
@@ -432,7 +478,9 @@ export function QuestDetailBody({
         </p>
       )}
       <p className="quest-meta-row">
-        <IconUsers /> {selected.capacity ? `${rsvpCount} / ${selected.capacity} spots filled` : `${rsvpCount} RSVP'd`}
+        <IconUsers /> {selected.capacity
+          ? `${rsvpCount} / ${selected.capacity} spots filled`
+          : `${rsvpCount} ${primary.isDefault ? 'accepted' : "RSVP'd"}`}
       </p>
       <p className="quest-description">{primary.description}</p>
       <div className="quest-tags">
@@ -457,7 +505,15 @@ export function QuestDetailBody({
             disabled={busyId === selected.id || isFull || !!gate}
             aria-describedby={gate ? `${selected.id}-gate` : undefined}
           >
-            {busyId === selected.id ? 'Saving...' : gate ? (gate.type === 'locked' ? 'Locked' : 'Limit reached') : isFull ? 'Full' : isRsvpd ? 'Cancel RSVP' : 'RSVP'}
+            {busyId === selected.id
+              ? 'Saving...'
+              : gate
+                ? (gate.type === 'locked' ? 'Locked' : 'Limit reached')
+                : isFull
+                  ? 'Full'
+                  : isRsvpd
+                    ? (primary.isDefault ? 'Leave quest' : 'Cancel RSVP')
+                    : (primary.isDefault ? 'Accept Quest' : 'RSVP')}
           </StampButton>
         )}
         {gate && onGoToOrgQuests && (
@@ -467,7 +523,7 @@ export function QuestDetailBody({
         )}
         {!canRsvp && onGuestRsvp && (
           <StampButton type="button" variant="primary" onClick={onGuestRsvp}>
-            RSVP
+            {primary.isDefault ? 'Accept Quest' : 'RSVP'}
           </StampButton>
         )}
         <AnimatePresence>
@@ -479,7 +535,7 @@ export function QuestDetailBody({
               exit={reduce ? undefined : { opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <IconCheck /> You're in!
+              <IconCheck /> {primary.isDefault ? 'Accepted!' : "You're in!"}
             </motion.span>
           )}
         </AnimatePresence>
@@ -497,7 +553,9 @@ export function QuestDetailBody({
         <AddToCalendar quest={selected} />
       </div>
       {isRsvpd && showReview && <QuestReview questId={selected.id} />}
-      {canRsvp && isRsvpd && <QuestPhotoSubmission questId={selected.id} userId={userId} />}
+      {canRsvp && isRsvpd && (
+        <QuestPhotoSubmission questId={selected.id} userId={userId} isDefault={!!primary.isDefault} />
+      )}
       {showReviewsList && <QuestReviewsList questId={selected.id} />}
       {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
     </div>

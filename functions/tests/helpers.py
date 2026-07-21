@@ -68,6 +68,7 @@ def seed_photo_submission(fake_firestore, quest_id, uid, **overrides):
         "userName": "Alex",
         "storagePath": f"photoSubmissions/{quest_id}_{uid}/1.jpg",
         "contentType": "image/jpeg",
+        "reflection": None,
         "status": "pending",
         "pointsAwarded": 0,
         "rejectionReason": None,
