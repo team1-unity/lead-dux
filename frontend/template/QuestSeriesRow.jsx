@@ -248,9 +248,13 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
         <StampButton type="button" onClick={a.toggleAttendees} disabled={a.busy}>
           {a.attendeesOpen ? 'Hide attendees' : 'View attendees'}
         </StampButton>
-        <StampButton type="button" onClick={a.toggleReviews} disabled={a.busy}>
-          {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
-        </StampButton>
+        {/* Reviews are an organization-quest concept — side/default quests
+            have no organization to review, so there's never anything here. */}
+        {primary.orgId && (
+          <StampButton type="button" onClick={a.toggleReviews} disabled={a.busy}>
+            {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
+          </StampButton>
+        )}
         {primary.orgId && (
           <StampButton type="button" onClick={() => setFeedbackOpen((v) => !v)} disabled={a.busy}>
             {feedbackOpen ? 'Hide feedback' : 'Give feedback'}
@@ -280,7 +284,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             {a.recurring ? 'Cancel' : 'Make recurring'}
           </StampButton>
         )}
-        <AddToCalendar quest={selected} />
+        {primary.orgId && <AddToCalendar quest={selected} />}
         <StampButton
           type="button"
           variant="danger"
@@ -379,7 +383,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           ))}
         </ul>
       )}
-      {a.reviewsOpen && a.reviews && (
+      {primary.orgId && a.reviewsOpen && a.reviews && (
         <ul className="data-sublist">
           {a.reviews.length === 0 && <li>No reviews yet.</li>}
           {a.reviews.map((r) => (

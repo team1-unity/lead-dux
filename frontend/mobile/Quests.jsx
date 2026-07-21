@@ -539,25 +539,32 @@ export function QuestDetailBody({
             </motion.span>
           )}
         </AnimatePresence>
-        {canRsvp && isRsvpd && (
+        {/* Reviews, sharing, and calendar exports are all organization-quest
+            concepts — side quests have no organization to review, and no
+            individual event worth its own shareable link or calendar entry. */}
+        {!primary.isDefault && canRsvp && isRsvpd && (
           <StampButton type="button" onClick={() => setShowReview((v) => !v)}>
             {showReview ? 'Hide review' : 'Leave a review'}
           </StampButton>
         )}
-        <StampButton type="button" onClick={() => setShowReviewsList((v) => !v)}>
-          {showReviewsList ? 'Hide reviews' : 'View reviews'}
-        </StampButton>
-        <StampButton type="button" onClick={() => setShareOpen((v) => !v)}>
-          {shareOpen ? 'Hide share link' : 'Share quest'}
-        </StampButton>
-        <AddToCalendar quest={selected} />
+        {!primary.isDefault && (
+          <StampButton type="button" onClick={() => setShowReviewsList((v) => !v)}>
+            {showReviewsList ? 'Hide reviews' : 'View reviews'}
+          </StampButton>
+        )}
+        {!primary.isDefault && (
+          <StampButton type="button" onClick={() => setShareOpen((v) => !v)}>
+            {shareOpen ? 'Hide share link' : 'Share quest'}
+          </StampButton>
+        )}
+        {!primary.isDefault && <AddToCalendar quest={selected} />}
       </div>
-      {isRsvpd && showReview && <QuestReview questId={selected.id} />}
+      {!primary.isDefault && isRsvpd && showReview && <QuestReview questId={selected.id} />}
       {canRsvp && isRsvpd && (
         <QuestPhotoSubmission questId={selected.id} userId={userId} isDefault={!!primary.isDefault} />
       )}
-      {showReviewsList && <QuestReviewsList questId={selected.id} />}
-      {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
+      {!primary.isDefault && showReviewsList && <QuestReviewsList questId={selected.id} />}
+      {!primary.isDefault && shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
     </div>
   );
 }
