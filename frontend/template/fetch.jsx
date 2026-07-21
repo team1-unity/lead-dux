@@ -256,6 +256,34 @@ export async function callCheckInToEvent({ questId, token }) {
   return result.data;
 }
 
+// user: submits a photo already uploaded to Storage (see
+// QuestPhotoSubmission.jsx) as proof of a completed (checked-in) quest.
+// storagePath must be under photoSubmissions/{questId}_{uid}/ — see
+// storage.rules. Rejects with FAILED_PRECONDITION if the caller hasn't
+// checked in, ALREADY_EXISTS if a pending/approved submission already
+// exists (resubmission is only allowed after a rejection).
+export async function callSubmitQuestPhoto({ questId, storagePath, contentType }) {
+  const fn = httpsCallable(functions, 'submit_quest_photo');
+  const result = await fn({ questId, storagePath, contentType });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): approves a pending photo
+// submission, awarding the submitter's +5 photo bonus.
+export async function callApprovePhotoSubmission({ questId, userId }) {
+  const fn = httpsCallable(functions, 'approve_photo_submission');
+  const result = await fn({ questId, userId });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): rejects a pending photo
+// submission, optionally with a reason. The submitter can resubmit after this.
+export async function callRejectPhotoSubmission({ questId, userId, reason }) {
+  const fn = httpsCallable(functions, 'reject_photo_submission');
+  const result = await fn({ questId, userId, reason });
+  return result.data;
+}
+
 // user: submits a review for a quest the caller checked in to. Rejects
 // with ALREADY_EXISTS if this uid already reviewed this quest.
 export async function callSubmitReview({ questId, rating, body }) {

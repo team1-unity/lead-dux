@@ -17,6 +17,7 @@ import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
+import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
 import {
   IconPlus,
   IconSearch,
@@ -614,8 +615,10 @@ function OrgQuests() {
 // info fits there, alongside its account/org status), not here — this
 // page is purely quest browsing/management.
 export function Dashboard() {
+  const { user } = useAuth();
   return (
     <PageMotion>
+      <PendingPhotoSubmissions scopeField="orgId" scopeValue={user.uid} />
       <OrgQuests />
     </PageMotion>
   );

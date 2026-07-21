@@ -12,6 +12,7 @@ from google.genai import types as genai_types
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import auth, firestore, initialize_app
+from firebase_admin import storage as admin_storage
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -1368,6 +1369,286 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     })
 
     return {"success": True, "alreadyCheckedIn": False, "pointsAwarded": base_points}
+
+
+# Quest photo submission & verification --------------------------------------
+#
+# Proof-of-participation photo — separate from organization feedback/reviews
+# below, and from the +5 bonus it can unlock. Doc id is the same
+# {questId}_{uid} composite _attendance_doc_id already uses, which is what
+# makes "one submission per completed quest" true at the data-model level:
+# only one photoSubmissions doc can ever exist for a given (quest, user)
+# pair, and a resubmission after rejection overwrites that same doc rather
+# than creating a new one.
+#
+# Eligibility differs by quest type, since only organization quests actually
+# have a QR check-in flow:
+#   - Organization quest: must already be checked in (an `attendance` doc
+#     exists — see check_in_to_event). The photo is extra proof on top of an
+#     already-completed quest.
+#   - Side/default quest: no QR ever exists for these, so RSVP alone is the
+#     gate, and approving the photo (see approve_photo_submission) is ITSELF
+#     what marks the side quest completed — it creates the `attendance` doc
+#     (freeing the caller's SIDE_QUEST_CONCURRENT_LIMIT slot, see
+#     _active_side_quest_ids) and awards the tier's base points, in addition
+#     to the +5 photo bonus, since there's no other path to earn either.
+#
+# The binary upload itself never passes through a callable — the client
+# uploads straight to Cloud Storage (storage.rules enforces the file-type/
+# size limits unconditionally, so a tampered client can't bypass them), and
+# submit_quest_photo below only ever receives the resulting storage path.
+# It still re-verifies the uploaded blob server-side via the Admin SDK as
+# defense in depth, and patches the blob's metadata with the quest's real
+# orgId/isDefault (trusted, since it's read from the quest doc, not the
+# caller) — that's what lets storage.rules gate reads without needing a
+# cross-service lookup at the Firestore doc this function then creates.
+
+PHOTO_BONUS_POINTS = 5
+MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024
+ALLOWED_PHOTO_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+REJECTION_REASON_MAX_LENGTH = 300
+
+
+def _photo_submission_ref(db, quest_id: str, uid: str):
+    return db.collection("photoSubmissions").document(_attendance_doc_id(quest_id, uid))
+
+
+# Callable from the quest list's photo-upload form, once the file is
+# already sitting in Storage at storagePath (see QuestPhotoSubmission.jsx).
+@https_fn.on_call()
+def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    quest_id = req.data.get("questId")
+    storage_path = req.data.get("storagePath")
+    content_type = req.data.get("contentType")
+    if not quest_id or not storage_path or not content_type:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId, storagePath, and contentType are required.",
+        )
+    if content_type not in ALLOWED_PHOTO_CONTENT_TYPES:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"contentType must be one of {sorted(ALLOWED_PHOTO_CONTENT_TYPES)}.",
+        )
+
+    uid = req.auth.uid
+    # Must be exactly this caller's own folder for this quest — otherwise a
+    # tampered client could point storagePath at someone else's upload (or
+    # a different quest's) and have it recorded as their own submission.
+    expected_prefix = f"photoSubmissions/{_attendance_doc_id(quest_id, uid)}/"
+    if not storage_path.startswith(expected_prefix):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "storagePath must be under this quest's own submission folder.",
+        )
+
+    db = firestore.client()
+    quest = _get_quest_or_404(db, quest_id)
+
+    # Side/default quests have no QR check-in flow at all — RSVP is the
+    # whole gate, and the photo (once approved) is what completes it.
+    # Organization quests still require an actual check-in first.
+    if quest.get("isDefault"):
+        if uid not in (quest.get("rsvpd") or []):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                "RSVP to this side quest before submitting a photo.",
+            )
+    elif not _attendance_ref(db, quest_id, uid).get().exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "You can only submit a photo for a quest you've checked in to.",
+        )
+
+    blob = admin_storage.bucket().blob(storage_path)
+    if not blob.exists():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "Uploaded photo not found — try uploading again.",
+        )
+    blob.reload()
+    if blob.size is not None and blob.size > MAX_PHOTO_SIZE_BYTES:
+        blob.delete()
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"Photo must be smaller than {MAX_PHOTO_SIZE_BYTES // (1024 * 1024)}MB.",
+        )
+    if blob.content_type not in ALLOWED_PHOTO_CONTENT_TYPES:
+        blob.delete()
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Unsupported photo file type.",
+        )
+
+    # Trusted routing info for storage.rules' read check — read from the
+    # quest doc server-side, never from anything the caller supplied.
+    blob.metadata = {"orgId": quest.get("orgId") or "", "isDefault": str(bool(quest.get("isDefault")))}
+    blob.patch()
+
+    ref = _photo_submission_ref(db, quest_id, uid)
+    existing_snap = ref.get()
+    existing = existing_snap.to_dict() if existing_snap.exists else None
+    # A pending or approved submission already occupies this quest's one
+    # slot; only a rejected (or no) prior submission can be (re)submitted
+    # over.
+    if existing and existing.get("status") in ("pending", "approved"):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.ALREADY_EXISTS,
+            "You've already submitted a photo for this quest.",
+        )
+
+    user_snap = db.collection("users").document(uid).get()
+    user_name = user_snap.to_dict().get("name") if user_snap.exists else None
+
+    ref.set({
+        "questId": quest_id,
+        "userId": uid,
+        "orgId": quest.get("orgId"),
+        "isDefault": bool(quest.get("isDefault")),
+        "questTitle": quest.get("title"),
+        "userName": user_name,
+        "storagePath": storage_path,
+        "contentType": content_type,
+        "status": "pending",
+        "pointsAwarded": 0,
+        "rejectionReason": None,
+        "reviewedAt": None,
+        "reviewedBy": None,
+        # Preserved across a resubmission — the first time this quest was
+        # ever submitted for stays stable even if it's later rejected and
+        # tried again.
+        "createdAt": existing.get("createdAt") if existing else firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    })
+    return {"success": True, "status": "pending"}
+
+
+def _record_photo_approval(transaction, ref, reviewer_uid):
+    snap = ref.get(transaction=transaction)
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No photo submission found.")
+    submission = snap.to_dict()
+    # Re-checked inside the transaction (not just by the caller before
+    # starting it) so two overlapping approve calls — a double-click, or
+    # two reviewers in different tabs — can't both award points.
+    if submission.get("status") != "pending":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Only pending submissions can be approved.",
+        )
+    transaction.update(ref, {
+        "status": "approved",
+        "reviewedAt": firestore.SERVER_TIMESTAMP,
+        "reviewedBy": reviewer_uid,
+    })
+    return submission
+
+
+# Callable from the org dashboard's (own quests) or admin dashboard's (side
+# quests) pending-photo queue. Awarding points is a separate step after the
+# transaction above commits — same two-step "record, then award" shape
+# submit_quest_feedback_batch uses for its own bonus.
+#
+# The +5 photo bonus (PHOTO_BONUS_POINTS) only ever applies to organization
+# quests, which already earned their flat base points at check-in — the
+# photo there really is an extra bonus on top. Side/default quests have no
+# such bonus: they have no QR check-in at all (see the module note above
+# submit_quest_photo), so approving the photo IS the quest's completion
+# moment, and it awards exactly the tier's own base points (Iron = 10
+# total, not 10 + 5) — it also creates the attendance doc, freeing the
+# submitter's SIDE_QUEST_CONCURRENT_LIMIT slot (see _active_side_quest_ids).
+# If an admin separately generated a QR for this side quest and the
+# submitter already checked in through it, those points were already
+# awarded there, so approval awards nothing further (never double-counted).
+@https_fn.on_call()
+def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    quest_id = req.data.get("questId")
+    user_id = req.data.get("userId")
+    if not quest_id or not user_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId and userId are required.",
+        )
+
+    db = firestore.client()
+    quest = _get_quest_or_404(db, quest_id)
+    _require_owning_org_or_admin(req, quest, "review photo submissions")
+
+    ref = _photo_submission_ref(db, quest_id, user_id)
+    submission = firestore.transactional(_record_photo_approval)(db.transaction(), ref, req.auth.uid)
+    submitter_uid = submission["userId"]
+
+    if quest.get("isDefault"):
+        attendance_ref = _attendance_ref(db, quest_id, submitter_uid)
+        if attendance_ref.get().exists:
+            total_points = 0
+        else:
+            total_points = TIER_BASE_POINTS.get(quest.get("tier"), 0)
+            attendance_ref.set({
+                "userId": submitter_uid,
+                "orgId": None,
+                "eventId": quest_id,
+                "checkedInAt": firestore.SERVER_TIMESTAMP,
+                "pointsAwarded": total_points,
+                "qrToken": None,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+            })
+    else:
+        total_points = PHOTO_BONUS_POINTS
+
+    _award_points(db, submitter_uid, total_points)
+    ref.update({"pointsAwarded": total_points})
+
+    return {"success": True}
+
+
+# Callable from the same pending-photo queues as approve_photo_submission.
+# Rejecting an already-approved submission (clawing back points) is out of
+# scope — only a currently-pending one can be rejected. The submitter can
+# resubmit afterward (see submit_quest_photo).
+@https_fn.on_call()
+def reject_photo_submission(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    quest_id = req.data.get("questId")
+    user_id = req.data.get("userId")
+    reason = req.data.get("reason")
+    if not quest_id or not user_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId and userId are required.",
+        )
+    if reason is not None and (not isinstance(reason, str) or len(reason) > REJECTION_REASON_MAX_LENGTH):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"reason must be a string of at most {REJECTION_REASON_MAX_LENGTH} characters.",
+        )
+
+    db = firestore.client()
+    quest = _get_quest_or_404(db, quest_id)
+    _require_owning_org_or_admin(req, quest, "review photo submissions")
+
+    ref = _photo_submission_ref(db, quest_id, user_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No photo submission found.")
+    if snap.to_dict().get("status") != "pending":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Only pending submissions can be rejected.",
+        )
+
+    ref.update({
+        "status": "rejected",
+        "reviewedAt": firestore.SERVER_TIMESTAMP,
+        "reviewedBy": req.auth.uid,
+        "rejectionReason": (reason.strip() if isinstance(reason, str) and reason.strip() else None),
+    })
+    return {"success": True}
 
 
 # Organization feedback & reflections journal --------------------------------

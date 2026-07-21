@@ -39,8 +39,44 @@ def seed_attendance(fake_firestore, quest_id, uid, **overrides):
     return attendance
 
 
-def seed_user(fake_firestore, uid, name, email):
-    fake_firestore.client().collection("users").document(uid).set({"name": name, "email": email})
+def seed_user(fake_firestore, uid, name, email, **overrides):
+    user = {"name": name, "email": email}
+    user.update(overrides)
+    fake_firestore.client().collection("users").document(uid).set(user)
+
+
+def seed_blob(fake_storage, path, **overrides):
+    """Seeds a Storage blob as if a real upload already landed there —
+    tests for submit_quest_photo call this instead of actually uploading
+    anything, since the fake has no real bytes to store."""
+    blob = fake_storage.bucket().blob(path)
+    blob._exists = True
+    blob.size = 1000
+    blob.content_type = "image/jpeg"
+    for key, value in overrides.items():
+        setattr(blob, key, value)
+    return blob
+
+
+def seed_photo_submission(fake_firestore, quest_id, uid, **overrides):
+    submission = {
+        "questId": quest_id,
+        "userId": uid,
+        "orgId": "org-1",
+        "isDefault": False,
+        "questTitle": "Trail Cleanup",
+        "userName": "Alex",
+        "storagePath": f"photoSubmissions/{quest_id}_{uid}/1.jpg",
+        "contentType": "image/jpeg",
+        "status": "pending",
+        "pointsAwarded": 0,
+        "rejectionReason": None,
+        "reviewedAt": None,
+        "reviewedBy": None,
+    }
+    submission.update(overrides)
+    main._photo_submission_ref(fake_firestore.client(), quest_id, uid).set(submission)
+    return submission
 
 
 def seed_org(fake_firestore, uid, **overrides):

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { db } from '@shared/firebaseapp.jsx';
+import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import {
   callRsvpToQuest,
@@ -11,11 +12,13 @@ import {
   callSubmitReview,
   callListQuestReviews,
   callGetSideQuestStatus,
+  callSubmitQuestPhoto,
 } from '@shared/fetch.jsx';
 import { groupBySeries, attachSeriesRatings, formatRecurrence, isUpcoming } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
+import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -133,6 +136,159 @@ function QuestReview({ questId }) {
       {error && <p className="box-danger">{error}</p>}
       <StampButton type="submit" variant="primary" disabled={submitting}>
         {submitting ? 'Submitting...' : 'Submit review'}
+      </StampButton>
+    </form>
+  );
+}
+
+const PHOTO_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+const EXT_BY_CONTENT_TYPE = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
+
+// A member's proof-of-participation photo for a quest they've RSVP'd to.
+// Shows the current Pending/Approved/Rejected status if a submission
+// already exists, otherwise an upload form. Same "let the server's
+// FAILED_PRECONDITION surface inline" approach as QuestReview above — this
+// doesn't duplicate the "did you actually check in" check client-side.
+function QuestPhotoSubmission({ questId, userId }) {
+  const [submission, setSubmission] = useState(undefined); // undefined = loading, null = none yet
+  const [file, setFile] = useState(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
+  const [submittedPhotoUrl, setSubmittedPhotoUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setSubmission(undefined);
+    setFile(null);
+    setError('');
+    return onSnapshot(
+      doc(db, 'photoSubmissions', `${questId}_${userId}`),
+      (snap) => setSubmission(snap.exists() ? snap.data() : null),
+      (err) => {
+        setError(err.message || 'Could not load your photo submission.');
+        setSubmission(null);
+      },
+    );
+  }, [questId, userId]);
+
+  // A quick local preview of whichever file is currently selected, before
+  // it's even uploaded — lets someone confirm they picked the right photo.
+  useEffect(() => {
+    if (!file) {
+      setLocalPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setLocalPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  // Once a submission exists (pending/approved/rejected), fetch the actual
+  // uploaded photo itself so it's visible here too, not just its status.
+  useEffect(() => {
+    if (!submission?.storagePath) {
+      setSubmittedPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    getDownloadURL(storageRef(storage, submission.storagePath))
+      .then((url) => {
+        if (!cancelled) setSubmittedPhotoUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setSubmittedPhotoUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [submission?.storagePath]);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!file) return;
+    setError('');
+    if (!PHOTO_CONTENT_TYPES.includes(file.type)) {
+      setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
+      return;
+    }
+    if (file.size > MAX_PHOTO_SIZE_BYTES) {
+      setError('Photo must be smaller than 10MB.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+      const storagePath = `photoSubmissions/${questId}_${userId}/${Date.now()}.${ext}`;
+      await uploadBytes(storageRef(storage, storagePath), file, { contentType: file.type });
+      await callSubmitQuestPhoto({ questId, storagePath, contentType: file.type });
+      setFile(null);
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (submission === undefined) return <LoadingSpinner label="Loading photo status..." />;
+
+  if (submission && (submission.status === 'pending' || submission.status === 'approved')) {
+    return (
+      <div className="ink-card flex flex-col gap-sm" style={{ marginTop: 12 }}>
+        <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
+        {submittedPhotoUrl && (
+          <img
+            src={submittedPhotoUrl}
+            alt="Your submitted proof"
+            style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
+          />
+        )}
+        <StatusStamp tone={submission.status === 'approved' ? 'education' : 'outdoors'}>
+          {submission.status === 'approved' ? 'Approved' : 'Pending review'}
+        </StatusStamp>
+        {submission.status === 'approved' && (
+          <p style={{ margin: 0 }}>+{submission.pointsAwarded} points earned</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="ink-card flex flex-col gap-md" style={{ marginTop: 12 }}>
+      <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
+      {submission?.status === 'rejected' && (
+        <>
+          {submittedPhotoUrl && (
+            <img
+              src={submittedPhotoUrl}
+              alt="Your rejected submission"
+              style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
+            />
+          )}
+          <StatusStamp tone="rejected">Rejected</StatusStamp>
+          {submission.rejectionReason && <p style={{ margin: 0 }}>{submission.rejectionReason}</p>}
+        </>
+      )}
+      <label>
+        {submission?.status === 'rejected' ? 'Submit a new photo' : 'Upload a photo'}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+        />
+      </label>
+      {localPreviewUrl && (
+        <img src={localPreviewUrl} alt="Selected photo preview" style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }} />
+      )}
+      {error && <p className="box-danger">{error}</p>}
+      <StampButton type="submit" variant="primary" disabled={!file || uploading}>
+        {uploading ? 'Uploading...' : 'Submit photo'}
       </StampButton>
     </form>
   );
@@ -341,6 +497,7 @@ export function QuestDetailBody({
         <AddToCalendar quest={selected} />
       </div>
       {isRsvpd && showReview && <QuestReview questId={selected.id} />}
+      {canRsvp && isRsvpd && <QuestPhotoSubmission questId={selected.id} userId={userId} />}
       {showReviewsList && <QuestReviewsList questId={selected.id} />}
       {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
     </div>

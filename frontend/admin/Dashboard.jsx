@@ -20,6 +20,7 @@ import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { QuestSeriesRow } from '@shared/QuestSeriesRow.jsx';
+import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
 
 const ROLES = ['onboarding_user', 'user', 'onboarding_org', 'pending_org', 'organization', 'admin'];
 
@@ -462,6 +463,7 @@ export function Dashboard() {
     <PageMotion>
       <TopBar title="Admin Data" />
       <PendingRequests />
+      <PendingPhotoSubmissions scopeField="isDefault" scopeValue={true} title="Pending side quest photo submissions" />
       <AllUsers />
       <Organizations />
       <DiamondCertifications />

@@ -188,6 +188,8 @@
   --tag-arts-ink: #48276e;
   --tag-verified: #cfead9;
   --tag-verified-ink: #1e5c3c;
+  --tag-rejected: #f8e6e3;
+  --tag-rejected-ink: #c04a3c;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
   --rank-iron: #dfe3e6;
@@ -258,6 +260,8 @@
     --tag-arts-ink: #dcc4f0;
     --tag-verified: #23422f;
     --tag-verified-ink: #a9e0bc;
+    --tag-rejected: #3a2420;
+    --tag-rejected-ink: #e08a78;
 
     --rank-iron: #3a4147;
     --rank-iron-ink: #cdd3d6;
@@ -307,6 +311,8 @@
   --tag-food-security-ink: #e3dd8e;
   --tag-arts: #362949;
   --tag-arts-ink: #dcc4f0;
+  --tag-rejected: #3a2420;
+  --tag-rejected-ink: #e08a78;
 
   --accent-soft: #223a29;
   --secondary-ink: #f3d873;
@@ -346,6 +352,8 @@
   --tag-arts-ink: #48276e;
   --tag-verified: #cfead9;
   --tag-verified-ink: #1e5c3c;
+  --tag-rejected: #f8e6e3;
+  --tag-rejected-ink: #c04a3c;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
   --rank-iron: #dfe3e6;
