@@ -3,16 +3,18 @@ import { Link, Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callUpdateInterests, callUpdateOrganizationTags, callUpdateOrganizationProfile } from '@shared/fetch.jsx';
+import { callUpdateInterests, callUpdateAccommodationNeeds, callUpdateOrganizationTags, callUpdateOrganizationProfile } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
+import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { IconCheck, IconChevron, IconLock } from '@shared/icons.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
+import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import { hashTone } from '@shared/tagTones.js';
 import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from '@shared/rank.js';
 
@@ -152,6 +154,110 @@ function InterestsEditor() {
       {error && <p className="box-danger">{error}</p>}
       <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
         {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save interests'}
+      </StampButton>
+    </section>
+  );
+}
+
+// Lets a "user" change the accessibility needs and/or location they gave
+// during onboarding — onboarding only ever sets these once, and needs (or
+// where someone lives) can change afterward. Location doubles as the input
+// to the accommodation-based side-quest-limit relaxation check (see
+// rsvp_to_quest), so re-picking it here keeps that check current too, not
+// just the display. Re-picking a place is optional — location fields are
+// only sent to the server when the user actually changes them.
+function AccommodationNeedsEditor() {
+  const { user } = useAuth();
+  const [needs, setNeeds] = useState(null);
+  const [location, setLocation] = useState('');
+  const [placeId, setPlaceId] = useState(null);
+  const [lat, setLat] = useState(null);
+  const [lng, setLng] = useState(null);
+  const [locationChanged, setLocationChanged] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, 'users', user.uid)).then((snap) => {
+      const data = snap.exists() ? snap.data() : {};
+      setNeeds(data.accommodationNeeds || []);
+      setLocation(data.location || '');
+      setPlaceId(data.placeId || null);
+      setLat(typeof data.lat === 'number' ? data.lat : null);
+      setLng(typeof data.lng === 'number' ? data.lng : null);
+    });
+  }, [user]);
+
+  function toggle(value) {
+    setSaved(false);
+    setNeeds((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  }
+
+  async function save() {
+    setError('');
+    setSubmitting(true);
+    try {
+      const payload = { accommodationNeeds: needs };
+      if (locationChanged) {
+        payload.location = location;
+        payload.placeId = placeId;
+        payload.lat = lat;
+        payload.lng = lng;
+      }
+      await callUpdateAccommodationNeeds(payload);
+      setLocationChanged(false);
+      setSaved(true);
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (needs === null) return <LoadingSpinner label="Loading accessibility info..." />;
+
+  return (
+    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <h2 style={{ marginBottom: 0 }}>Accessibility &amp; Location</h2>
+      <p style={{ margin: 0 }}>
+        Missed this during onboarding, or does it need to change? Update it any time — it&rsquo;s
+        what opens up side quests for you when accessible events nearby run out.
+      </p>
+      <div className="flex flex-wrap gap-sm">
+        {ACCOMMODATION_OPTIONS.map((option) => (
+          <TagStamp
+            key={option.value}
+            selectable
+            selected={needs.includes(option.value)}
+            onClick={() => toggle(option.value)}
+          >
+            {option.label}
+          </TagStamp>
+        ))}
+      </div>
+      <label>
+        Your neighborhood or city
+        <PlaceAutocompleteInput
+          ariaLabel="Your neighborhood or city"
+          placeholder="Search for a place..."
+          onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat: selectedLat, lng: selectedLng }) => {
+            setLocation(selectedLocation);
+            setPlaceId(selectedPlaceId);
+            setLat(selectedLat);
+            setLng(selectedLng);
+            setLocationChanged(true);
+            setSaved(false);
+          }}
+        />
+        {location && <p className="field-optional">{location}</p>}
+      </label>
+      {error && <p className="box-danger">{error}</p>}
+      <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
+        {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save'}
       </StampButton>
     </section>
   );
@@ -424,6 +530,7 @@ export function Profile() {
       <div className="profile-grid">
         {role === 'user' && <ProgressCard />}
         {role === 'user' && <InterestsEditor />}
+        {role === 'user' && <AccommodationNeedsEditor />}
 
         {role !== 'user' && (
           <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

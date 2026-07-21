@@ -409,6 +409,16 @@ export async function callUpdateInterests({ interests }) {
   return result.data;
 }
 
+// user: changes their accommodation needs and/or location after onboarding.
+// Only send the fields actually being changed — omitted keys are left
+// untouched server-side (location/placeId/lat/lng travel together or not
+// at all).
+export async function callUpdateAccommodationNeeds(fields) {
+  const fn = httpsCallable(functions, 'update_accommodation_needs');
+  const result = await fn(fields);
+  return result.data;
+}
+
 // Settings' danger zone: permanently deletes the caller's own account,
 // cascading owned quests (organization) or rsvpd entries (everyone else)
 // server-side before removing the Auth account itself.

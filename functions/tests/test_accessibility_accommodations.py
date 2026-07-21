@@ -129,3 +129,85 @@ class TestGetSideQuestStatusRelaxation:
 
         assert result["atLimit"] is True
         assert result["limit"] == main.SIDE_QUEST_CONCURRENT_LIMIT
+
+
+class TestUpdateAccommodationNeeds:
+    def test_updates_accommodation_needs_only(self, fake_firestore, make_request, call):
+        _seed_accommodation_user(fake_firestore, needs=())
+
+        result = call(main.update_accommodation_needs, make_request(
+            data={"accommodationNeeds": ["wheelchair-accessible", "elevator-access"]},
+            uid="user-1", role="user",
+        ))
+
+        assert result == {"success": True}
+        user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
+        assert user["accommodationNeeds"] == ["wheelchair-accessible", "elevator-access"]
+        # Location untouched since it wasn't part of this request.
+        assert user["lat"] == USER_LAT
+        assert user["lng"] == USER_LNG
+
+    def test_can_clear_accommodation_needs_back_to_empty(self, fake_firestore, make_request, call):
+        _seed_accommodation_user(fake_firestore)
+
+        call(main.update_accommodation_needs, make_request(
+            data={"accommodationNeeds": []}, uid="user-1", role="user",
+        ))
+
+        user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
+        assert user["accommodationNeeds"] == []
+
+    def test_updates_location_together_with_lat_lng(self, fake_firestore, make_request, call):
+        _seed_accommodation_user(fake_firestore)
+
+        call(main.update_accommodation_needs, make_request(
+            data={
+                "location": "Brooklyn, NY", "placeId": "ChIJ_brooklyn",
+                "lat": NEARBY_LAT, "lng": NEARBY_LNG,
+            },
+            uid="user-1", role="user",
+        ))
+
+        user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
+        assert user["location"] == "Brooklyn, NY"
+        assert user["placeId"] == "ChIJ_brooklyn"
+        assert user["lat"] == NEARBY_LAT
+        assert user["lng"] == NEARBY_LNG
+        # Needs untouched since they weren't part of this request.
+        assert user["accommodationNeeds"] == ["wheelchair-accessible"]
+
+    def test_rejects_an_unknown_accommodation_tag(self, fake_firestore, make_request, call):
+        _seed_accommodation_user(fake_firestore)
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.update_accommodation_needs, make_request(
+                data={"accommodationNeeds": ["not-a-real-tag"]}, uid="user-1", role="user",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_rejects_lat_lng_without_location_and_placeid(self, fake_firestore, make_request, call):
+        _seed_accommodation_user(fake_firestore)
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.update_accommodation_needs, make_request(
+                data={"lat": NEARBY_LAT, "lng": NEARBY_LNG}, uid="user-1", role="user",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_rejects_empty_request(self, fake_firestore, make_request, call):
+        _seed_accommodation_user(fake_firestore)
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.update_accommodation_needs, make_request(data={}, uid="user-1", role="user"))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_requires_user_role(self, fake_firestore, make_request, call):
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.update_accommodation_needs, make_request(
+                data={"accommodationNeeds": []}, uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.PERMISSION_DENIED
