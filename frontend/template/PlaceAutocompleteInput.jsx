@@ -28,8 +28,16 @@ export function PlaceAutocompleteInput({ onSelect, placeholder, ariaLabel }) {
       containerRef.current.appendChild(element);
       element.addEventListener('gmp-select', async ({ placePrediction }) => {
         const place = placePrediction.toPlace();
-        await place.fetchFields({ fields: ['formattedAddress'] });
-        onSelect({ location: place.formattedAddress || '', placeId: place.id });
+        await place.fetchFields({ fields: ['formattedAddress', 'location'] });
+        onSelect({
+          location: place.formattedAddress || '',
+          placeId: place.id,
+          // place.location is a google.maps.LatLng, not a plain object —
+          // callers (create-quest forms) need plain numbers to send to the
+          // Cloud Function as-is.
+          lat: place.location?.lat(),
+          lng: place.location?.lng(),
+        });
       });
     });
 

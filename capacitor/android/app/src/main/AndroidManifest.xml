@@ -47,4 +47,12 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- EventsMap.jsx uses the browser navigator.geolocation API — same
+         story as CAMERA above: Capacitor's WebView bridges that request to
+         these runtime permissions automatically (confirmed via
+         BridgeWebChromeClient.onGeolocationPermissionsShowPrompt), no
+         native geolocation plugin needed. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 </manifest>

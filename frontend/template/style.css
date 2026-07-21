@@ -2488,3 +2488,67 @@ button.data-row:active:not(:disabled) {
   font-size: 0.85rem;
   color: var(--line-soft);
 }
+
+/* ---------- EventsMap.jsx — "Nearby" map view ---------- */
+
+.events-map-location-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.events-map-container {
+  width: 100%;
+  height: 320px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 14px;
+  background: var(--paper-well);
+}
+@media (min-width: 860px) {
+  .events-map-container {
+    height: 440px;
+  }
+}
+.events-map-selected {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.events-map-selected-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.events-map-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.events-map-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.events-map-list-row[data-active='true'] {
+  border-color: var(--accent);
+}
+.events-map-list-meta {
+  flex: 1;
+  min-width: 0;
+}
+.events-map-list-distance {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--line-soft);
+  white-space: nowrap;
+}

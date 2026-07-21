@@ -311,6 +311,7 @@ function OrgQuests() {
   const [timezone, setTimezone] = useState(detectTimezone());
   const [location, setLocation] = useState('');
   const [placeId, setPlaceId] = useState(null);
+  const [coords, setCoords] = useState(null); // { lat, lng } — see PlaceAutocompleteInput
   // Bumped after every successful submit to force a fresh
   // PlaceAutocompleteInput instance — the widget owns its own shadow-DOM
   // input, so there's no clean imperative "clear the displayed text" call;
@@ -375,6 +376,8 @@ function OrgQuests() {
         timezone,
         location,
         placeId,
+        lat: coords?.lat,
+        lng: coords?.lng,
         capacity: capacity ? Number(capacity) : null,
       };
       if (isRecurring) {
@@ -389,6 +392,7 @@ function OrgQuests() {
       setEventEndTime('');
       setLocation('');
       setPlaceId(null);
+      setCoords(null);
       setPlaceKey((k) => k + 1);
       setCapacity('');
       setIsRecurring(false);
@@ -427,9 +431,10 @@ function OrgQuests() {
           key={placeKey}
           ariaLabel="Quest location"
           placeholder="Search for an address or venue..."
-          onSelect={({ location: selectedLocation, placeId: selectedPlaceId }) => {
+          onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat, lng }) => {
             setLocation(selectedLocation);
             setPlaceId(selectedPlaceId);
+            setCoords({ lat, lng });
           }}
         />
         {placeId && <p className="field-optional">{location}</p>}

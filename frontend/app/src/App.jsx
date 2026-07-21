@@ -8,6 +8,7 @@ import { BottomNav } from '@shared/BottomNav.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { FeedbackToast } from '@shared/FeedbackToast.jsx';
+import { EventsMap } from '@shared/EventsMap.jsx';
 import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
 import { ForgotPassword } from './ForgotPassword.jsx';
@@ -147,6 +148,7 @@ function App() {
             <Route path="/quests/:seriesId" element={<QuestDetails />} />
             <Route path="/badges" element={<Badges />} />
             <Route path="/journal" element={<Journal />} />
+            <Route path="/map" element={<EventsMap />} />
             <Route
               path="/admin"
               element={

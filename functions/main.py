@@ -283,6 +283,19 @@ def _validate_capacity(value):
     return value
 
 
+# lat/lng always travel with a placeId (see _quest_doc_fields) — the
+# frontend captures both from the same Places Autocomplete selection, so a
+# request with one but not the other means the client is out of sync with
+# this API, not a case worth quietly tolerating.
+def _validate_coordinates(lat, lng) -> tuple:
+    if isinstance(lat, bool) or isinstance(lng, bool) or not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "lat and lng are required and must be numbers — select a location from the suggestions.",
+        )
+    return float(lat), float(lng)
+
+
 # Scheduling multiple/recurring dates for one quest --------------------------
 #
 # Doesn't introduce a separate template/instance collection — every
@@ -372,7 +385,7 @@ def _generate_series_dates(first_event_date: datetime, frequency: str, until: da
 def _quest_doc_fields(
     *, title, description, tags, location, tz, capacity, series_id,
     recurrence_frequency, recurrence_until, event_date, event_end_time,
-    org_id, org_name, is_default, tier, place_id=None,
+    org_id, org_name, is_default, tier, place_id=None, lat=None, lng=None,
 ):
     return {
         "title": title,
@@ -386,6 +399,14 @@ def _quest_doc_fields(
         # so create_default_quest never collects or validates a location
         # this way and this stays None for them.
         "placeId": place_id,
+        # Coordinates for the map view — captured client-side from the same
+        # Places Autocomplete selection as placeId (see
+        # PlaceAutocompleteInput.jsx), so these two fields always travel
+        # together: a quest either has both a placeId and coordinates, or
+        # neither. Side/default quests stay None here for the same reason
+        # they have no placeId — they're not tied to one point on a map.
+        "lat": lat,
+        "lng": lng,
         "timezone": tz,
         "capacity": capacity,
         "seriesId": series_id,
@@ -779,6 +800,7 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "A location must be selected from the suggestions.",
         )
+    lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
 
     event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
     event_end_time = (
@@ -803,6 +825,7 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
         capacity=capacity, series_id=doc_ref.id, recurrence_frequency=None, recurrence_until=None,
         event_date=event_date, event_end_time=event_end_time,
         org_id=req.auth.uid, org_name=org_name, is_default=False, tier=None, place_id=place_id,
+        lat=lat, lng=lng,
     ))
     return {"success": True, "questId": doc_ref.id}
 
@@ -839,6 +862,7 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "A location must be selected from the suggestions.",
         )
+    lat, lng = (None, None) if is_admin else _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
 
     first_event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
     event_end_time = (
@@ -882,6 +906,7 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
             recurrence_frequency=frequency, recurrence_until=until,
             event_date=occurrence_date, event_end_time=occurrence_end,
             org_id=org_id, org_name=org_name, is_default=is_default, tier=tier, place_id=place_id,
+            lat=lat, lng=lng,
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()
@@ -961,11 +986,71 @@ def make_quest_recurring(req: https_fn.CallableRequest) -> dict:
             event_date=occurrence_date, event_end_time=occurrence_end,
             org_id=quest.get("orgId"), org_name=quest.get("orgName"), is_default=quest.get("isDefault", False),
             tier=quest.get("tier"), place_id=quest.get("placeId"),
+            lat=quest.get("lat"), lng=quest.get("lng"),
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()
 
     return {"success": True, "seriesId": series_id, "questIds": quest_ids}
+
+
+# One-time (well — re-runnable, but idempotent) admin utility: every quest
+# that has a placeId already had a real place selected via Places
+# Autocomplete, but coordinates weren't captured client-side until the map
+# view existed (see PlaceAutocompleteInput.jsx). This backfills lat/lng for
+# every such quest that's missing them, via a Place Details lookup by the
+# placeId it already has — not a fuzzy address geocode, so there's no
+# "couldn't find that address" case to design around; the only way this
+# fails per-quest is a transient API error or a placeId that's since become
+# invalid (e.g. the place closed), which just gets reported back rather
+# than blocking the rest of the run. Side/default quests are untouched —
+# they never had a placeId to look up in the first place.
+@https_fn.on_call(secrets=["GOOGLE_PLACES_SERVER_KEY"])
+def backfill_quest_coordinates(req: https_fn.CallableRequest) -> dict:
+    _require_admin(req)
+
+    import os
+    import urllib.error
+    import urllib.request
+
+    api_key = os.environ["GOOGLE_PLACES_SERVER_KEY"]
+    db = firestore.client()
+
+    updated = 0
+    failed_quest_ids = []
+    batch = db.batch()
+    pending = 0
+
+    for doc in db.collection("quests").stream():
+        data = doc.to_dict()
+        place_id = data.get("placeId")
+        if not place_id or data.get("lat") is not None:
+            continue
+
+        url = f"https://places.googleapis.com/v1/places/{place_id}?fields=location&key={api_key}"
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                result = json.loads(resp.read())
+            location = result["location"]
+            batch.update(doc.reference, {"lat": location["latitude"], "lng": location["longitude"]})
+        except (urllib.error.URLError, KeyError, json.JSONDecodeError):
+            failed_quest_ids.append(doc.id)
+            continue
+
+        updated += 1
+        pending += 1
+        # Firestore caps a single batch at 500 writes — flush well under
+        # that so a run with more quests than fit in one batch still commits
+        # everything instead of raising partway through.
+        if pending >= 400:
+            batch.commit()
+            batch = db.batch()
+            pending = 0
+
+    if pending > 0:
+        batch.commit()
+
+    return {"success": True, "updated": updated, "failedQuestIds": failed_quest_ids}
 
 
 # Callable from the admin dashboard's "add default neighborhood quest" form —

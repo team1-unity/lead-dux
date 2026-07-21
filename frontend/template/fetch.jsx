@@ -113,9 +113,9 @@ export async function callSubmitOrganizationRequest({ name, phone, location, pla
 // the QR expiry to a few hours past eventDate when it's omitted. capacity
 // is optional (unlimited if omitted). See callCreateRecurringQuest for
 // creating a whole series of dates in one call.
-export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, capacity }) {
+export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity }) {
   const fn = httpsCallable(functions, 'create_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, capacity });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity });
   return result.data;
 }
 
@@ -133,6 +133,8 @@ export async function callCreateRecurringQuest({
   timezone,
   location,
   placeId,
+  lat,
+  lng,
   capacity,
   frequency,
   until,
@@ -148,6 +150,8 @@ export async function callCreateRecurringQuest({
     timezone,
     location,
     placeId,
+    lat,
+    lng,
     capacity,
     frequency,
     until,
@@ -390,5 +394,14 @@ export async function callListDiamondUsers() {
 export async function callIssueCertificate(targetUid) {
   const fn = httpsCallable(functions, 'issue_certificate');
   const result = await fn({ targetUid });
+  return result.data;
+}
+
+// admin: fills in lat/lng for every existing quest that has a placeId but
+// no coordinates yet (see EventsMap.jsx) — re-runnable/idempotent, only
+// touches quests still missing them. Returns { updated, failedQuestIds }.
+export async function callBackfillQuestCoordinates() {
+  const fn = httpsCallable(functions, 'backfill_quest_coordinates');
+  const result = await fn();
   return result.data;
 }
