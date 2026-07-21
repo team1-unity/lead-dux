@@ -2628,6 +2628,50 @@ def update_interests(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# Callable from Profile — lets an already-onboarded "user" change their
+# accommodation needs and/or location after the fact (onboarding only ever
+# sets them once). Unlike update_interests, an empty accommodationNeeds list
+# is valid (it means "no needs anymore"), and location/placeId/lat/lng are
+# only touched when actually present in the request — see
+# update_organization_profile above for the same "present key = change it"
+# shape. Both feed _has_enough_accessible_org_quests, so keeping them
+# current matters for the side-quest-limit relaxation, not just display.
+@https_fn.on_call()
+def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    update = {"updatedAt": firestore.SERVER_TIMESTAMP}
+
+    if "accommodationNeeds" in req.data:
+        update["accommodationNeeds"] = _validate_accommodation_tags(
+            req.data.get("accommodationNeeds") or [], "accommodationNeeds"
+        )
+
+    location_keys = ("location", "placeId", "lat", "lng")
+    if any(key in req.data for key in location_keys):
+        location = req.data.get("location")
+        place_id = req.data.get("placeId")
+        if not isinstance(location, str) or not location.strip() or not isinstance(place_id, str) or not place_id.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "location and placeId are required together with lat/lng.",
+            )
+        lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
+        update["location"] = location
+        update["placeId"] = place_id
+        update["lat"] = lat
+        update["lng"] = lng
+
+    if len(update) == 1:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Provide accommodationNeeds and/or a location to update.",
+        )
+
+    firestore.client().collection("users").document(req.auth.uid).update(update)
+    return {"success": True}
+
+
 # Rank progression -------------------------------------------------------
 #
 # Points themselves are only ever touched by _award_points (check-in,
