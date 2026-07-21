@@ -9,6 +9,8 @@ ONBOARDING_PAYLOAD = {
     "age": 25,
     "location": "Jersey City, NJ, USA",
     "placeId": "ChIJ_test_place_id",
+    "lat": 40.7178,
+    "lng": -74.0431,
     "interests": ["community"],
     "experienceLevel": "new",
     "timeAvailability": "weekly",
@@ -53,6 +55,45 @@ class TestSubmitOnboardingLocation:
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
         assert user["location"] == "Jersey City, NJ, USA"
         assert user["placeId"] == "ChIJ_test_place_id"
+        assert user["lat"] == 40.7178
+        assert user["lng"] == -74.0431
+
+    def test_requires_lat_lng(self, fake_firestore, make_request, call):
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        data = {**ONBOARDING_PAYLOAD, "lat": None, "lng": None}
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.submit_onboarding, make_request(data=data, uid="user-1", role="onboarding_user"))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+
+class TestSubmitOnboardingAccommodationNeeds:
+    def test_defaults_to_empty(self, fake_firestore, fake_auth, make_request, call):
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+
+        call(main.submit_onboarding, make_request(data=ONBOARDING_PAYLOAD, uid="user-1", role="onboarding_user"))
+
+        user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
+        assert user["accommodationNeeds"] == []
+
+    def test_stores_a_valid_selection(self, fake_firestore, fake_auth, make_request, call):
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        data = {**ONBOARDING_PAYLOAD, "accommodationNeeds": ["wheelchair-accessible", "sensory-friendly"]}
+
+        call(main.submit_onboarding, make_request(data=data, uid="user-1", role="onboarding_user"))
+
+        user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
+        assert user["accommodationNeeds"] == ["wheelchair-accessible", "sensory-friendly"]
+
+    def test_rejects_unknown_value(self, fake_firestore, make_request, call):
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        data = {**ONBOARDING_PAYLOAD, "accommodationNeeds": ["free-parking"]}
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.submit_onboarding, make_request(data=data, uid="user-1", role="onboarding_user"))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
 
 
 class TestSubmitOrganizationRequestLocation:

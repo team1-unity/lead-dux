@@ -1,6 +1,7 @@
 import base64
 import calendar
 import json
+import math
 import secrets
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -198,6 +199,65 @@ def _active_side_quest_ids(db, uid: str) -> list:
     return active
 
 
+EARTH_RADIUS_KM = 6371  # matches EventsMap.jsx's client-side haversine formula
+ACCESSIBLE_QUEST_RADIUS_KM = 25  # ~15.5mi — what counts as "nearby" below
+
+
+def _haversine_km(lat1, lng1, lat2, lng2):
+    # Same formula as frontend/template/EventsMap.jsx's client-side
+    # haversineKm — no new dependency needed for a straight-line distance
+    # at this app's scale.
+    r1, r2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(r1) * math.cos(r2) * math.sin(dlng / 2) ** 2
+    return EARTH_RADIUS_KM * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+# Whether a user who stated accommodationNeeds at onboarding currently has
+# enough nearby, fully-matching organization quests to reach their next
+# rank purely from those — if not, rsvp_to_quest relaxes
+# SIDE_QUEST_CONCURRENT_LIMIT for them (see there), since side quests have
+# no physical venue to be inaccessible in the first place. Live, not
+# cached: recomputed on every call, so it always reflects the current quest
+# catalog rather than a stale onboarding-time snapshot that would go wrong
+# as quests get added or removed.
+def _has_enough_accessible_org_quests(db, user: dict) -> bool:
+    needs = set(user.get("accommodationNeeds") or [])
+    if not needs:
+        return True  # callers only care when needs is non-empty; safe default otherwise
+
+    points_to_next_rank = _points_to_next_rank(user.get("points", 0))
+    if points_to_next_rank is None:
+        return True  # already at Diamond — nothing left to rank up into
+
+    user_lat, user_lng = user.get("lat"), user.get("lng")
+    if user_lat is None or user_lng is None:
+        # No coordinates on file — can't evaluate "nearby" at all, so
+        # returning False here (meaning "not enough") errs generous: the
+        # caller relaxes the limit rather than silently holding someone to
+        # the normal cap just because we can't confirm their situation.
+        return False
+
+    quests_needed = math.ceil(points_to_next_rank / ORG_QUEST_BASE_POINTS)
+    now = datetime.now(timezone.utc)
+    matching_count = 0
+    for doc in db.collection("quests").where("isDefault", "==", False).stream():
+        quest = doc.to_dict()
+        event_date = quest.get("eventDate")
+        lat, lng = quest.get("lat"), quest.get("lng")
+        if event_date is None or _to_utc(event_date) < now or lat is None or lng is None:
+            continue
+        if _haversine_km(user_lat, user_lng, lat, lng) > ACCESSIBLE_QUEST_RADIUS_KM:
+            continue
+        if not needs.issubset(set(quest.get("accommodationTags") or [])):
+            continue
+        matching_count += 1
+        if matching_count >= quests_needed:
+            return True
+    return matching_count >= quests_needed
+
+
 def _review_ref(db, series_id: str, uid: str, quest_id: str):
     # Doc id is {uid}_{questId}, not just uid — a member can review more
     # than one date in the same series (see submit_review), so uid alone
@@ -387,6 +447,7 @@ def _quest_doc_fields(
     *, title, description, tags, location, tz, capacity, series_id,
     recurrence_frequency, recurrence_until, event_date, event_end_time,
     org_id, org_name, is_default, tier, place_id=None, lat=None, lng=None,
+    accommodation_tags=None, accommodation_details=None,
 ):
     return {
         "title": title,
@@ -408,6 +469,16 @@ def _quest_doc_fields(
         # they have no placeId — they're not tied to one point on a map.
         "lat": lat,
         "lng": lng,
+        # Which accessibility accommodations this quest offers (e.g.
+        # wheelchair-accessible), organization quests only — see
+        # ACCOMMODATION_OPTIONS/_validate_accommodation_tags and
+        # _has_enough_accessible_org_quests. Side/default quests never set
+        # this (self-directed, no physical venue to accommodate). Required
+        # (non-empty) at create_quest time for org quests — see there.
+        "accommodationTags": accommodation_tags or [],
+        # Optional free-text supplement to the tags above — e.g. specific
+        # entry instructions. Side/default quests never set this either.
+        "accommodationDetails": accommodation_details,
         "timezone": tz,
         "capacity": capacity,
         "seriesId": series_id,
@@ -511,6 +582,54 @@ MOTIVATIONS = {"experience", "community", "impact", "requirement"}
 MAX_OTHER_LENGTH = 120
 MAX_LEADER_GOAL_LENGTH = 280
 
+# Fixed vocabulary for accessibility accommodations — mirrors
+# frontend/template/accommodations.js, kept in sync by hand the same way
+# the leadership-profile vocabularies above are. A user's accommodationNeeds
+# (set here, at onboarding) are matched against a quest's own
+# accommodationTags (required at create_quest time — see
+# _validate_accommodation_tags/_has_enough_accessible_org_quests below) —
+# unlike the leadership-profile questions, this is a multi-select with no
+# "Other" (same shape as `interests`), so there's nothing to resolve beyond
+# "every value must be one of these."
+ACCOMMODATION_OPTIONS = {
+    "wheelchair-accessible", "asl-interpretation", "accessible-parking", "sensory-friendly", "elevator-access",
+}
+ACCOMMODATION_DETAILS_MAX_LENGTH = 500
+
+
+def _validate_accommodation_tags(value, field_name):
+    if not isinstance(value, list):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"{field_name} must be a list.",
+        )
+    unknown = set(value) - ACCOMMODATION_OPTIONS
+    if unknown:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"{field_name} has unknown values: {sorted(unknown)}. Allowed: {sorted(ACCOMMODATION_OPTIONS)}.",
+        )
+    return value
+
+
+# Optional free-text supplement to accommodationTags (e.g. "ring the side
+# door bell for wheelchair entry") — organization quests only, never
+# required (unlike the tags themselves).
+def _validate_accommodation_details(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "accommodationDetails must be a string.",
+        )
+    if len(value) > ACCOMMODATION_DETAILS_MAX_LENGTH:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"accommodationDetails must be at most {ACCOMMODATION_DETAILS_MAX_LENGTH} characters.",
+        )
+    return value.strip() or None
+
 
 def _resolve_choice_with_other(value, other_value, known_values, field_name):
     if value == "other":
@@ -552,6 +671,7 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     location = req.data.get("location")
     place_id = req.data.get("placeId")
     leader_goal = req.data.get("leaderGoal") or ""
+    accommodation_needs = _validate_accommodation_tags(req.data.get("accommodationNeeds") or [], "accommodationNeeds")
 
     if not isinstance(interests, list) or not interests:
         raise https_fn.HttpsError(
@@ -567,6 +687,12 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "A location must be selected from the suggestions.",
         )
+    # Same Places Autocomplete selection as location/placeId (see
+    # PlaceAutocompleteInput.jsx) — required alongside them, same reasoning
+    # as create_quest's lat/lng requirement. Used by
+    # _has_enough_accessible_org_quests to find nearby organization quests
+    # for someone with accommodationNeeds; unused otherwise today.
+    lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
 
     experience_level, experience_level_other = _resolve_choice_with_other(
         req.data.get("experienceLevel"), req.data.get("experienceLevelOther"), EXPERIENCE_LEVELS, "experienceLevel",
@@ -597,7 +723,10 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
         "age": age,
         "location": location,
         "placeId": place_id,
+        "lat": lat,
+        "lng": lng,
         "interests": interests,
+        "accommodationNeeds": accommodation_needs,
         "experienceLevel": experience_level,
         "experienceLevelOther": experience_level_other,
         "timeAvailability": time_availability,
@@ -802,6 +931,16 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
             "A location must be selected from the suggestions.",
         )
     lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
+    # Required so attendees can see what's available before deciding to
+    # attend (see QuestDetailBody's accessibility section) — organization
+    # quests only, never optional the way plain `tags` is.
+    accommodation_tags = _validate_accommodation_tags(req.data.get("accommodationTags") or [], "accommodationTags")
+    if not accommodation_tags:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Select at least one accessibility accommodation for this quest.",
+        )
+    accommodation_details = _validate_accommodation_details(req.data.get("accommodationDetails"))
 
     event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
     event_end_time = (
@@ -826,7 +965,7 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
         capacity=capacity, series_id=doc_ref.id, recurrence_frequency=None, recurrence_until=None,
         event_date=event_date, event_end_time=event_end_time,
         org_id=req.auth.uid, org_name=org_name, is_default=False, tier=None, place_id=place_id,
-        lat=lat, lng=lng,
+        lat=lat, lng=lng, accommodation_tags=accommodation_tags, accommodation_details=accommodation_details,
     ))
     return {"success": True, "questId": doc_ref.id}
 
@@ -864,6 +1003,17 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
             "A location must be selected from the suggestions.",
         )
     lat, lng = (None, None) if is_admin else _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
+    # Required for the org branch only — see create_quest's identical check.
+    if is_admin:
+        accommodation_tags, accommodation_details = [], None
+    else:
+        accommodation_tags = _validate_accommodation_tags(req.data.get("accommodationTags") or [], "accommodationTags")
+        if not accommodation_tags:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "Select at least one accessibility accommodation for this quest.",
+            )
+        accommodation_details = _validate_accommodation_details(req.data.get("accommodationDetails"))
 
     first_event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
     event_end_time = (
@@ -907,7 +1057,7 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
             recurrence_frequency=frequency, recurrence_until=until,
             event_date=occurrence_date, event_end_time=occurrence_end,
             org_id=org_id, org_name=org_name, is_default=is_default, tier=tier, place_id=place_id,
-            lat=lat, lng=lng,
+            lat=lat, lng=lng, accommodation_tags=accommodation_tags, accommodation_details=accommodation_details,
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()
@@ -988,6 +1138,7 @@ def make_quest_recurring(req: https_fn.CallableRequest) -> dict:
             org_id=quest.get("orgId"), org_name=quest.get("orgName"), is_default=quest.get("isDefault", False),
             tier=quest.get("tier"), place_id=quest.get("placeId"),
             lat=quest.get("lat"), lng=quest.get("lng"),
+            accommodation_tags=quest.get("accommodationTags"), accommodation_details=quest.get("accommodationDetails"),
         ))
         quest_ids.append(doc_ref.id)
     batch.commit()
@@ -1254,14 +1405,23 @@ def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
     # RSVPs could race over.
     if quest.get("isDefault"):
         user_snap = db.collection("users").document(req.auth.uid).get()
-        points = user_snap.to_dict().get("points", 0) if user_snap.exists else 0
+        user = user_snap.to_dict() if user_snap.exists else {}
+        points = user.get("points", 0)
         if quest.get("tier") not in _unlocked_tiers(_rank_for_points(points)):
             raise https_fn.HttpsError(
                 https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
                 "You haven't unlocked this side quest tier yet.",
             )
         already_rsvpd = req.auth.uid in (quest.get("rsvpd") or [])
-        if not already_rsvpd and len(_active_side_quest_ids(db, req.auth.uid)) >= SIDE_QUEST_CONCURRENT_LIMIT:
+        # Someone with accessibility needs who doesn't currently have enough
+        # nearby, matching organization quests to rank up skips this limit
+        # entirely — side quests are self-directed with no physical venue
+        # to be inaccessible in the first place (see
+        # _has_enough_accessible_org_quests).
+        at_limit = len(_active_side_quest_ids(db, req.auth.uid)) >= SIDE_QUEST_CONCURRENT_LIMIT
+        if at_limit and user.get("accommodationNeeds") and not _has_enough_accessible_org_quests(db, user):
+            at_limit = False
+        if not already_rsvpd and at_limit:
             raise https_fn.HttpsError(
                 https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
                 f"You've reached your side quest limit ({SIDE_QUEST_CONCURRENT_LIMIT} at a time). "
@@ -2513,14 +2673,21 @@ def get_side_quest_status(req: https_fn.CallableRequest) -> dict:
 
     db = firestore.client()
     snap = db.collection("users").document(req.auth.uid).get()
-    points = snap.to_dict().get("points", 0) if snap.exists else 0
+    user = snap.to_dict() if snap.exists else {}
+    points = user.get("points", 0)
     active_ids = _active_side_quest_ids(db, req.auth.uid)
+    at_limit = len(active_ids) >= SIDE_QUEST_CONCURRENT_LIMIT
+    # Same relaxation rsvp_to_quest enforces — see
+    # _has_enough_accessible_org_quests. limit/atLimit go to None/False
+    # together so the frontend's existing sideQuestGate (keyed off atLimit)
+    # just stops gating, no separate "why" messaging needed there.
+    relaxed = at_limit and bool(user.get("accommodationNeeds")) and not _has_enough_accessible_org_quests(db, user)
 
     return {
         "unlockedTiers": _unlocked_tiers(_rank_for_points(points)),
         "activeSideQuestIds": active_ids,
-        "limit": SIDE_QUEST_CONCURRENT_LIMIT,
-        "atLimit": len(active_ids) >= SIDE_QUEST_CONCURRENT_LIMIT,
+        "limit": None if relaxed else SIDE_QUEST_CONCURRENT_LIMIT,
+        "atLimit": False if relaxed else at_limit,
     }
 
 

@@ -26,7 +26,10 @@ export async function callSubmitOnboarding({
   age,
   location,
   placeId,
+  lat,
+  lng,
   interests,
+  accommodationNeeds,
   experienceLevel,
   experienceLevelOther,
   timeAvailability,
@@ -43,7 +46,10 @@ export async function callSubmitOnboarding({
     age,
     location,
     placeId,
+    lat,
+    lng,
     interests,
+    accommodationNeeds,
     experienceLevel,
     experienceLevelOther,
     timeAvailability,
@@ -113,9 +119,15 @@ export async function callSubmitOrganizationRequest({ name, phone, location, pla
 // the QR expiry to a few hours past eventDate when it's omitted. capacity
 // is optional (unlimited if omitted). See callCreateRecurringQuest for
 // creating a whole series of dates in one call.
-export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity }) {
+export async function callCreateQuest({
+  title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity,
+  accommodationTags, accommodationDetails,
+}) {
   const fn = httpsCallable(functions, 'create_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity });
+  const result = await fn({
+    title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity,
+    accommodationTags, accommodationDetails,
+  });
   return result.data;
 }
 
@@ -139,6 +151,8 @@ export async function callCreateRecurringQuest({
   frequency,
   until,
   tier,
+  accommodationTags,
+  accommodationDetails,
 }) {
   const fn = httpsCallable(functions, 'create_recurring_quest');
   const result = await fn({
@@ -156,6 +170,8 @@ export async function callCreateRecurringQuest({
     frequency,
     until,
     tier,
+    accommodationTags,
+    accommodationDetails,
   });
   return result.data;
 }

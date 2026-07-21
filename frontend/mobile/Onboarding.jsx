@@ -6,6 +6,7 @@ import { AuthShell } from '@shared/AuthShell.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
+import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { EXPERIENCE_LEVELS, TIME_AVAILABILITY, GROUP_PREFERENCES, MOTIVATIONS, LEADER_GOAL_OPTIONS } from '@shared/leadershipProfile.js';
 
@@ -88,7 +89,10 @@ export function Onboarding({ name: initialName, onComplete }) {
   const [age, setAge] = useState('');
   const [location, setLocation] = useState('');
   const [placeId, setPlaceId] = useState(null);
+  const [lat, setLat] = useState(null);
+  const [lng, setLng] = useState(null);
   const [interests, setInterests] = useState([]);
+  const [accommodationNeeds, setAccommodationNeeds] = useState([]);
   const [experienceLevel, setExperienceLevel] = useState('');
   const [experienceLevelOther, setExperienceLevelOther] = useState('');
   const [timeAvailability, setTimeAvailability] = useState('');
@@ -119,6 +123,12 @@ export function Onboarding({ name: initialName, onComplete }) {
     );
   }
 
+  function toggleAccommodationNeed(value) {
+    setAccommodationNeeds((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  }
+
   async function finishOnboarding(resolvedLeaderGoal) {
     setError('');
     setSubmitting(true);
@@ -128,7 +138,10 @@ export function Onboarding({ name: initialName, onComplete }) {
         age: Number(age),
         location,
         placeId,
+        lat,
+        lng,
         interests,
+        accommodationNeeds,
         experienceLevel,
         experienceLevelOther,
         timeAvailability,
@@ -220,9 +233,11 @@ export function Onboarding({ name: initialName, onComplete }) {
             <PlaceAutocompleteInput
               ariaLabel="Your neighborhood or city"
               placeholder="Search for a place..."
-              onSelect={({ location: selectedLocation, placeId: selectedPlaceId }) => {
+              onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat: selectedLat, lng: selectedLng }) => {
                 setLocation(selectedLocation);
                 setPlaceId(selectedPlaceId);
+                setLat(selectedLat);
+                setLng(selectedLng);
               }}
             />
             {placeId && <p className="field-optional">{location}</p>}
@@ -239,6 +254,21 @@ export function Onboarding({ name: initialName, onComplete }) {
                   onClick={() => toggleInterest(interest)}
                 >
                   {interest}
+                </TagStamp>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Do you need any accessibility accommodations? (optional — select any that apply)</legend>
+            <div className="flex flex-wrap gap-sm" style={{ marginTop: 8 }}>
+              {ACCOMMODATION_OPTIONS.map((option) => (
+                <TagStamp
+                  key={option.value}
+                  selectable
+                  selected={accommodationNeeds.includes(option.value)}
+                  onClick={() => toggleAccommodationNeed(option.value)}
+                >
+                  {option.label}
                 </TagStamp>
               ))}
             </div>
