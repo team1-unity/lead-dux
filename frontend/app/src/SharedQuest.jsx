@@ -78,6 +78,25 @@ export function SharedQuest() {
     );
   }
 
+  // Side/default quests never had a "Share quest" action to generate this
+  // link from (see QuestSeriesRow.jsx, gated on primary.orgId) — guarding
+  // here too means an already-shared or bookmarked link to one stops
+  // working, not just the button that would create a new one.
+  if (!quest.orgId) {
+    return (
+      <PageMotion>
+        <div className="ink-card shared-quest-message">
+          <DuckMark size={56} />
+          <h1>This link isn't available</h1>
+          <p>Side quests don't have their own individual share link.</p>
+          <StampButton as={Link} to="/" variant="primary">
+            Go to Leadership Quest
+          </StampButton>
+        </div>
+      </PageMotion>
+    );
+  }
+
   if (!isUpcoming(quest)) {
     return (
       <PageMotion>
