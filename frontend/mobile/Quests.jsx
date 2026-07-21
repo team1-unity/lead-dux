@@ -24,6 +24,7 @@ import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { ShareQuestBox } from '@shared/QuestSeriesRow.jsx';
+import { accommodationLabel } from '@shared/accommodations.js';
 import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch, IconLock } from '@shared/icons.jsx';
 
 // Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
@@ -491,6 +492,27 @@ export function QuestDetailBody({
           </TagStamp>
         ))}
       </div>
+      {/* Side quests are self-directed with no physical venue, so
+          accessibility accommodations only ever apply to organization
+          quests — see accommodationTags' required-field validation in
+          create_quest. */}
+      {!primary.isDefault && (
+        <div className="ink-card" style={{ marginTop: 8 }}>
+          <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Accessibility</p>
+          {(primary.accommodationTags || []).length > 0 ? (
+            <>
+              <ul className="data-sublist" style={{ marginTop: 6 }}>
+                {primary.accommodationTags.map((tag) => (
+                  <li key={tag}>{accommodationLabel(tag)}</li>
+                ))}
+              </ul>
+              {primary.accommodationDetails && <p style={{ margin: '6px 0 0' }}>{primary.accommodationDetails}</p>}
+            </>
+          ) : (
+            <p style={{ margin: '6px 0 0' }}>Accessibility information not yet provided.</p>
+          )}
+        </div>
+      )}
       {gate && (
         <p className="side-quest-gate" id={`${selected.id}-gate`} role="status">
           <IconLock /> {gate.message}

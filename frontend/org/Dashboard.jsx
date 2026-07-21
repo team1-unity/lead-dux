@@ -18,6 +18,7 @@ import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
+import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import {
   IconPlus,
   IconSearch,
@@ -319,6 +320,8 @@ function OrgQuests() {
   // remounting is the straightforward way to reset it alongside the rest
   // of the form.
   const [placeKey, setPlaceKey] = useState(0);
+  const [accommodationTags, setAccommodationTags] = useState([]);
+  const [accommodationDetails, setAccommodationDetails] = useState('');
   const [capacity, setCapacity] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState('weekly');
@@ -359,11 +362,21 @@ function OrgQuests() {
     });
   }, [seriesList, search, activeTag]);
 
+  function toggleAccommodationTag(value) {
+    setAccommodationTags((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  }
+
   async function createQuest(e) {
     e.preventDefault();
     setError('');
     if (!placeId) {
       setError('Select a location from the suggestions.');
+      return;
+    }
+    if (accommodationTags.length === 0) {
+      setError('Select at least one accessibility accommodation for this quest.');
       return;
     }
     setSubmitting(true);
@@ -380,6 +393,8 @@ function OrgQuests() {
         lat: coords?.lat,
         lng: coords?.lng,
         capacity: capacity ? Number(capacity) : null,
+        accommodationTags,
+        accommodationDetails: accommodationDetails.trim() || null,
       };
       if (isRecurring) {
         await callCreateRecurringQuest({ ...base, frequency, until });
@@ -395,6 +410,8 @@ function OrgQuests() {
       setPlaceId(null);
       setCoords(null);
       setPlaceKey((k) => k + 1);
+      setAccommodationTags([]);
+      setAccommodationDetails('');
       setCapacity('');
       setIsRecurring(false);
       setUntil('');
@@ -439,6 +456,32 @@ function OrgQuests() {
           }}
         />
         {placeId && <p className="field-optional">{location}</p>}
+      </label>
+      <fieldset>
+        <legend>Accessibility accommodations</legend>
+        <p className="field-optional" style={{ marginTop: 0 }}>
+          Select at least one so attendees know what's available before deciding to attend.
+        </p>
+        <div className="flex flex-wrap gap-sm" style={{ marginTop: 8 }}>
+          {ACCOMMODATION_OPTIONS.map((option) => (
+            <TagStamp
+              key={option.value}
+              selectable
+              selected={accommodationTags.includes(option.value)}
+              onClick={() => toggleAccommodationTag(option.value)}
+            >
+              {option.label}
+            </TagStamp>
+          ))}
+        </div>
+      </fieldset>
+      <label>
+        Additional accessibility details (optional)
+        <textarea
+          value={accommodationDetails}
+          onChange={(e) => setAccommodationDetails(e.target.value)}
+          placeholder="e.g. Ring the side door bell for wheelchair entry."
+        />
       </label>
       <label>
         Capacity (optional)
