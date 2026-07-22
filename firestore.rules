@@ -50,6 +50,15 @@ service cloud.firestore {
     match /organizations/{uid} {
       allow read: if request.auth != null;
       allow write: if false;
+
+      // The org's own private reflection on how hosting a specific
+      // occurrence went — see submit_host_reflection in functions/main.py.
+      // Nothing sensitive here, same as users/{uid}/feedback, so the
+      // owner can read it directly; only a Cloud Function can write.
+      match /hostReflections/{questId} {
+        allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.role == 'admin');
+        allow write: if false;
+      }
     }
 
     // Any signed-in user can read the quest list to see it sorted by their

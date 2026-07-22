@@ -863,6 +863,7 @@ def delete_organization(req: https_fn.CallableRequest) -> dict:
         )
 
     db = firestore.client()
+    _delete_org_host_reflections(db, target_uid)
     db.collection("organizations").document(target_uid).delete()
     series_ids = set()
     for quest_doc in db.collection("quests").where("orgId", "==", target_uid).stream():
@@ -2422,6 +2423,74 @@ def submit_quest_reflection(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# Organization hosting reflections -------------------------------------------
+#
+# The organization side of the same journal idea: once a quest occurrence
+# has actually happened, the hosting org can privately write its own
+# reflection on how the hosting went. Lives at
+# organizations/{orgId}/hostReflections/{questId}, one doc per occurrence,
+# mirroring users/{uid}/feedback/{questId}'s shape. Unlike a member's
+# reflection there's no prior feedback doc to gate on — the gate here is
+# just that the occurrence has already happened, using the same effective-
+# end check _qr_expires_at uses for QR expiry (and the frontend's
+# isUpcoming). Purely private (see firestore.rules: owner-or-admin read
+# only); doesn't affect points or rank.
+
+HOST_REFLECTION_MAX_LENGTH = 4000
+
+
+def _host_reflection_ref(db, org_id: str, quest_id: str):
+    return db.collection("organizations").document(org_id).collection("hostReflections").document(quest_id)
+
+
+def _delete_org_host_reflections(db, org_id: str):
+    for doc in db.collection("organizations").document(org_id).collection("hostReflections").stream():
+        doc.reference.delete()
+
+
+# Callable from the org dashboard journal's reflection textarea. Requires
+# the occurrence to have already happened — an org reflects on hosting it
+# actually did, not one still upcoming.
+@https_fn.on_call()
+def submit_host_reflection(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    quest_id = req.data.get("questId")
+    body = req.data.get("body")
+    if not quest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
+    if not isinstance(body, str) or len(body) > HOST_REFLECTION_MAX_LENGTH:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"body must be a string of at most {HOST_REFLECTION_MAX_LENGTH} characters.",
+        )
+
+    db = firestore.client()
+    quest = _get_quest_or_404(db, quest_id)
+    _require_owning_org_or_admin(req, quest, "reflect on")
+    if not quest.get("orgId"):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This quest has no organization to reflect as.",
+        )
+
+    expires_at = _qr_expires_at(quest["eventDate"], quest.get("eventEndTime"))
+    if datetime.now(timezone.utc) < expires_at:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "You can only reflect on a quest once it's actually happened.",
+        )
+
+    _host_reflection_ref(db, quest["orgId"], quest_id).set({
+        "questId": quest_id,
+        "questTitle": quest.get("title"),
+        "eventDate": quest.get("eventDate"),
+        "reflectionBody": body.strip(),
+        "reflectionUpdatedAt": firestore.SERVER_TIMESTAMP,
+    }, merge=True)
+    return {"success": True}
+
+
 # Callable from the org dashboard's "view attendees" button (own quests
 # only) and the admin dashboard (any quest). The client Firestore rules
 # only let a user read their OWN users/{uid} doc, so resolving a quest's
@@ -3053,6 +3122,7 @@ def delete_account(req: https_fn.CallableRequest) -> dict:
             _delete_quest(db, quest_doc.reference)
         for series_id in series_ids:
             _delete_series_reviews(db, series_id)
+        _delete_org_host_reflections(db, uid)
         db.collection("organizations").document(uid).delete()
     else:
         for quest_doc in db.collection("quests").where("rsvpd", "array_contains", uid).stream():

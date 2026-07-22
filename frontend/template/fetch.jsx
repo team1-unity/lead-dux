@@ -394,6 +394,15 @@ export async function callSubmitQuestReflection({ questId, body }) {
   return result.data;
 }
 
+// organization (own quests) or admin (any quest): saves (or updates) the
+// org's own private reflection on how hosting a specific, already-happened
+// occurrence went.
+export async function callSubmitHostReflection({ questId, body }) {
+  const fn = httpsCallable(functions, 'submit_host_reflection');
+  const result = await fn({ questId, body });
+  return result.data;
+}
+
 // organization: sets the org's own location-area and activity-type tags
 // (separate from a single quest's tags — these describe the org itself).
 export async function callUpdateOrganizationTags({ ltag, etag }) {

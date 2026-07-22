@@ -55,7 +55,10 @@ const FEATURES_BY_ROLE = {
     { to: '/badges', icon: IconTrophy, label: 'Badges' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],
-  organization: [{ to: '/map', icon: IconMap, label: 'Map' }],
+  organization: [
+    { to: '/map', icon: IconMap, label: 'Map' },
+    { to: '/org/journal', icon: IconJournal, label: 'Journal' },
+  ],
   admin: [{ to: '/map', icon: IconMap, label: 'Map' }],
 };
 
