@@ -12,6 +12,8 @@ import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
+import { TrustTag } from '@shared/TrustTag.jsx';
+import { getTrustStatus } from '@shared/questSeries.js';
 import { IconCheck, IconChevron, IconLock } from '@shared/icons.jsx';
 import { INTEREST_OPTIONS } from '@shared/interests.js';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
@@ -581,8 +583,17 @@ export function Profile() {
         {role === 'organization' && org && (
           <>
             <section className="ink-card">
-              <h2 style={{ marginTop: 0 }}>About</h2>
-              <p style={{ margin: 0 }}>{org.reason}</p>
+              <div className="flex items-center gap-sm">
+                <h2 style={{ margin: 0 }}>About</h2>
+                <TrustTag status={getTrustStatus(org.reviewCount || 0, org.avgRating || 0)} />
+              </div>
+              {getTrustStatus(org.reviewCount || 0, org.avgRating || 0) === 'under_review' && (
+                <p className="box-danger" style={{ marginTop: 10 }}>
+                  Your ratings have fallen low enough that your organization is under review. Improve your Trust
+                  Score by delivering the experience your quests describe — an admin may also reach out.
+                </p>
+              )}
+              <p style={{ margin: '10px 0 0' }}>{org.reason}</p>
               <p className="data-stat" style={{ marginTop: 10 }}>{org.location}</p>
               <p className="data-stat">{org.phone}</p>
             </section>
