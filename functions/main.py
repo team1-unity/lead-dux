@@ -838,11 +838,6 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "contactEmail": None,
         "socialLinks": {},
         "photos": [],
-        # Trust Score rollup (see _record_review) — raw sum/count rather
-        # than a derived average, so both the average and the "needs at
-        # least 3 reviews" cutoff can be recomputed without replaying history.
-        "ratingSum": 0,
-        "ratingCount": 0,
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
@@ -2578,20 +2573,6 @@ def _record_review(transaction, series_ref, review_ref, org_ref, rating, body, u
     # right instinct if this doc ever grows more fields later.
     transaction.set(series_ref, {"reviewCount": new_count, "avgRating": new_avg}, merge=True)
     transaction.set(org_ref, {"reviewCount": org_new_count, "avgRating": org_new_avg}, merge=True)
-
-    # Organization Trust Score — a straight running sum/count (not a
-    # derived average like the series aggregate above) so both the average
-    # and the "needs at least 3 reviews before it's shown" cutoff (see
-    # OrganizationProfile) can be recomputed from these two raw numbers
-    # without replaying every review ever left across all of an org's
-    # quests. Every quest this transaction can reach always has an orgId
-    # (submit_review rejects orgless quests before calling this), so
-    # org_ref always points at a real approved organization doc.
-    org = org_ref.get(transaction=transaction).to_dict() or {}
-    transaction.set(org_ref, {
-        "ratingSum": org.get("ratingSum", 0) + rating,
-        "ratingCount": org.get("ratingCount", 0) + 1,
-    }, merge=True)
 
 
 @https_fn.on_call()

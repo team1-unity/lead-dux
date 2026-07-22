@@ -9,7 +9,8 @@ import { TagStamp } from '@shared/TagStamp.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { PhotoGallery } from '@shared/PhotoGallery.jsx';
 import { formatEventDate } from '@shared/QuestSeriesRow.jsx';
-import { groupBySeries, attachSeriesRatings, isUpcoming } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, isUpcoming, getTrustStatus } from '@shared/questSeries.js';
+import { TrustTag } from '@shared/TrustTag.jsx';
 import { hashTone } from '@shared/tagTones.js';
 import {
   IconGlobe,
@@ -32,21 +33,6 @@ const SOCIAL_ICONS = {
   tiktok: IconTikTok,
   youtube: IconYouTube,
 };
-
-// Trust Score is only ever shown once an org has at least 3 reviews (see
-// the rollup in functions/main.py's _record_review) — anything below that
-// reads as "New Organization" instead, so a single early 1-star review
-// can't misrepresent an otherwise-untested org.
-const MIN_REVIEWS_FOR_TRUST_SCORE = 3;
-
-function TrustScore({ org }) {
-  const count = org.ratingCount || 0;
-  if (count < MIN_REVIEWS_FOR_TRUST_SCORE) {
-    return <span className="data-stat">New Organization</span>;
-  }
-  const score = org.ratingSum / count;
-  return <span className="data-stat">★ {score.toFixed(1)} / 5 ({count} reviews)</span>;
-}
 
 function OrgQuestCard({ series }) {
   const { primary, occurrences } = series;
@@ -122,11 +108,17 @@ export function OrganizationProfile() {
             {org.verified && <StatusStamp tone="verified">Verified</StatusStamp>}
           </div>
           <div className="flex items-center gap-sm" style={{ marginTop: 6 }}>
-            <TrustScore org={org} />
+            <TrustTag status={getTrustStatus(org.reviewCount || 0, org.avgRating || 0)} />
             {org.category && <TagStamp tone={hashTone(org.category)}>{org.category}</TagStamp>}
           </div>
         </div>
       </div>
+      {getTrustStatus(org.reviewCount || 0, org.avgRating || 0) === 'under_review' && (
+        <p className="box-danger">
+          This organization is under review for consistently low ratings — its Trust Score has not yet been
+          confirmed.
+        </p>
+      )}
 
       <div className="profile-grid">
         <section className="ink-card">
