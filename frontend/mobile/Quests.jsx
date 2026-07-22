@@ -13,14 +13,16 @@ import {
   callListQuestReviews,
   callGetSideQuestStatus,
   callSubmitQuestPhoto,
+  callListOrganizationTrustTags,
 } from '@shared/fetch.jsx';
-import { groupBySeries, attachSeriesRatings, formatRecurrence, isUpcoming } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, attachOrgTrustStatus, formatRecurrence, isUpcoming } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
+import { TrustTag } from '@shared/TrustTag.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { ShareQuestBox } from '@shared/QuestSeriesRow.jsx';
@@ -432,15 +434,22 @@ export function QuestDetailBody({
         <div>
           <p className="quest-title" style={{ fontSize: '1.25rem' }}>{primary.title}</p>
           {primary.orgName && (
-            <p className="quest-org-line">
+            <p className="quest-org-line flex items-center gap-sm" style={{ flexWrap: 'wrap' }}>
               {primary.orgId ? (
                 <Link to={`/organizations/${primary.orgId}`}>{primary.orgName}</Link>
               ) : (
-                primary.orgName
+                <span>{primary.orgName}</span>
               )}
+              <TrustTag status={series.orgTrustStatus} />
             </p>
           )}
         </div>
+      )}
+      {series.orgTrustStatus === 'under_review' && (
+        <p className="box-danger">
+          This organization is under review for consistently low ratings — its Trust Score has not yet been
+          confirmed.
+        </p>
       )}
       {formatRecurrence(primary) && <p className="quest-org-line">{formatRecurrence(primary)}</p>}
       {occurrences.length > 1 ? (
@@ -612,6 +621,12 @@ function QuestRow({ series, isLast, isOpen, isActive, gate, onSelect, children }
         <button type="button" className="quest-card-head" onClick={onSelect} aria-expanded={isOpen || isActive}>
           <div className="quest-card-titles">
             <p className="quest-title">{primary.title}</p>
+            {primary.orgName && (
+              <p className="quest-org-line flex items-center gap-sm" style={{ flexWrap: 'wrap' }}>
+                <span>{primary.orgName}</span>
+                <TrustTag status={series.orgTrustStatus} />
+              </p>
+            )}
             {primary.isDefault && primary.tier && (
               <p className="quest-org-line"><TierBadge tier={primary.tier} /></p>
             )}
@@ -620,11 +635,6 @@ function QuestRow({ series, isLast, isOpen, isActive, gate, onSelect, children }
                 <IconLock /> {gate.type === 'locked' ? 'Locked' : 'Side quest limit reached'}
               </p>
             )}
-            {/* Plain text, not a Link — this whole row is already inside a
-                <button onClick={onSelect}> to expand the card, and an <a>
-                can't nest inside a <button>. The org name IS a link once
-                the card is expanded (see QuestDetailBody above). */}
-            {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
             {primary.location && (
               <p className="quest-org-line">
                 <span className="quest-dot" aria-hidden="true" />
@@ -708,11 +718,16 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
 
   function load() {
     setLoadError(null);
-    Promise.all([getDocs(collection(db, 'quests')), getDocs(collection(db, 'questSeries'))])
-      .then(([questsSnap, seriesSnap]) => {
+    Promise.all([
+      getDocs(collection(db, 'quests')),
+      getDocs(collection(db, 'questSeries')),
+      callListOrganizationTrustTags(),
+    ])
+      .then(([questsSnap, seriesSnap, trustTags]) => {
         const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
-        const grouped = attachSeriesRatings(groupBySeries(all), seriesDocsById);
+        const trustStatusByOrgId = new Map(trustTags.map((t) => [t.orgId, t.trustStatus]));
+        const grouped = attachOrgTrustStatus(attachSeriesRatings(groupBySeries(all), seriesDocsById), trustStatusByOrgId);
         grouped.sort((a, b) => {
           // Organization quests only — AI ranking is generated server-side
           // from interests/experience/volunteer history, see

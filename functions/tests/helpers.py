@@ -92,6 +92,9 @@ def seed_org(fake_firestore, uid, **overrides):
         "verified": True,
         "ratingSum": 0,
         "ratingCount": 0,
+        "reviewCount": 0,
+        "avgRating": 0,
+        
     }
     org.update(overrides)
     fake_firestore.client().collection("organizations").document(uid).set(org)

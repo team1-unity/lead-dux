@@ -330,6 +330,17 @@ export async function callListQuestReviews(questId) {
   return result.data.reviews;
 }
 
+// Any signed-in user: every organization's public-facing trust tag —
+// {orgId, trustStatus}, where trustStatus is 'new' | 'trustworthy' |
+// 'under_review' | null. The underlying score/review count never comes
+// back at all (see list_organization_trust_tags in functions/main.py) —
+// the frontend only ever gets which tag (if any) to render.
+export async function callListOrganizationTrustTags() {
+  const fn = httpsCallable(functions, 'list_organization_trust_tags');
+  const result = await fn();
+  return result.data.organizations;
+}
+
 // organization (own quests) or admin (any quest): resolves a quest's rsvpd
 // uids into {uid, name, email} for display.
 export async function callListQuestAttendees(questId) {

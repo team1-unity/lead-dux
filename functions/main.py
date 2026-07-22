@@ -816,6 +816,12 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "reason": request_data.get("reason"),
         "ltag": [],
         "etag": [],
+        # Trust Score starts at 0 (see AI_README.md) — reviewCount/avgRating
+        # are otherwise only ever set by _record_review's merge=True, which
+        # would leave them entirely absent from a fresh org's doc until its
+        # first review.
+        "reviewCount": 0,
+        "avgRating": 0,
         # Getting approved here IS the vetting pass (see the two-step
         # application/manual-review process in the proposal) — there's no
         # separate "mark verified" admin action, approval already implies it.
@@ -897,14 +903,27 @@ def admin_list_users(req: https_fn.CallableRequest) -> dict:
     return {"users": users}
 
 
-# Callable from the admin dashboard's "organizations" list.
+# Callable from the admin dashboard's "organizations" list. Unlike
+# list_organization_trust_tags, admin sees the real reviewCount/avgRating/
+# trustScore regardless of the TRUST_SCORE_MIN_REVIEWS gate, plus a computed
+# `flagged` — an org whose Trust Score has settled at or below
+# TRUST_SCORE_FLAG_THRESHOLD once it has enough reviews to be meaningful
+# (see AI_README.md's "Organizations with consistently low scores are
+# flagged for internal review"). Neither trustScore nor flagged is stored —
+# both are cheap to recompute on every read, and storing them would mean
+# remembering to update them from _record_review too.
 @https_fn.on_call()
 def admin_list_organizations(req: https_fn.CallableRequest) -> dict:
     _require_admin(req)
 
     orgs = []
     for doc in firestore.client().collection("organizations").stream():
-        orgs.append({"uid": doc.id, **doc.to_dict()})
+        org = doc.to_dict()
+        review_count = org.get("reviewCount", 0)
+        avg_rating = org.get("avgRating", 0)
+        trust_score = _trust_score(avg_rating)
+        flagged = _trust_status(review_count, avg_rating) == "under_review"
+        orgs.append({"uid": doc.id, **org, "trustScore": trust_score, "flagged": flagged})
     return {"organizations": orgs}
 
 
@@ -2478,9 +2497,53 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
 MIN_RATING = 1
 MAX_RATING = 5
 
+# Organization Trust Score (see AI_README.md) ---------------------------
+#
+# Distinct from the per-series reviewCount/avgRating above: a quest series
+# is one specific recurring event, while an organization typically runs
+# many series over time. _record_review rolls every review into BOTH
+# rollups in the same transaction — the series' own rating (what a member
+# sees deciding whether to attend that particular event) and the org's
+# rating (the org's platform-wide reputation).
+#
+# The org's rollup itself (avgRating on organizations/{uid}) stays on the
+# same 1-5 scale as every individual rating, the same way questSeries'
+# avgRating does — that's what makes the incremental running-average math
+# in _record_review correct. The underlying 0-100 Trust Score (see
+# _trust_score) is derived from that average at read time, never stored —
+# so there's only ever one source of truth to update per review — and it
+# never leaves the server as a number. Members only ever see one of three
+# tags (see _trust_status/list_organization_trust_tags): "new" (not enough
+# reviews yet to judge), "trustworthy" (cleared TRUST_SCORE_TAG_THRESHOLD),
+# or "under_review" (a warning — settled at or below
+# TRUST_SCORE_FLAG_THRESHOLD, the same bar that gets an org flagged for
+# admin). Anything in between those two thresholds is unremarkable enough
+# to get no tag at all. Admin is the one place that still sees the real
+# numbers regardless of tag (see admin_list_organizations).
+TRUST_SCORE_MIN_REVIEWS = 3
+TRUST_SCORE_MAX = 100
+TRUST_SCORE_FLAG_THRESHOLD = 60  # "under_review" / admin-flagged once eligible AND at/below this
+TRUST_SCORE_TAG_THRESHOLD = 80  # "trustworthy" once eligible AND at/above this
+
+
+def _trust_score(avg_rating: float) -> int:
+    return round((avg_rating / MAX_RATING) * TRUST_SCORE_MAX)
+
+
+def _trust_status(review_count: int, avg_rating: float) -> str | None:
+    if review_count < TRUST_SCORE_MIN_REVIEWS:
+        return "new"
+    score = _trust_score(avg_rating)
+    if score >= TRUST_SCORE_TAG_THRESHOLD:
+        return "trustworthy"
+    if score <= TRUST_SCORE_FLAG_THRESHOLD:
+        return "under_review"
+    return None
+
 
 def _record_review(transaction, series_ref, review_ref, org_ref, rating, body, uid, quest_id, event_date):
     series_snap = series_ref.get(transaction=transaction)
+    org_snap = org_ref.get(transaction=transaction)
     review_snap = review_ref.get(transaction=transaction)
     if review_snap.exists:
         raise https_fn.HttpsError(
@@ -2493,6 +2556,12 @@ def _record_review(transaction, series_ref, review_ref, org_ref, rating, body, u
     current_avg = series.get("avgRating", 0)
     new_count = current_count + 1
     new_avg = ((current_avg * current_count) + rating) / new_count
+
+    org = org_snap.to_dict() or {}
+    org_current_count = org.get("reviewCount", 0)
+    org_current_avg = org.get("avgRating", 0)
+    org_new_count = org_current_count + 1
+    org_new_avg = ((org_current_avg * org_current_count) + rating) / org_new_count
 
     transaction.set(review_ref, {
         "uid": uid,
@@ -2508,6 +2577,7 @@ def _record_review(transaction, series_ref, review_ref, org_ref, rating, body, u
     # (reviewCount/avgRating are its only fields today) but merge is the
     # right instinct if this doc ever grows more fields later.
     transaction.set(series_ref, {"reviewCount": new_count, "avgRating": new_avg}, merge=True)
+    transaction.set(org_ref, {"reviewCount": org_new_count, "avgRating": org_new_avg}, merge=True)
 
     # Organization Trust Score — a straight running sum/count (not a
     # derived average like the series aggregate above) so both the average
@@ -2683,6 +2753,28 @@ def list_quest_reviews(req: https_fn.CallableRequest) -> dict:
 
     reviews.sort(key=lambda r: r["eventDate"] or "", reverse=True)
     return {"reviews": reviews}
+
+
+# Callable from anywhere an organization's name is shown to a member (quest
+# list, quest cards) — the public-facing half of the Trust Score feature.
+# Open to any signed-in user, same reasoning as list_quest_reviews, but
+# unlike that function this never exposes the underlying score, review
+# count, or average at all — only which of the three tags applies (see
+# _trust_status): "new", "trustworthy", "under_review", or null for an org
+# that's eligible but landed in the unremarkable middle. Admins see the
+# true numbers regardless — see admin_list_organizations.
+@https_fn.on_call()
+def list_organization_trust_tags(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    organizations = []
+    for doc in firestore.client().collection("organizations").stream():
+        org = doc.to_dict()
+        organizations.append({
+            "orgId": doc.id,
+            "trustStatus": _trust_status(org.get("reviewCount", 0), org.get("avgRating", 0)),
+        })
+    return {"organizations": organizations}
 
 
 # Callable from the org dashboard — lets an organization set the location

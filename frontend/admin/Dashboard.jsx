@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
@@ -20,7 +21,7 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
-import { QuestSeriesRow } from '@shared/QuestSeriesRow.jsx';
+import { QuestSeriesRow, formatStars } from '@shared/QuestSeriesRow.jsx';
 import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
 
 const ROLES = ['onboarding_user', 'user', 'onboarding_org', 'pending_org', 'organization', 'admin'];
@@ -333,6 +334,16 @@ function Organizations() {
                 <span className="data-stat">{o.email}</span>
               </div>
               <p className="data-row-sub">{o.location} · {o.phone}</p>
+              <p className="data-row-sub">
+                {o.reviewCount > 0
+                  ? `${formatStars(o.avgRating)} ${o.avgRating.toFixed(1)} avg · Trust Score ${o.trustScore}/100 (${o.reviewCount} review${o.reviewCount === 1 ? '' : 's'})`
+                  : 'No reviews yet'}
+                {o.flagged && (
+                  <span className="status-stamp" style={{ '--tag-color': 'var(--danger)', marginLeft: 8 }}>
+                    Flagged: low trust score
+                  </span>
+                )}
+              </p>
               <div className="data-row-actions">
                 <StampButton type="button" variant="danger" onClick={() => remove(o.uid)} disabled={busyUid === o.uid}>
                   {busyUid === o.uid ? 'Deleting...' : 'Delete organization'}
