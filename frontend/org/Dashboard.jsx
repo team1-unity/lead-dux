@@ -36,38 +36,6 @@ import {
   IconUsers,
 } from '@shared/icons.jsx';
 
-// A lightweight second query rather than lifting OrgQuests' own state up —
-// the org's quest count is small enough that a second read is cheap, and
-// it keeps the sidebar and the main list decoupled from each other.
-function OrgStats() {
-  const { user } = useAuth();
-  const [stats, setStats] = useState(null);
-
-  useEffect(() => {
-    if (!user) return;
-    getDocs(query(collection(db, 'quests'), where('orgId', '==', user.uid))).then((snap) => {
-      const quests = snap.docs.map((d) => d.data());
-      const totalRsvps = quests.reduce((sum, q) => sum + (q.rsvpd || []).length, 0);
-      setStats({ questCount: quests.length, totalRsvps });
-    });
-  }, [user]);
-
-  if (!stats) return null;
-
-  return (
-    <div className="stat-hero-row" style={{ marginBottom: 0 }}>
-      <div className="stat-hero-tile" style={{ background: 'var(--tag-community)' }}>
-        <span className="stat-hero-number">{stats.questCount}</span>
-        <span className="stat-hero-label">Quests posted</span>
-      </div>
-      <div className="stat-hero-tile" style={{ background: 'var(--tag-education)' }}>
-        <span className="stat-hero-number">{stats.totalRsvps}</span>
-        <span className="stat-hero-label">Total RSVPs</span>
-      </div>
-    </div>
-  );
-}
-
 // One entrance per row, staggered from the parent's transition.
 const listVariants = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
 
@@ -711,13 +679,6 @@ export function Dashboard() {
     <PageMotion>
       <AmbientParticles />
       <TopBar title={org ? org.name : 'Organization'} hero />
-      {org && (
-        <div className="ink-card" style={{ marginBottom: 16 }}>
-          <div className="stat-hero-row" style={{ marginBottom: 0 }}>
-            <OrgStats />
-          </div>
-        </div>
-      )}
       <PendingPhotoSubmissions scopeField="orgId" scopeValue={user.uid} />
       <OrgQuests />
     </PageMotion>
