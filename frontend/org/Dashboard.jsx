@@ -6,9 +6,8 @@ import { useAuth } from '@shared/AuthContext.jsx';
 import {
   callCreateQuest,
   callCreateRecurringQuest,
-  callUpdateOrganizationTags,
 } from '@shared/fetch.jsx';
-import { groupBySeries, attachSeriesRatings, formatRecurrence, getTrustStatus } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { ConfirmBox, ShareQuestBox, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
@@ -23,8 +22,6 @@ import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
-import { hashTone } from '@shared/tagTones.js';
-import { TrustTag } from '@shared/TrustTag.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
@@ -38,82 +35,6 @@ import {
   IconPin,
   IconUsers,
 } from '@shared/icons.jsx';
-
-// Lets an organization set the location areas and activity/event types it
-// operates in — separate from a single quest's own tags, these describe
-// the org itself (for future browse/filter-by-org features).
-function OrgTags({ org, onSaved }) {
-  const [editing, setEditing] = useState(false);
-  const [ltagInput, setLtagInput] = useState((org.ltag || []).join(', '));
-  const [etagInput, setEtagInput] = useState((org.etag || []).join(', '));
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  async function save(e) {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
-    try {
-      const ltag = ltagInput.split(',').map((t) => t.trim()).filter(Boolean);
-      const etag = etagInput.split(',').map((t) => t.trim()).filter(Boolean);
-      await callUpdateOrganizationTags({ ltag, etag });
-      onSaved({ ltag, etag });
-      setEditing(false);
-    } catch (err) {
-      setError(err.message || 'Something went wrong.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (!editing) {
-    const ltag = org.ltag || [];
-    const etag = org.etag || [];
-    return (
-      <div className="ink-card">
-        <div className="section-heading">
-          <h3 style={{ margin: 0 }}>Locations &amp; Activities</h3>
-          <StampButton type="button" onClick={() => setEditing(true)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
-            Edit
-          </StampButton>
-        </div>
-        {ltag.length === 0 && etag.length === 0 ? (
-          <p className="data-stat" style={{ margin: '10px 0 0' }}>Not set yet.</p>
-        ) : (
-          <div className="quest-tags" style={{ marginTop: 10 }}>
-            {ltag.map((t) => <TagStamp key={`l-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
-            {etag.map((t) => <TagStamp key={`e-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="ink-card">
-      <h3 style={{ marginTop: 0 }}>Locations &amp; Activities</h3>
-      <form onSubmit={save} className="flex flex-col gap-md">
-        <label>
-          Location areas (comma separated)
-          <input value={ltagInput} onChange={(e) => setLtagInput(e.target.value)} placeholder="Downtown, Riverside" />
-        </label>
-        <label>
-          Activity types (comma separated)
-          <input value={etagInput} onChange={(e) => setEtagInput(e.target.value)} placeholder="Cleanup, Workshop" />
-        </label>
-        {error && <p className="box-danger">{error}</p>}
-        <div className="flex gap-sm">
-          <StampButton type="submit" variant="primary" disabled={submitting}>
-            {submitting ? 'Saving...' : 'Save'}
-          </StampButton>
-          <StampButton type="button" onClick={() => setEditing(false)} disabled={submitting}>
-            Cancel
-          </StampButton>
-        </div>
-      </form>
-    </div>
-  );
-}
 
 // A lightweight second query rather than lifting OrgQuests' own state up —
 // the org's quest count is small enough that a second read is cheap, and
@@ -772,9 +693,9 @@ function OrgQuests() {
   );
 }
 
-// About/Locations & Activities now live on Profile (an org's "who we are"
-// info fits there, alongside its account/org status), not here — this
-// page is purely quest browsing/management.
+// About/Locations & Activities and the org's Trust Score both live on
+// Profile (an org's "who we are" and standing info fits there), not here —
+// this page is purely quest browsing/management.
 export function Dashboard() {
   const { user } = useAuth();
   const [org, setOrg] = useState(null);
@@ -795,16 +716,6 @@ export function Dashboard() {
           <div className="stat-hero-row" style={{ marginBottom: 0 }}>
             <OrgStats />
           </div>
-          <p style={{ marginTop: 10 }}>
-            <TrustTag status={getTrustStatus(org.reviewCount || 0, org.avgRating || 0)} />
-          </p>
-          {getTrustStatus(org.reviewCount || 0, org.avgRating || 0) === 'under_review' && (
-            <p className="box-danger" style={{ marginTop: 10 }}>
-              Your ratings have fallen low enough that your organization is under review. Improve your Trust Score
-              by delivering the experience your quests describe — an admin may also reach out.
-            </p>
-          )}
-          <OrgTags org={org} onSaved={(tags) => setOrg((prev) => ({ ...prev, ...tags }))} />
         </div>
       )}
       <PendingPhotoSubmissions scopeField="orgId" scopeValue={user.uid} />
