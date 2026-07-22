@@ -8,7 +8,7 @@ import {
   callCreateRecurringQuest,
   callUpdateOrganizationTags,
 } from '@shared/fetch.jsx';
-import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, getTrustStatus } from '@shared/questSeries.js';
 import { QuestSeriesRow } from '@shared/QuestSeriesRow.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { AmbientParticles } from '@shared/AmbientParticles.jsx';
@@ -19,6 +19,7 @@ import { TagStamp } from '@shared/TagStamp.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { hashTone } from '@shared/tagTones.js';
 import { IconPlus } from '@shared/icons.jsx';
+import { TrustTag } from '@shared/TrustTag.jsx';
 
 // Lets an organization set the location areas and activity/event types it
 // operates in — separate from a single quest's own tags, these describe
@@ -355,6 +356,15 @@ export function Dashboard() {
                 <p style={{ margin: 0 }}>{org.reason}</p>
                 <p className="data-stat" style={{ marginTop: 10 }}>{org.location}</p>
                 <p className="data-stat">{org.phone}</p>
+                <p style={{ marginTop: 10 }}>
+                  <TrustTag status={getTrustStatus(org.reviewCount || 0, org.avgRating || 0)} />
+                </p>
+                {getTrustStatus(org.reviewCount || 0, org.avgRating || 0) === 'under_review' && (
+                  <p className="box-danger" style={{ marginTop: 10 }}>
+                    Your ratings have fallen low enough that your organization is under review. Improve your
+                    Trust Score by delivering the experience your quests describe — an admin may also reach out.
+                  </p>
+                )}
               </div>
               <OrgTags org={org} onSaved={(tags) => setOrg((prev) => ({ ...prev, ...tags }))} />
             </>

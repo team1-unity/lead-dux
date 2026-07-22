@@ -39,6 +39,39 @@ export function attachSeriesRatings(groups, seriesDocsById) {
   });
 }
 
+// Merges each series' owning organization's trust tag (see
+// callListOrganizationTrustTags/list_organization_trust_tags) onto the
+// group — distinct from attachSeriesRatings above, which is this one
+// event's own star rating. Default/neighborhood quests (no orgId), and any
+// org the trust-tags list doesn't know about yet, both come back null — no
+// tag renders either way (see TrustTag.jsx).
+export function attachOrgTrustStatus(groups, trustStatusByOrgId) {
+  return groups.map((group) => ({
+    ...group,
+    orgTrustStatus: (group.primary.orgId && trustStatusByOrgId.get(group.primary.orgId)) || null,
+  }));
+}
+
+// Mirrors functions/main.py's TRUST_SCORE_MIN_REVIEWS/TRUST_SCORE_TAG_THRESHOLD/
+// TRUST_SCORE_FLAG_THRESHOLD/_trust_status — only needed where a raw
+// avgRating/reviewCount is read directly off an organizations/{uid} doc (an
+// org viewing its own dashboard, which can already see its own true numbers
+// per firestore.rules) instead of through list_organization_trust_tags,
+// which runs this same check server-side and never sends the raw numbers
+// at all. Returns 'new' | 'trustworthy' | 'under_review' | null, same as
+// the server.
+const TRUST_SCORE_MIN_REVIEWS = 3;
+const TRUST_SCORE_TAG_THRESHOLD = 80;
+const TRUST_SCORE_FLAG_THRESHOLD = 60;
+
+export function getTrustStatus(reviewCount, avgRating) {
+  if (reviewCount < TRUST_SCORE_MIN_REVIEWS) return 'new';
+  const score = Math.round((avgRating / 5) * 100);
+  if (score >= TRUST_SCORE_TAG_THRESHOLD) return 'trustworthy';
+  if (score <= TRUST_SCORE_FLAG_THRESHOLD) return 'under_review';
+  return null;
+}
+
 const FREQUENCY_LABELS = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 
 export function formatRecurrence(quest) {

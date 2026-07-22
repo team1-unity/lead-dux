@@ -10,13 +10,15 @@ import {
   callGetMyReview,
   callSubmitReview,
   callListQuestReviews,
+  callListOrganizationTrustTags,
 } from '@shared/fetch.jsx';
-import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, attachOrgTrustStatus, formatRecurrence } from '@shared/questSeries.js';
 import { RoughTexture } from '@shared/RoughTexture.jsx';
 import { RoughFrame } from '@shared/RoughFrame.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
+import { TrustTag } from '@shared/TrustTag.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { IconChevron } from '@shared/icons.jsx';
@@ -284,7 +286,12 @@ function QuestCard({ series, userId, canRsvp, busyId, onToggleRsvp, isLast }) {
         <button type="button" className="quest-card-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
           <div className="quest-card-titles">
             <p className="quest-title">{primary.title}</p>
-            {primary.orgName && <p className="quest-org-line">{primary.orgName}</p>}
+            {primary.orgName && (
+              <p className="quest-org-line flex items-center gap-sm" style={{ flexWrap: 'wrap' }}>
+                <span>{primary.orgName}</span>
+                <TrustTag status={series.orgTrustStatus} />
+              </p>
+            )}
             {series.reviewCount > 0 && (
               <p className="quest-org-line">
                 {formatStars(series.avgRating)} ({series.reviewCount})
@@ -296,6 +303,12 @@ function QuestCard({ series, userId, canRsvp, busyId, onToggleRsvp, isLast }) {
 
         {open && (
           <div className="quest-card-body">
+            {series.orgTrustStatus === 'under_review' && (
+              <p className="box-danger">
+                This organization is under review for consistently low ratings — its Trust Score has not yet been
+                confirmed.
+              </p>
+            )}
             {formatRecurrence(primary) && <p className="quest-org-line">{formatRecurrence(primary)}</p>}
             {occurrences.length > 1 ? (
               <label>
@@ -383,15 +396,18 @@ export function Quests({ interests }) {
   const reduce = useReducedMotion();
 
   function load() {
-    Promise.all([getDocs(collection(db, 'quests')), getDocs(collection(db, 'questSeries'))]).then(
-      ([questsSnap, seriesSnap]) => {
-        const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
-        const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
-        const grouped = attachSeriesRatings(groupBySeries(all), seriesDocsById);
-        grouped.sort((a, b) => relevanceScore(b.primary, interests) - relevanceScore(a.primary, interests));
-        setSeriesList(grouped);
-      },
-    );
+    Promise.all([
+      getDocs(collection(db, 'quests')),
+      getDocs(collection(db, 'questSeries')),
+      callListOrganizationTrustTags(),
+    ]).then(([questsSnap, seriesSnap, trustTags]) => {
+      const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
+      const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
+      const trustStatusByOrgId = new Map(trustTags.map((t) => [t.orgId, t.trustStatus]));
+      const grouped = attachOrgTrustStatus(attachSeriesRatings(groupBySeries(all), seriesDocsById), trustStatusByOrgId);
+      grouped.sort((a, b) => relevanceScore(b.primary, interests) - relevanceScore(a.primary, interests));
+      setSeriesList(grouped);
+    });
   }
 
   useEffect(load, [interests]);
