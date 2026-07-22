@@ -239,10 +239,13 @@ Optionally seed a handful of sample "default neighborhood" quests:
 python seed_quests.py
 ```
 
-Deploy the functions, Firestore rules, and indexes:
+Or seed a full presentation-ready demo dataset instead — verified organizations
+with complete profiles, a realistic spread of organization quests, demo users
+at every rank, reviews/Trust Scores, and the 6 default Iron neighborhood
+quests (prints every seeded login at the end):
 
 ```sh
-firebase deploy --only functions,firestore
+python seed_demo_data.py
 ```
 
 ### 3. Frontend
@@ -255,7 +258,7 @@ cd frontend/app
 npm run dev
 ```
 
-The dev server runs on Vite's default port. To point the frontend at the Firebase emulator suite instead of production, create `frontend/app/.env.local` with:
+The dev server runs on Vite's default port. To point the frontend at the Firebase emulator suite instead of production, add to `frontend/app/.env.local`:
 
 ```
 VITE_USE_FIREBASE_EMULATORS=true
@@ -267,7 +270,28 @@ and start the emulators from the repo root:
 firebase emulators:start
 ```
 
+Location fields (organization registration, organization quest creation, and the neighborhood/city field in user onboarding) use Google Places Autocomplete — add a Maps API key to `frontend/app/.env.local` too:
+
+```
+VITE_GOOGLE_MAPS_API_KEY=your-key-here
+```
+
+Get one from the [Google Cloud Console](https://console.cloud.google.com/) under the same project backing this app's Firebase project (`lead-dux`) — enable the **Places API**, create an API key under Credentials, and restrict it to your dev/prod domains (HTTP referrers). Without this key set, those location fields won't render (side/default quests created by an admin are unaffected — they keep a plain free-text location on purpose, since they don't have one specific physical place).
+
+Quest photo submissions (see the Cloud Functions table below) upload to Cloud Storage — no extra frontend config is needed, but if you're testing this locally against the emulator suite, export `STORAGE_EMULATOR_HOST=http://127.0.0.1:9199` before starting `firebase emulators:start` so `functions/main.py`'s server-side upload verification (`firebase_admin.storage`) talks to the local Storage emulator instead of real Cloud Storage — the emulator doesn't wire this up automatically the way it does for Firestore/Auth.
+
 Auth, Firestore, and Functions must be either **all** emulated or **all** real together, the local Auth emulator issues unsigned tokens that only the local Firestore/Functions emulators trust.
+
+### 4. Deploy
+
+Hosting, Functions, and Firestore rules/indexes are all declared as one config in `firebase.json` — deploy them together, in one command, every time:
+
+```sh
+cd frontend/app && npm run build && cd ../..
+firebase deploy
+```
+
+There's no CI/CD for this project — deploying is always this manual two-step, run from whoever's machine has the latest `main` pulled. **Don't deploy `--only functions,firestore` (or `--only hosting`) as a habit** — `frontend/app/dist` is gitignored and only exists because you just built it, so a partial deploy is how the live site quietly falls behind the repo. If you only need to iterate on one piece while testing, scope it with `--only` for that one run, but do a full `firebase deploy` before considering a change actually shipped.
 
 ---
 
@@ -285,6 +309,7 @@ lead-dux/
 │   ├── main.py                  # Every callable function + the role state machine
 │   ├── bootstrap_admin.py       # One-time: grant the first admin account (local only)
 │   ├── seed_quests.py           # One-time: seed sample default quests (local only)
+│   ├── seed_demo_data.py        # One-time: seed a full presentation-ready demo dataset (local only)
 │   └── requirements.txt
 │
 └── frontend/

@@ -20,6 +20,20 @@ def create_quest_payload(**overrides):
         "eventEndTime": None,
         "timezone": "UTC",
         "location": "Riverside Park",
+        # Places Autocomplete-backed — every organization-quest test uses
+        # this same fake id/coordinates unless a test is specifically
+        # exercising the "no place selected" rejection (see
+        # TestCreateQuest/TestCreateRecurringQuest's placeId-specific tests
+        # below). Admin calls (create_default_quest, or create_recurring_quest
+        # as admin) ignore these fields entirely, so their presence there is
+        # harmless.
+        "placeId": "ChIJ_test_place_id",
+        "lat": 40.7128,
+        "lng": -74.0060,
+        # Required for organization quests (see create_quest's
+        # accommodationTags check) — same "admin path ignores this" reasoning
+        # as placeId/lat/lng above.
+        "accommodationTags": ["wheelchair-accessible"],
     }
     payload.update(overrides)
     return payload
@@ -37,10 +51,55 @@ class TestCreateQuest:
         quest = fake_firestore.client().collection("quests").document(result["questId"]).get().to_dict()
         assert quest["timezone"] == "America/New_York"
         assert quest["location"] == "Riverside Park"
+        assert quest["placeId"] == "ChIJ_test_place_id"
+        assert quest["lat"] == 40.7128
+        assert quest["lng"] == -74.0060
+        assert quest["accommodationTags"] == ["wheelchair-accessible"]
         assert quest["capacity"] == 10
         # A standalone quest is its own series of one.
         assert quest["seriesId"] == result["questId"]
         assert quest["recurrenceFrequency"] is None
+
+    def test_rejects_missing_place_id(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.create_quest, make_request(
+                data=create_quest_payload(placeId=None), uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_rejects_missing_accommodation_tags(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.create_quest, make_request(
+                data=create_quest_payload(accommodationTags=[]), uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_rejects_unknown_accommodation_tag(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.create_quest, make_request(
+                data=create_quest_payload(accommodationTags=["free-parking"]), uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_stores_optional_accommodation_details(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        result = call(main.create_quest, make_request(
+            data=create_quest_payload(accommodationDetails="Ring the side door bell for wheelchair entry."),
+            uid="org-1", role="organization",
+        ))
+
+        quest = fake_firestore.client().collection("quests").document(result["questId"]).get().to_dict()
+        assert quest["accommodationDetails"] == "Ring the side door bell for wheelchair entry."
 
     def test_localizes_naive_datetime_to_the_given_timezone(self, fake_firestore, make_request, call):
         make_org(fake_firestore, "org-1")
@@ -166,12 +225,41 @@ class TestCreateRecurringQuest:
 
     def test_admin_creates_a_recurring_default_quest(self, fake_firestore, make_request, call):
         result = call(main.create_recurring_quest, make_request(
-            data=create_quest_payload(frequency="weekly", until="2026-07-22T00:00"),
+            # Deliberately still includes a placeId (create_quest_payload's
+            # default) to prove the admin path ignores/nulls it out rather
+            # than erroring on an unexpected field or storing it anyway.
+            data=create_quest_payload(frequency="weekly", until="2026-07-22T00:00", tier="iron"),
             uid="admin-1", role="admin",
         ))
 
         docs = [fake_firestore.client().collection("quests").document(qid).get().to_dict() for qid in result["questIds"]]
-        assert all(d["orgId"] is None and d["orgName"] == "Neighborhood" and d["isDefault"] is True for d in docs)
+        assert all(
+            d["orgId"] is None and d["orgName"] == "Neighborhood" and d["isDefault"] is True and d["placeId"] is None
+            and d["accommodationTags"] == [] and d["accommodationDetails"] is None
+            for d in docs
+        )
+
+    def test_rejects_missing_place_id_for_organization(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.create_recurring_quest, make_request(
+                data=create_quest_payload(placeId=None, frequency="weekly", until="2026-07-22T00:00"),
+                uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_rejects_missing_accommodation_tags_for_organization(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.create_recurring_quest, make_request(
+                data=create_quest_payload(accommodationTags=[], frequency="weekly", until="2026-07-22T00:00"),
+                uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
 
     def test_rejects_non_admin_non_org_caller(self, fake_firestore, make_request, call):
         with pytest.raises(https_fn.HttpsError) as exc_info:
@@ -232,7 +320,7 @@ class TestMakeQuestRecurring:
 
     def test_admin_can_convert_a_default_quest(self, fake_firestore, make_request, call):
         created = call(main.create_default_quest, make_request(
-            data=create_quest_payload(eventDate="2026-07-01T14:00"), uid="admin-1", role="admin",
+            data=create_quest_payload(eventDate="2026-07-01T14:00", tier="iron"), uid="admin-1", role="admin",
         ))
 
         result = call(main.make_quest_recurring, make_request(
@@ -266,7 +354,7 @@ class TestDeleteQuest:
     def test_deleting_one_of_several_occurrences_keeps_series_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))
@@ -281,7 +369,7 @@ class TestDeleteQuest:
 
     def test_deleting_the_last_occurrence_still_keeps_its_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", orgId="org-1", rsvpd=["user-1"])
-        seed_attendance(fake_firestore, "quest-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "quest-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))
@@ -349,7 +437,7 @@ class TestDeleteQuestSeries:
     def test_keep_quest_id_preserves_series_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))
@@ -370,7 +458,7 @@ class TestDeleteQuestSeries:
     def test_full_series_delete_cleans_up_reviews(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="occ-1", rsvpd=["user-1"])
         seed_quest(fake_firestore, "occ-2", orgId="org-1", seriesId="occ-1")
-        seed_attendance(fake_firestore, "occ-1", "user-1", status="checked_in")
+        seed_attendance(fake_firestore, "occ-1", "user-1")
         call(main.submit_review, make_request(
             data={"questId": "occ-1", "rating": 5, "body": "Great!"}, uid="user-1", role="user",
         ))

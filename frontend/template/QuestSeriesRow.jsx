@@ -1,17 +1,9 @@
 import { useEffect, useState } from 'react';
-import {
-  callMakeQuestRecurring,
-  callDeleteQuest,
-  callDeleteQuestSeries,
-  callListQuestAttendees,
-  callListQuestReviews,
-  callGenerateQuestFeedbackDrafts,
-  callSubmitQuestFeedbackBatch,
-} from './fetch.jsx';
+import { useQuestSeriesActions } from './useQuestSeriesActions.js';
+import { callGenerateQuestFeedbackDrafts, callSubmitQuestFeedbackBatch } from './fetch.jsx';
 import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
-import { QuestScanner } from './QuestScanner.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
 
 const FEEDBACK_RATINGS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
@@ -148,129 +140,74 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
   );
 }
 
+// The stable public link is just `${origin}/share/{seriesId}` — seriesId
+// never changes once a quest is created (see _quest_doc_fields), and
+// SharedQuest.jsx is the signed-out-friendly page it points at. No backend
+// call needed to "generate" it: every quest doc already carries its own
+// seriesId, so there's nothing to fetch that isn't already on hand here.
+export function ShareQuestBox({ seriesId }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/share/${seriesId}`;
+
+  async function copy() {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="ink-card share-quest-box" style={{ marginTop: 12 }}>
+      <p style={{ marginTop: 0 }} className="data-stat">
+        Anyone with this link can view (and sign up to RSVP to) this quest, even without an account.
+      </p>
+      <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          readOnly
+          value={url}
+          onFocus={(e) => e.target.select()}
+          aria-label="Shareable quest link"
+          style={{ flex: '1 1 260px' }}
+        />
+        <StampButton type="button" variant="primary" onClick={copy}>
+          {copied ? 'Copied!' : 'Copy link'}
+        </StampButton>
+      </div>
+      <p aria-live="polite" className="visually-hidden">
+        {copied ? 'Link copied to clipboard' : ''}
+      </p>
+    </div>
+  );
+}
+
 // One row per series (not per date) — a recurring quest with 8 scheduled
 // occurrences shows as a single row with a date selector, rather than
-// flooding the list with 8 near-duplicate rows. Every action here
-// (attendees/reviews/scanning/deleting) targets whichever date is
-// currently selected, since those are inherently per-occurrence — nothing
-// about the underlying data model changed, only how many dates are
-// visually surfaced at once (see functions/main.py's module note above
-// _generate_series_dates).
+// flooding the list with 8 near-duplicate rows.
 //
 // Shared between the org dashboard (own quests only) and the admin
 // dashboard (any quest, including default neighborhood ones) — the
 // backend already gates every action here (delete/attendees/reviews/make
 // recurring) on ownership-or-admin, so this component doesn't need its
 // own permission prop; whichever caller can legally act on a quest sees
-// this exact same row and feature set.
+// this exact same row and feature set. (The org dashboard's own desktop
+// Quests view uses a list-row/detail-pane split instead — see
+// QuestSeriesListItem/QuestSeriesDetailPane, which share this same
+// useQuestSeriesActions hook rather than duplicating its logic.)
 export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
   const { primary, occurrences } = series;
-  const [selectedId, setSelectedId] = useState(occurrences[0].id);
-  const selected = occurrences.find((o) => o.id === selectedId) || occurrences[0];
-  const isSeries = occurrences.length > 1;
-
-  const [busy, setBusy] = useState(false);
-  const [attendeesOpen, setAttendeesOpen] = useState(false);
-  const [attendees, setAttendees] = useState(null);
-  const [reviewsOpen, setReviewsOpen] = useState(false);
-  const [reviews, setReviews] = useState(null);
+  const a = useQuestSeriesActions(series, onChanged);
+  const { selected, selectedId, isSeries } = a;
+  // Not part of useQuestSeriesActions — feedback is org-only (see the
+  // primary.orgId gate below) and doesn't apply to QuestSeriesListItem/
+  // QuestSeriesDetailPane's split view, so it stays local to this row.
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [recurring, setRecurring] = useState(false);
-  const [recurFrequency, setRecurFrequency] = useState('weekly');
-  const [recurUntil, setRecurUntil] = useState('');
-  const [recurSubmitting, setRecurSubmitting] = useState(false);
-  const [recurError, setRecurError] = useState('');
-  const [deleteAction, setDeleteAction] = useState(null); // null | 'one' | 'keep' | 'all'
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
-
-  function switchDate(id) {
-    setSelectedId(id);
-    setAttendeesOpen(false);
-    setReviewsOpen(false);
+  useEffect(() => {
     setFeedbackOpen(false);
-    setScanning(false);
-    setDeleteAction(null);
-  }
-
-  async function toggleAttendees() {
-    if (attendeesOpen) {
-      setAttendeesOpen(false);
-      return;
-    }
-    setBusy(true);
-    try {
-      setAttendees(await callListQuestAttendees(selected.id));
-      setAttendeesOpen(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggleReviews() {
-    if (reviewsOpen) {
-      setReviewsOpen(false);
-      return;
-    }
-    setBusy(true);
-    try {
-      setReviews(await callListQuestReviews(selected.id));
-      setReviewsOpen(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleScanResult() {
-    if (attendeesOpen) setAttendees(await callListQuestAttendees(selected.id));
-  }
-
-  async function makeRecurring(e) {
-    e.preventDefault();
-    setRecurError('');
-    setRecurSubmitting(true);
-    try {
-      await callMakeQuestRecurring({ questId: selected.id, frequency: recurFrequency, until: recurUntil });
-      setRecurUntil('');
-      setRecurring(false);
-      await onChanged();
-    } catch (err) {
-      setRecurError(err.message || 'Something went wrong.');
-    } finally {
-      setRecurSubmitting(false);
-    }
-  }
-
-  async function deleteThisDate() {
-    setDeleteSubmitting(true);
-    try {
-      await callDeleteQuest(selected.id);
-      await onChanged();
-    } finally {
-      setDeleteSubmitting(false);
-    }
-  }
-
-  async function keepOnlyThisDate() {
-    setDeleteSubmitting(true);
-    try {
-      await callDeleteQuestSeries(selected.id, selected.id);
-      await onChanged();
-    } finally {
-      setDeleteSubmitting(false);
-    }
-  }
-
-  async function deleteAllInSeries() {
-    setDeleteSubmitting(true);
-    try {
-      await callDeleteQuestSeries(selected.id);
-      await onChanged();
-    } finally {
-      setDeleteSubmitting(false);
-    }
-  }
-
+  }, [selectedId]);
+  // Unlike feedback (per-date) or attendees, the share link is per-series
+  // (see ShareQuestBox) — it doesn't need to reset when switchDate changes
+  // which occurrence is selected.
+  const [shareOpen, setShareOpen] = useState(false);
   const rsvpCount = (selected.rsvpd || []).length;
 
   return (
@@ -284,7 +221,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
       {isSeries ? (
         <label>
           Date
-          <select value={selectedId} onChange={(e) => switchDate(e.target.value)}>
+          <select value={selectedId} onChange={(e) => a.switchDate(e.target.value)}>
             {occurrences.map((o) => (
               <option key={o.id} value={o.id}>
                 {formatEventDate(o.eventDate)} — {(o.rsvpd || []).length}
@@ -308,30 +245,50 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
       )}
       <p className="data-row-sub">{primary.description}</p>
       <div className="data-row-actions">
-        <StampButton type="button" onClick={toggleAttendees} disabled={busy}>
-          {attendeesOpen ? 'Hide attendees' : 'View attendees'}
+        <StampButton type="button" onClick={a.toggleAttendees} disabled={a.busy}>
+          {a.attendeesOpen ? 'Hide attendees' : 'View attendees'}
         </StampButton>
-        <StampButton type="button" onClick={toggleReviews} disabled={busy}>
-          {reviewsOpen ? 'Hide reviews' : 'View reviews'}
-        </StampButton>
+        {/* Reviews are an organization-quest concept — side/default quests
+            have no organization to review, so there's never anything here. */}
         {primary.orgId && (
-          <StampButton type="button" onClick={() => setFeedbackOpen((v) => !v)} disabled={busy}>
+          <StampButton type="button" onClick={a.toggleReviews} disabled={a.busy}>
+            {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
+          </StampButton>
+        )}
+        {primary.orgId && (
+          <StampButton type="button" onClick={() => setFeedbackOpen((v) => !v)} disabled={a.busy}>
             {feedbackOpen ? 'Hide feedback' : 'Give feedback'}
           </StampButton>
         )}
-        <StampButton type="button" variant="primary" onClick={() => setScanning((v) => !v)}>
-          {scanning ? 'Close scanner' : 'Scan to check in'}
-        </StampButton>
-        {!isSeries && (
-          <StampButton type="button" onClick={() => setRecurring((v) => !v)}>
-            {recurring ? 'Cancel' : 'Make recurring'}
+        {primary.orgId && (
+          <StampButton type="button" onClick={() => setShareOpen((v) => !v)} disabled={a.busy}>
+            {shareOpen ? 'Hide share link' : 'Share quest'}
           </StampButton>
         )}
-        <AddToCalendar quest={selected} />
+        {!selected.qrToken ? (
+          <StampButton type="button" variant="primary" onClick={a.generateQr} disabled={a.qrBusy}>
+            {a.qrBusy ? 'Generating...' : 'Generate QR Code'}
+          </StampButton>
+        ) : (
+          <>
+            <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
+              {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
+            </StampButton>
+            <StampButton type="button" onClick={a.refreshQr} disabled={a.qrBusy}>
+              Refresh QR Code
+            </StampButton>
+          </>
+        )}
+        {!isSeries && (
+          <StampButton type="button" onClick={() => a.setRecurring((v) => !v)}>
+            {a.recurring ? 'Cancel' : 'Make recurring'}
+          </StampButton>
+        )}
+        {primary.orgId && <AddToCalendar quest={selected} />}
         <StampButton
           type="button"
           variant="danger"
-          onClick={() => setDeleteAction(deleteAction === 'one' ? null : 'one')}
+          onClick={() => a.setDeleteAction(a.deleteAction === 'one' ? null : 'one')}
         >
           Delete this date
         </StampButton>
@@ -340,56 +297,56 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             <StampButton
               type="button"
               variant="danger"
-              onClick={() => setDeleteAction(deleteAction === 'keep' ? null : 'keep')}
+              onClick={() => a.setDeleteAction(a.deleteAction === 'keep' ? null : 'keep')}
             >
               Keep only this date
             </StampButton>
             <StampButton
               type="button"
               variant="danger"
-              onClick={() => setDeleteAction(deleteAction === 'all' ? null : 'all')}
+              onClick={() => a.setDeleteAction(a.deleteAction === 'all' ? null : 'all')}
             >
               Delete all in series
             </StampButton>
           </>
         )}
       </div>
-      {deleteAction === 'one' && (
+      {a.deleteAction === 'one' && (
         <ConfirmBox
           message="Delete this one date, including its RSVPs and attendance. Any reviews already left for it stay part of this quest's review history. This cannot be undone."
           confirmLabel="Yes, delete this date"
-          submitting={deleteSubmitting}
-          onConfirm={deleteThisDate}
-          onCancel={() => setDeleteAction(null)}
+          submitting={a.deleteSubmitting}
+          onConfirm={a.deleteThisDate}
+          onCancel={() => a.setDeleteAction(null)}
         />
       )}
-      {deleteAction === 'keep' && (
+      {a.deleteAction === 'keep' && (
         <ConfirmBox
           message={`This cancels the recurrence and deletes the other ${occurrences.length - 1} date${occurrences.length - 1 === 1 ? '' : 's'} in this series — only the selected date stays, as a standalone quest. This cannot be undone.`}
           confirmLabel="Yes, keep only this date"
-          submitting={deleteSubmitting}
-          onConfirm={keepOnlyThisDate}
-          onCancel={() => setDeleteAction(null)}
+          submitting={a.deleteSubmitting}
+          onConfirm={a.keepOnlyThisDate}
+          onCancel={() => a.setDeleteAction(null)}
         />
       )}
-      {deleteAction === 'all' && (
+      {a.deleteAction === 'all' && (
         <ConfirmBox
           message={`This deletes all ${occurrences.length} dates in this series, including their RSVPs, attendance, and reviews. This cannot be undone.`}
           confirmLabel={`Yes, delete ${occurrences.length} events`}
-          submitting={deleteSubmitting}
-          onConfirm={deleteAllInSeries}
-          onCancel={() => setDeleteAction(null)}
+          submitting={a.deleteSubmitting}
+          onConfirm={a.deleteAllInSeries}
+          onCancel={() => a.setDeleteAction(null)}
         />
       )}
-      {recurring && (
-        <form onSubmit={makeRecurring} className="ink-card flex flex-col gap-md" style={{ marginTop: 12 }}>
+      {a.recurring && (
+        <form onSubmit={a.makeRecurring} className="ink-card flex flex-col gap-md" style={{ marginTop: 12 }}>
           <p style={{ margin: 0 }}>
             This date becomes the first occurrence — the remaining dates reuse its title, description, location,
             time of day, and timezone.
           </p>
           <label>
             Repeats
-            <select value={recurFrequency} onChange={(e) => setRecurFrequency(e.target.value)}>
+            <select value={a.recurFrequency} onChange={(e) => a.setRecurFrequency(e.target.value)}>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
@@ -397,32 +354,39 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           </label>
           <label>
             Until
-            <input type="date" required value={recurUntil} onChange={(e) => setRecurUntil(e.target.value)} />
+            <input type="date" required value={a.recurUntil} onChange={(e) => a.setRecurUntil(e.target.value)} />
           </label>
-          {recurError && <p className="box-danger">{recurError}</p>}
-          <StampButton type="submit" variant="primary" disabled={recurSubmitting}>
-            {recurSubmitting ? 'Saving...' : 'Make recurring'}
+          {a.recurError && <p className="box-danger">{a.recurError}</p>}
+          <StampButton type="submit" variant="primary" disabled={a.recurSubmitting}>
+            {a.recurSubmitting ? 'Saving...' : 'Make recurring'}
           </StampButton>
         </form>
       )}
-      {scanning && <QuestScanner questId={selected.id} onCheckedIn={handleScanResult} />}
+      {a.qrError && <p className="box-danger">{a.qrError}</p>}
+      {a.qrOpen && a.qr && (
+        <div className="ink-card event-qr-display">
+          <img src={a.qr} alt="Event check-in QR code" />
+          <p className="data-stat">Attendees scan this from the app's Check In screen.</p>
+        </div>
+      )}
       {feedbackOpen && <GiveFeedbackPanel key={selected.id} questId={selected.id} onSent={onChanged} />}
-      {attendeesOpen && attendees && (
+      {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
+      {a.attendeesOpen && a.attendees && (
         <ul className="data-sublist">
-          {attendees.length === 0 && <li>No RSVPs yet.</li>}
-          {attendees.map((a) => (
-            <li key={a.uid}>
-              {a.name || 'Unnamed'} — {a.email}
+          {a.attendees.length === 0 && <li>No RSVPs yet.</li>}
+          {a.attendees.map((att) => (
+            <li key={att.uid}>
+              {att.name || 'Unnamed'} — {att.email}
               {' — '}
-              {a.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
+              {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
             </li>
           ))}
         </ul>
       )}
-      {reviewsOpen && reviews && (
+      {primary.orgId && a.reviewsOpen && a.reviews && (
         <ul className="data-sublist">
-          {reviews.length === 0 && <li>No reviews yet.</li>}
-          {reviews.map((r) => (
+          {a.reviews.length === 0 && <li>No reviews yet.</li>}
+          {a.reviews.map((r) => (
             <li key={`${r.uid}-${r.eventDate}`}>
               {formatStars(r.rating)} — {r.name || 'Unnamed'}
               {r.eventDate ? ` (${formatEventDate(r.eventDate)})` : ''}: {r.body}

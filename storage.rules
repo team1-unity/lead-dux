@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// Quest photo submissions — proof of quest participation (see
+// submit_quest_photo/approve_photo_submission/reject_photo_submission in
+// functions/main.py). Path is photoSubmissions/{questId}_{uid}/{fileName},
+// the same {questId}_{uid} composite id _attendance_doc_id already uses.
+//
+// The read rule checks the blob's own custom metadata (orgId/isDefault)
+// rather than looking up the matching photoSubmissions Firestore doc —
+// that doc doesn't exist yet at upload time (submit_quest_photo creates it
+// AFTER re-verifying the upload), and reading a blob's own metadata avoids
+// a cross-service rules dependency entirely. submit_quest_photo patches
+// this metadata via the Admin SDK (bypasses these rules) once it has
+// verified the quest's real orgId/isDefault server-side.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Pulls the uid back out of a {questId}_{uid} composite id by taking
+    // the LAST '_'-separated segment, not a fixed index — a quest id can
+    // itself contain underscores (e.g. seed data uses slugs like
+    // "seed-jc-community-kitchen-near_full"), but a Firebase Auth uid
+    // never does, so the final segment is always the uid regardless of
+    // how many underscores came before it.
+    function submitterUid(questIdUid) {
+      return questIdUid.split('_')[questIdUid.split('_').size() - 1];
+    }
+
+    match /photoSubmissions/{questIdUid}/{fileName} {
+      allow read: if request.auth != null && (
+        request.auth.uid == submitterUid(questIdUid) ||
+        request.auth.token.role == 'admin' ||
+        (request.auth.token.role == 'organization' && resource != null &&
+         request.auth.uid == resource.metadata.orgId)
+      );
+      // Create-only — a resubmission after rejection always uploads to a
+      // fresh {timestampMillis}.{ext} path (see QuestPhotoSubmission.jsx),
+      // never overwriting an existing object, so update isn't needed.
+      allow create: if request.auth != null
+        && request.auth.uid == submitterUid(questIdUid)
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+      allow update, delete: if false;
+    }
+  }
+}

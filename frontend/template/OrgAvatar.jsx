@@ -9,7 +9,11 @@ export function OrgAvatar({ name, seed }) {
   const tone = hashTone(seed ?? name);
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
   return (
-    <div className="org-avatar" style={{ '--tag-color': `var(--tag-${tone})` }} aria-hidden="true">
+    <div
+      className="org-avatar"
+      style={{ '--tag-color': `var(--tag-${tone})`, '--tag-ink': `var(--tag-${tone}-ink)` }}
+      aria-hidden="true"
+    >
       {initial}
     </div>
   );

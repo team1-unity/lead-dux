@@ -22,3 +22,17 @@ export function pointsToNextRank(points) {
   if (index === RANKS.length - 1) return null;
   return (index + 1) * POINTS_PER_RANK - Math.max(points, 0);
 }
+
+export function allRanks() {
+  return RANKS;
+}
+
+// 0-100: how far through the CURRENT rank the caller is — the progress bar
+// fill, not overall progress toward Diamond. Pinned at 100 once Diamond is
+// reached (there's no next rank to show progress toward).
+export function progressPercent(points) {
+  const index = rankIndex(points);
+  if (index === RANKS.length - 1) return 100;
+  const clamped = Math.max(points, 0);
+  return ((clamped - index * POINTS_PER_RANK) / POINTS_PER_RANK) * 100;
+}

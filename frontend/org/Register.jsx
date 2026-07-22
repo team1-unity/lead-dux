@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
-import { getAdditionalUserInfo } from 'firebase/auth';
 import { registerWithEmail, signInWithGoogle } from '@shared/auth.jsx';
 import { callCompleteSignup, callSubmitOrganizationRequest } from '@shared/fetch.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -8,6 +7,7 @@ import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { AuthShell } from '@shared/AuthShell.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 
 // The account-creation half of organization signup — reached directly from
 // the landing page by someone with no account yet. Mirrors mobile/Register,
@@ -46,8 +46,8 @@ function SignupStep() {
     setError('');
     setSubmitting(true);
     try {
-      const credential = await signInWithGoogle();
-      if (getAdditionalUserInfo(credential)?.isNewUser) {
+      const { isNewUser } = await signInWithGoogle();
+      if (isNewUser) {
         await callCompleteSignup({ accountType: 'organization' });
       }
       // An existing account signing in here (isNewUser === false) keeps
@@ -112,6 +112,7 @@ export function Register() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
+  const [placeId, setPlaceId] = useState(null);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -120,13 +121,13 @@ export function Register() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!name || !phone || !location || !reason) {
-      setError('Organization name, phone, location, and reason are required.');
+    if (!name || !phone || !placeId || !reason) {
+      setError('Organization name, phone, a location selected from the suggestions, and reason are required.');
       return;
     }
     setSubmitting(true);
     try {
-      await callSubmitOrganizationRequest({ name, phone, location, reason });
+      await callSubmitOrganizationRequest({ name, phone, location, placeId, reason });
       await refreshRole();
       navigate('/');
     } catch (err) {
@@ -157,7 +158,15 @@ export function Register() {
         </label>
         <label>
           Location
-          <input type="text" required value={location} onChange={(e) => setLocation(e.target.value)} />
+          <PlaceAutocompleteInput
+            ariaLabel="Organization location"
+            placeholder="Search for an address..."
+            onSelect={({ location: selectedLocation, placeId: selectedPlaceId }) => {
+              setLocation(selectedLocation);
+              setPlaceId(selectedPlaceId);
+            }}
+          />
+          {placeId && <p className="field-optional">{location}</p>}
         </label>
         <label>
           What do you hope to get out of this?
