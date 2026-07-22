@@ -4,21 +4,26 @@ import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
 import { ProtectedRoute } from '@shared/ProtectedRoute.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { TopBar } from '@shared/TopBar.jsx';
 import { BottomNav } from '@shared/BottomNav.jsx';
-import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { FeedbackToast } from '@shared/FeedbackToast.jsx';
+import { EventsMap } from '@shared/EventsMap.jsx';
 import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
 import { ForgotPassword } from './ForgotPassword.jsx';
 import { ResetPassword } from './ResetPassword.jsx';
 import { Settings } from './Settings.jsx';
 import { Profile } from './Profile.jsx';
+import { CheckIn } from './CheckIn.jsx';
+import { Certificate } from './Certificate.jsx';
+import { OrganizationProfile } from './OrganizationProfile.jsx';
+import { QuestDetails } from './QuestDetails.jsx';
+import { SharedQuest } from './SharedQuest.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
+import { Badges } from '@mobile/Badges.jsx';
 import { Journal } from '@mobile/Journal.jsx';
 import { Register as RegisterOrganization } from '@org/Register.jsx';
 import { Dashboard as OrgDashboard } from '@org/Dashboard.jsx';
@@ -64,11 +69,13 @@ function PublicHome({ role }) {
 
   return (
     <PageMotion>
-      <AmbientParticles />
-      <TopBar />
       {role === 'pending_org' && <PendingBanner />}
       <FeedbackToast />
-      <Quests interests={profile?.interests || []} />
+      <Quests
+        interests={profile?.interests || []}
+        name={profile?.name}
+        recommendedQuestOrder={profile?.recommendedQuestOrder}
+      />
     </PageMotion>
   );
 }
@@ -78,8 +85,6 @@ function PublicHome({ role }) {
 function AdminHome() {
   return (
     <PageMotion>
-      <AmbientParticles />
-      <TopBar />
       <Quests interests={[]} />
     </PageMotion>
   );
@@ -132,11 +137,22 @@ function App() {
           <Route path="/register/organization" element={<RegisterOrganization />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Deliberately outside AppShell — this is the one quest page that
+              has to work for a fully signed-out visitor (a share link
+              clicked from outside the app), so it can't sit behind the
+              same tree as routes that assume an authenticated role. */}
+          <Route path="/share/:seriesId" element={<SharedQuest />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<Home />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/check-in" element={<CheckIn />} />
+            <Route path="/certificate" element={<Certificate />} />
+            <Route path="/organizations/:orgId" element={<OrganizationProfile />} />
+            <Route path="/quests/:seriesId" element={<QuestDetails />} />
+            <Route path="/badges" element={<Badges />} />
             <Route path="/journal" element={<Journal />} />
+            <Route path="/map" element={<EventsMap />} />
             <Route
               path="/admin"
               element={

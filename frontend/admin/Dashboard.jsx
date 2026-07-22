@@ -10,6 +10,9 @@ import {
   callDeleteOrganization,
   callCreateDefaultQuest,
   callCreateRecurringQuest,
+  callListDiamondUsers,
+  callIssueCertificate,
+  callBackfillQuestCoordinates,
 } from '@shared/fetch.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -19,6 +22,7 @@ import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { QuestSeriesRow, formatStars } from '@shared/QuestSeriesRow.jsx';
+import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
 
 const ROLES = ['onboarding_user', 'user', 'onboarding_org', 'pending_org', 'organization', 'admin'];
 
@@ -38,6 +42,123 @@ function RoleStamp({ role }) {
     <StatusStamp tone={tone} muted={!tone}>
       {role}
     </StatusStamp>
+  );
+}
+
+// Every default/neighborhood quest must pick one of these — see
+// TIER_BASE_POINTS in functions/main.py, the source of truth these point
+// values mirror.
+const TIER_OPTIONS = [
+  { value: 'iron', label: 'Iron — 10 pts' },
+  { value: 'bronze', label: 'Bronze — 12 pts' },
+  { value: 'silver', label: 'Silver — 15 pts' },
+  { value: 'gold', label: 'Gold — 18 pts' },
+  { value: 'diamond', label: 'Diamond — 20 pts' },
+];
+
+// Re-runnable, not a one-shot migration screen — every quest that already
+// had a placeId (organization quests created before the map view existed)
+// is still missing lat/lng until this runs once; re-running it later is
+// harmless since backfill_quest_coordinates only ever touches quests still
+// missing coordinates (see functions/main.py). Side/default quests never
+// show up in failedQuestIds — they have no placeId to look up in the
+// first place, so they're never candidates here at all.
+function CoordinatesBackfill() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  async function run() {
+    setRunning(true);
+    setError('');
+    setResult(null);
+    try {
+      setResult(await callBackfillQuestCoordinates());
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <h2>Map coordinates</h2>
+      <div className="ink-card">
+        <p style={{ marginTop: 0 }}>
+          Fills in map coordinates for existing quests that have a location but were created before the map view
+          existed. Safe to run more than once — it only touches quests still missing coordinates.
+        </p>
+        <StampButton type="button" variant="primary" onClick={run} disabled={running}>
+          {running ? 'Backfilling...' : 'Backfill quest coordinates'}
+        </StampButton>
+        {error && <p className="box-danger" style={{ marginTop: 10 }}>{error}</p>}
+        {result && (
+          <p className="data-stat" style={{ marginTop: 10 }}>
+            {result.updated} quest{result.updated === 1 ? '' : 's'} updated.
+            {result.failedQuestIds.length > 0 && ` ${result.failedQuestIds.length} failed — check the logs.`}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// The "admin can see once a user reaches the last rank" requirement —
+// certificates are never issued automatically (see issue_certificate,
+// functions/main.py), only by an admin choosing to here.
+function DiamondCertifications() {
+  const [users, setUsers] = useState(null);
+  const [busyUid, setBusyUid] = useState(null);
+
+  async function load() {
+    setUsers(await callListDiamondUsers());
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function issue(uid) {
+    setBusyUid(uid);
+    try {
+      await callIssueCertificate(uid);
+      await load();
+    } finally {
+      setBusyUid(null);
+    }
+  }
+
+  if (!users) return <LoadingSpinner label="Loading Diamond members..." />;
+
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <h2>Diamond certifications</h2>
+      {users.length === 0 ? (
+        <p>No one has reached Diamond rank yet.</p>
+      ) : (
+        <div className="ink-card data-list">
+          {users.map((u) => (
+            <div key={u.uid} className="data-row">
+              <div className="data-row-head">
+                <p className="data-row-title">{u.name || u.email}</p>
+                <span className="data-stat">{u.points} points</span>
+              </div>
+              <p className="data-row-sub">{u.email}</p>
+              <div className="data-row-actions" style={{ alignItems: 'center', gap: 12 }}>
+                {u.certificateIssued ? (
+                  <StatusStamp tone="community">CERTIFICATE ISSUED</StatusStamp>
+                ) : (
+                  <StampButton type="button" variant="primary" onClick={() => issue(u.uid)} disabled={busyUid === u.uid}>
+                    {busyUid === u.uid ? 'Issuing...' : 'Issue certificate'}
+                  </StampButton>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -252,6 +373,7 @@ function QuestsAdmin() {
   const [timezone, setTimezone] = useState(detectTimezone());
   const [location, setLocation] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [tier, setTier] = useState('iron');
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState('weekly');
   const [until, setUntil] = useState('');
@@ -290,6 +412,7 @@ function QuestsAdmin() {
         timezone,
         location,
         capacity: capacity ? Number(capacity) : null,
+        tier,
       };
       if (isRecurring) {
         await callCreateRecurringQuest({ ...base, frequency, until });
@@ -303,6 +426,7 @@ function QuestsAdmin() {
       setEventEndTime('');
       setLocation('');
       setCapacity('');
+      setTier('iron');
       setIsRecurring(false);
       setUntil('');
       await load();
@@ -339,6 +463,12 @@ function QuestsAdmin() {
           <label>
             Capacity (optional)
             <input type="number" min="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="Unlimited" />
+          </label>
+          <label>
+            Difficulty tier
+            <select value={tier} onChange={(e) => setTier(e.target.value)}>
+              {TIER_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
           </label>
           <EventDateFields
             eventDate={eventDate}
@@ -393,8 +523,11 @@ export function Dashboard() {
     <PageMotion>
       <TopBar title="Admin Data" />
       <PendingRequests />
+      <PendingPhotoSubmissions scopeField="isDefault" scopeValue={true} title="Pending side quest photo submissions" />
       <AllUsers />
       <Organizations />
+      <DiamondCertifications />
+      <CoordinatesBackfill />
       <QuestsAdmin />
     </PageMotion>
   );

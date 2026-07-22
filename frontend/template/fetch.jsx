@@ -24,7 +24,12 @@ export async function callCompleteSignup({ name, accountType }) {
 export async function callSubmitOnboarding({
   name,
   age,
+  location,
+  placeId,
+  lat,
+  lng,
   interests,
+  accommodationNeeds,
   experienceLevel,
   experienceLevelOther,
   timeAvailability,
@@ -39,7 +44,12 @@ export async function callSubmitOnboarding({
   const result = await fn({
     name,
     age,
+    location,
+    placeId,
+    lat,
+    lng,
     interests,
+    accommodationNeeds,
     experienceLevel,
     experienceLevelOther,
     timeAvailability,
@@ -97,9 +107,9 @@ export async function callDeleteOrganization(targetUid) {
 // The org-details form's submit, for an account currently onboarding_org
 // (the state a brand-new org signup reaches directly). Creates the ORGREQ
 // and moves the caller to pending_org.
-export async function callSubmitOrganizationRequest({ name, phone, location, reason }) {
+export async function callSubmitOrganizationRequest({ name, phone, location, placeId, reason }) {
   const fn = httpsCallable(functions, 'submit_organization_request');
-  const result = await fn({ name, phone, location, reason });
+  const result = await fn({ name, phone, location, placeId, reason });
   return result.data;
 }
 
@@ -109,15 +119,23 @@ export async function callSubmitOrganizationRequest({ name, phone, location, rea
 // the QR expiry to a few hours past eventDate when it's omitted. capacity
 // is optional (unlimited if omitted). See callCreateRecurringQuest for
 // creating a whole series of dates in one call.
-export async function callCreateQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity }) {
+export async function callCreateQuest({
+  title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity,
+  accommodationTags, accommodationDetails,
+}) {
   const fn = httpsCallable(functions, 'create_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity });
+  const result = await fn({
+    title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity,
+    accommodationTags, accommodationDetails,
+  });
   return result.data;
 }
 
 // organization: creates a whole recurring series in one call — every
 // occurrence up to (and including) `until`, spaced by `frequency`
-// ('daily' | 'weekly' | 'monthly'). Returns { seriesId, questIds }.
+// ('daily' | 'weekly' | 'monthly'). Returns { seriesId, questIds }. `tier`
+// only matters when an admin calls this to create a recurring default
+// (side/neighborhood) quest — see callCreateDefaultQuest.
 export async function callCreateRecurringQuest({
   title,
   description,
@@ -126,9 +144,15 @@ export async function callCreateRecurringQuest({
   eventEndTime,
   timezone,
   location,
+  placeId,
+  lat,
+  lng,
   capacity,
   frequency,
   until,
+  tier,
+  accommodationTags,
+  accommodationDetails,
 }) {
   const fn = httpsCallable(functions, 'create_recurring_quest');
   const result = await fn({
@@ -139,9 +163,15 @@ export async function callCreateRecurringQuest({
     eventEndTime,
     timezone,
     location,
+    placeId,
+    lat,
+    lng,
     capacity,
     frequency,
     until,
+    tier,
+    accommodationTags,
+    accommodationDetails,
   });
   return result.data;
 }
@@ -156,9 +186,12 @@ export async function callMakeQuestRecurring({ questId, frequency, until }) {
 }
 
 // admin: creates a quest with no owning organization, shown to everyone.
-export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity }) {
+// `tier` (iron/bronze/silver/gold/diamond) is required — it's what the
+// quest's check-in base points come from (see TIER_BASE_POINTS,
+// functions/main.py).
+export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity, tier }) {
   const fn = httpsCallable(functions, 'create_default_quest');
-  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity });
+  const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity, tier });
   return result.data;
 }
 
@@ -195,19 +228,81 @@ export async function callCancelRsvp(questId) {
   return result.data;
 }
 
-// user: re-fetches the caller's own check-in QR code for a quest they've
-// already RSVP'd to (rsvp_to_quest returns the same shape the first time).
-export async function callGetQuestQr(questId) {
-  const fn = httpsCallable(functions, 'get_quest_qr');
+// user: self-only. Returns { unlockedTiers, activeSideQuestIds, limit,
+// atLimit } — which side quest tiers the caller's rank has unlocked, which
+// of their side quests are still RSVP'd-but-not-checked-in (occupying one
+// of `limit` concurrent slots), and whether they're at that limit right
+// now. rsvp_to_quest enforces the same rules server-side; this just lets
+// the quest list gray out and explain locked/at-limit side quests ahead of
+// a failed RSVP attempt.
+export async function callGetSideQuestStatus() {
+  const fn = httpsCallable(functions, 'get_side_quest_status');
+  const result = await fn({});
+  return result.data;
+}
+
+// organization (own quest) or admin (any quest): mints this quest's QR
+// code if it doesn't have one yet, or re-renders the existing one — never
+// rotates an existing token (see callRefreshEventQrCode for that).
+export async function callGenerateEventQrCode(questId) {
+  const fn = httpsCallable(functions, 'generate_event_qr_code');
   const result = await fn({ questId });
   return result.data;
 }
 
-// organization (own quests) or admin (any quest): validates a scanned QR
-// code's {questId, uid, token} payload and marks that attendee checked in.
-export async function callCheckInAttendee({ questId, uid, token }) {
-  const fn = httpsCallable(functions, 'check_in_attendee');
-  const result = await fn({ questId, uid, token });
+// organization (own quest) or admin (any quest): re-renders the quest's
+// current QR code image without minting or rotating anything.
+export async function callGetEventQrCode(questId) {
+  const fn = httpsCallable(functions, 'get_event_qr_code');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// organization (own quest) or admin (any quest): rotates the quest's QR
+// token, invalidating the previous one (any attendance already recorded
+// against the old token is untouched).
+export async function callRefreshEventQrCode(questId) {
+  const fn = httpsCallable(functions, 'refresh_event_qr_code');
+  const result = await fn({ questId });
+  return result.data;
+}
+
+// user: validates a scanned event QR's {questId, token} payload and checks
+// the CALLER themself in (self-service — this is the whole point of the
+// event-QR redesign, as opposed to an org scanning each attendee).
+export async function callCheckInToEvent({ questId, token }) {
+  const fn = httpsCallable(functions, 'check_in_to_event');
+  const result = await fn({ questId, token });
+  return result.data;
+}
+
+// user: submits a photo already uploaded to Storage (see
+// QuestPhotoSubmission.jsx) as proof of a completed quest. storagePath must
+// be under photoSubmissions/{questId}_{uid}/ — see storage.rules. Rejects
+// with FAILED_PRECONDITION if the caller hasn't accepted (side quest) or
+// checked in (organization quest), ALREADY_EXISTS if a pending/approved
+// submission already exists (resubmission is only allowed after a
+// rejection). reflection is required for side quests only — the Cloud
+// Function ignores/never stores it for organization quests.
+export async function callSubmitQuestPhoto({ questId, storagePath, contentType, reflection }) {
+  const fn = httpsCallable(functions, 'submit_quest_photo');
+  const result = await fn({ questId, storagePath, contentType, reflection });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): approves a pending photo
+// submission, awarding the submitter's +5 photo bonus.
+export async function callApprovePhotoSubmission({ questId, userId }) {
+  const fn = httpsCallable(functions, 'approve_photo_submission');
+  const result = await fn({ questId, userId });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): rejects a pending photo
+// submission, optionally with a reason. The submitter can resubmit after this.
+export async function callRejectPhotoSubmission({ questId, userId, reason }) {
+  const fn = httpsCallable(functions, 'reject_photo_submission');
+  const result = await fn({ questId, userId, reason });
   return result.data;
 }
 
@@ -307,6 +402,16 @@ export async function callUpdateOrganizationTags({ ltag, etag }) {
   return result.data;
 }
 
+// organization: sets the public-facing profile fields shown on
+// OrganizationProfile (logo, mission, city/state, website, contact email,
+// social links). Only send the fields actually being changed — omitted
+// keys are left untouched server-side.
+export async function callUpdateOrganizationProfile(fields) {
+  const fn = httpsCallable(functions, 'update_organization_profile');
+  const result = await fn(fields);
+  return result.data;
+}
+
 // user: changes their interests after onboarding (onboarding only sets
 // them once).
 export async function callUpdateInterests({ interests }) {
@@ -315,11 +420,55 @@ export async function callUpdateInterests({ interests }) {
   return result.data;
 }
 
+// user: changes their accommodation needs and/or location after onboarding.
+// Only send the fields actually being changed — omitted keys are left
+// untouched server-side (location/placeId/lat/lng travel together or not
+// at all).
+export async function callUpdateAccommodationNeeds(fields) {
+  const fn = httpsCallable(functions, 'update_accommodation_needs');
+  const result = await fn(fields);
+  return result.data;
+}
+
 // Settings' danger zone: permanently deletes the caller's own account,
 // cascading owned quests (organization) or rsvpd entries (everyone else)
 // server-side before removing the Auth account itself.
 export async function callDeleteAccount() {
   const fn = httpsCallable(functions, 'delete_account');
+  const result = await fn();
+  return result.data;
+}
+
+// Self by default; admin can pass targetUid to look up someone else's rank
+// (used by the admin dashboard's Diamond Certifications panel). Returns
+// { points, rank, pointsToNextRank }, recomputed server-side from `points`.
+export async function callGetUserRank(targetUid) {
+  const fn = httpsCallable(functions, 'get_user_rank');
+  const result = await fn(targetUid ? { targetUid } : {});
+  return result.data;
+}
+
+// admin: every user who has reached Diamond rank, with whether they've
+// already been issued a certificate.
+export async function callListDiamondUsers() {
+  const fn = httpsCallable(functions, 'list_diamond_users');
+  const result = await fn();
+  return result.data.users;
+}
+
+// admin: manually issues a Diamond certificate to a user (never automatic —
+// see the proposal's Admin Dashboard section). Idempotent.
+export async function callIssueCertificate(targetUid) {
+  const fn = httpsCallable(functions, 'issue_certificate');
+  const result = await fn({ targetUid });
+  return result.data;
+}
+
+// admin: fills in lat/lng for every existing quest that has a placeId but
+// no coordinates yet (see EventsMap.jsx) — re-runnable/idempotent, only
+// touches quests still missing them. Returns { updated, failedQuestIds }.
+export async function callBackfillQuestCoordinates() {
+  const fn = httpsCallable(functions, 'backfill_quest_coordinates');
   const result = await fn();
   return result.data;
 }

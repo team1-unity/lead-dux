@@ -1,0 +1,11 @@
+{
+  "appId": "com.leaddux.app",
+  "appName": "Lead-Dux",
+  "webDir": "../frontend/app/dist",
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": ["google.com"]
+    }
+  }
+}

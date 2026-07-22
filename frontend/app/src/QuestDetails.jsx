@@ -1,0 +1,73 @@
+import { useEffect, useState } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@shared/firebaseapp.jsx';
+import { useAuth } from '@shared/AuthContext.jsx';
+import { callRsvpToQuest, callCancelRsvp } from '@shared/fetch.jsx';
+import { PageMotion } from '@shared/PageMotion.jsx';
+import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
+import { QuestDetailBody } from '@mobile/Quests.jsx';
+
+// A standalone page for one quest series, reusing the exact same
+// QuestDetailBody the main Quests page shows inline — this is what
+// Organization Profile's "Active Quests" cards (and anything else that
+// wants to link straight to a specific quest) point at, rather than a
+// deep link back into the browsing list.
+export function QuestDetails() {
+  const { seriesId } = useParams();
+  const { user, role } = useAuth();
+  const [series, setSeries] = useState(null);
+  const [notFound, setNotFound] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  function load() {
+    Promise.all([
+      getDocs(query(collection(db, 'quests'), where('seriesId', '==', seriesId))),
+      getDoc(doc(db, 'questSeries', seriesId)),
+    ]).then(([questsSnap, seriesAggSnap]) => {
+      const quests = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (quests.length === 0) {
+        setNotFound(true);
+        return;
+      }
+      const seriesDocsById = new Map([[seriesId, seriesAggSnap.exists() ? seriesAggSnap.data() : {}]]);
+      const [grouped] = attachSeriesRatings(groupBySeries(quests), seriesDocsById);
+      setSeries(grouped);
+    });
+  }
+
+  useEffect(load, [seriesId]);
+
+  async function toggleRsvp(quest) {
+    setBusyId(quest.id);
+    try {
+      if ((quest.rsvpd || []).includes(user.uid)) {
+        await callCancelRsvp(quest.id);
+      } else {
+        await callRsvpToQuest(quest.id);
+      }
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (notFound) return <Navigate to="/" replace />;
+  if (!series) return <LoadingSpinner label="Loading quest..." />;
+
+  return (
+    <PageMotion>
+      <div className="ink-card">
+        <QuestDetailBody
+          series={series}
+          userId={user.uid}
+          canRsvp={role === 'user'}
+          busyId={busyId}
+          onToggleRsvp={toggleRsvp}
+          showTitle
+        />
+      </div>
+    </PageMotion>
+  );
+}
