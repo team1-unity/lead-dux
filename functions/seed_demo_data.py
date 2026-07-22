@@ -396,8 +396,8 @@ def seed_organizations():
             "contactEmail": org["email"],
             "socialLinks": org["social"],
             "photos": [photo_url(org["slug"], i) for i in range(1, org["photos"] + 1)],
-            "ratingSum": 0,
-            "ratingCount": 0,
+            "reviewCount": 0,
+            "avgRating": 0,
             "createdAt": firestore.SERVER_TIMESTAMP,
             "updatedAt": firestore.SERVER_TIMESTAMP,
         }, merge=True)
@@ -542,10 +542,11 @@ def seed_reviews(completed_quests, org_uids):
             series_ref.set({"reviewCount": review_count, "avgRating": rating_sum / review_count}, merge=True)
             org_snap = org_ref.get()
             org_data = org_snap.to_dict() or {}
-            org_ref.set({
-                "ratingSum": org_data.get("ratingSum", 0) + rating_sum,
-                "ratingCount": org_data.get("ratingCount", 0) + review_count,
-            }, merge=True)
+            org_current_count = org_data.get("reviewCount", 0)
+            org_current_avg = org_data.get("avgRating", 0)
+            org_new_count = org_current_count + review_count
+            org_new_avg = ((org_current_avg * org_current_count) + rating_sum) / org_new_count
+            org_ref.set({"reviewCount": org_new_count, "avgRating": org_new_avg}, merge=True)
             print(f"  Reviews: {cq['quest_id']} — {review_count} reviews, avg {rating_sum / review_count:.1f}")
 
 

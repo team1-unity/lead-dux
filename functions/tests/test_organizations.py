@@ -23,8 +23,8 @@ class TestApproveOrganization:
 
         org = fake_firestore.client().collection("organizations").document("org-1").get().to_dict()
         assert org["verified"] is True
-        assert org["ratingSum"] == 0
-        assert org["ratingCount"] == 0
+        assert org["reviewCount"] == 0
+        assert org["avgRating"] == 0
         assert org["photos"] == []
         assert org["socialLinks"] == {}
         assert org["logoUrl"] is None

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -28,7 +28,6 @@ import { TrustTag } from '@shared/TrustTag.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import {
   IconPlus,
   IconSearch,
