@@ -22,6 +22,7 @@ import { Quests } from '@mobile/Quests.jsx';
 import { Journal } from '@mobile/Journal.jsx';
 import { Register as RegisterOrganization } from '@org/Register.jsx';
 import { Dashboard as OrgDashboard } from '@org/Dashboard.jsx';
+import { Journal as OrgJournal } from '@org/Journal.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
 import { Dashboard as AdminDashboard } from '@admin/Dashboard.jsx';
 import '@shared/style.css';
@@ -150,6 +151,14 @@ function App() {
               element={
                 <ProtectedRoute requiredRole="organization">
                   <OrgDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/org/journal"
+              element={
+                <ProtectedRoute requiredRole="organization">
+                  <OrgJournal />
                 </ProtectedRoute>
               }
             />

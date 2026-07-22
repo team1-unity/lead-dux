@@ -29,7 +29,10 @@ const PRIMARY_BY_ROLE = {
     { to: '/', icon: IconList, label: 'Quests' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],
-  organization: [{ to: '/org', icon: IconList, label: 'Dashboard' }],
+  organization: [
+    { to: '/org', icon: IconList, label: 'Dashboard' },
+    { to: '/org/journal', icon: IconJournal, label: 'Journal' },
+  ],
   admin: [
     { to: '/', icon: IconList, label: 'Quests' },
     { to: '/admin', icon: IconGrid, label: 'Data' },
