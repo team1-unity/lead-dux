@@ -16,7 +16,7 @@ import { QuestDetailBody } from '@mobile/Quests.jsx';
 // deep link back into the browsing list.
 export function QuestDetails() {
   const { seriesId } = useParams();
-  const { user, role } = useAuth();
+  const { user, role, loading } = useAuth();
   const [series, setSeries] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -54,7 +54,13 @@ export function QuestDetails() {
   }
 
   if (notFound) return <Navigate to="/" replace />;
-  if (!series) return <LoadingSpinner label="Loading quest..." />;
+  // On a hard reload, Firebase Auth hasn't resolved `user` yet even after
+  // this quest's own (auth-independent) fetch finishes — render below reads
+  // user.uid unconditionally, so this has to wait on both, not just
+  // `series`, or it crashes here specifically (a client-side nav never hit
+  // this because `user` is already warm by the time this page mounts).
+  if (loading || !series) return <LoadingSpinner label="Loading quest..." />;
+  if (!user) return <Navigate to="/login" replace />;
 
   return (
     <PageMotion>

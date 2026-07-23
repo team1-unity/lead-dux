@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
 import { ProtectedRoute } from '@shared/ProtectedRoute.jsx';
@@ -9,6 +9,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { FeedbackToast } from '@shared/FeedbackToast.jsx';
 import { WelcomeTour } from '@shared/WelcomeTour.jsx';
+import { RouteErrorBoundary } from '@shared/RouteErrorBoundary.jsx';
 import { EventsMap } from '@shared/EventsMap.jsx';
 import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
@@ -115,15 +116,26 @@ function Home() {
 // sibling of <Outlet/> rather than inside each page — react-router keeps
 // this component instance mounted across navigations between its child
 // routes, so BottomNav no longer unmounts/remounts (and visibly jumps)
-// every time PageMotion replays a page's own mount animation. onboarding_user
-// is the one signed-in state that shouldn't see nav yet (Home renders the
-// Onboarding form in its place at "/").
+// every time PageMotion replays a page's own mount animation.
+//
+// showNav is deliberately keyed on the URL, not on `role` — the only two
+// states that shouldn't see nav (the signed-out Landing page and the
+// Onboarding form) both render in place of the quest feed at "/" (see
+// Home/PublicHome above), so "/" is the one path that still needs to ask
+// role. Every other path shows nav unconditionally: if role is momentarily
+// unresolved, stale, or a page below has an issue, that's exactly when a
+// way out matters most, so nav no longer disappears along with it. The
+// actual page content is also wrapped in an error boundary (not BottomNav)
+// so an uncaught error in one page can't take the nav down with it either.
 function AppShell() {
   const { role } = useAuth();
-  const showNav = role && role !== 'onboarding_user';
+  const location = useLocation();
+  const showNav = location.pathname !== '/' || (role && role !== 'onboarding_user');
   return (
     <>
-      <Outlet />
+      <RouteErrorBoundary resetKey={location.pathname}>
+        <Outlet />
+      </RouteErrorBoundary>
       {showNav && <BottomNav />}
       <WelcomeTour />
     </>
