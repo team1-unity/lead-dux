@@ -746,6 +746,23 @@ def submit_onboarding(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "role": "user"}
 
 
+# Callable from WelcomeTour.jsx, the moment a first-time leader or
+# organization dismisses (or finishes) the one-time feature walkthrough
+# shown right after they land on their real home screen. Flips `introSeen`
+# so it never shows again — written to whichever collection actually holds
+# this account's own profile doc (users/{uid} for a leader/pending_org,
+# organizations/{uid} for an organization) rather than a separate
+# collection, since nothing else needs this flag to live alongside it.
+# Both collections are already owner-readable (see firestore.rules), so no
+# rules change was needed to add this field.
+@https_fn.on_call()
+def mark_intro_seen(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+    collection = "organizations" if req.auth.token.get("role") == "organization" else "users"
+    firestore.client().collection(collection).document(req.auth.uid).update({"introSeen": True})
+    return {"success": True}
+
+
 # Callable from the org-details form, for an account currently in
 # onboarding_org (the state a brand-new org signup reaches directly via
 # complete_signup). A "user" who meant to sign up as an organization has no
