@@ -349,23 +349,22 @@ export async function callListQuestAttendees(questId) {
   return result.data.attendees;
 }
 
-// organization (own quests) or admin (any quest): AI-drafted feedback (a
-// default rating + a generated message) for every checked-in attendee who
-// doesn't already have feedback for this quest. Nothing is persisted by
-// this call — see callSubmitQuestFeedbackBatch for the actual send.
-export async function callGenerateQuestFeedbackDrafts(questId) {
-  const fn = httpsCallable(functions, 'generate_quest_feedback_drafts');
+// user: requests feedback on a quest they actually checked into and feel
+// good about — capped at 3 completed requests/month, once per occurrence
+// ever. See submit_feedback_request_response for the org's side.
+export async function callRequestQuestFeedback(questId) {
+  const fn = httpsCallable(functions, 'request_quest_feedback');
   const result = await fn({ questId });
   return result.data;
 }
 
-// organization (own quests) or admin (any quest): persists the org's
-// (possibly edited) feedback for a batch of attendees at once — this is
-// what actually writes to each attendee's journal and awards their bonus
-// points.
-export async function callSubmitQuestFeedbackBatch({ questId, feedback }) {
-  const fn = httpsCallable(functions, 'submit_quest_feedback_batch');
-  const result = await fn({ questId, feedback });
+// organization (own quests) or admin (any quest): answers a pending
+// feedback request with the fixed 5-question scores plus an optional note
+// — this is what actually writes to the leader's journal and, if the
+// average clears the threshold, awards their bonus points.
+export async function callSubmitFeedbackRequestResponse({ questId, uid, answers, extraThoughts }) {
+  const fn = httpsCallable(functions, 'submit_feedback_request_response');
+  const result = await fn({ questId, uid, answers, extraThoughts });
   return result.data;
 }
 
@@ -387,7 +386,8 @@ export async function callMarkFeedbackRead(questId) {
 }
 
 // user: saves (or updates) the caller's own private reflection for a quest
-// they've already received organization feedback on.
+// they checked into — independent of whether they've ever requested or
+// received feedback for it.
 export async function callSubmitQuestReflection({ questId, body }) {
   const fn = httpsCallable(functions, 'submit_quest_reflection');
   const result = await fn({ questId, body });

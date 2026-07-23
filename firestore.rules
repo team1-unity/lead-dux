@@ -24,13 +24,14 @@ service cloud.firestore {
       allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.role == 'admin');
       allow write: if false;
 
-      // Organization feedback (rating + message) on a specific completed
-      // quest, plus the user's own private reflection on it — see
-      // generate_quest_feedback_drafts/submit_quest_feedback_batch and
-      // submit_quest_reflection in functions/main.py. Nothing sensitive
-      // here (unlike attendance tokens), so — same as the parent doc —
-      // the owner can read it directly; only a Cloud Function can write.
-      match /feedback/{questId} {
+      // One entry per organization quest actually checked into — created
+      // at check-in (see check_in_to_event), holding the leader's own
+      // private reflection plus whatever requested feedback (see
+      // request_quest_feedback/submit_feedback_request_response) has come
+      // in for it, if any. Nothing sensitive here (unlike attendance
+      // tokens), so — same as the parent doc — the owner can read it
+      // directly; only a Cloud Function can write.
+      match /journal/{questId} {
         allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.role == 'admin');
         allow write: if false;
       }
@@ -130,6 +131,20 @@ service cloud.firestore {
     // resource.data.orgId (denormalized at submit time), so it's guarded
     // with `resource != null` first.
     match /photoSubmissions/{docId} {
+      allow read: if request.auth != null && (
+        request.auth.uid == submitterUid(docId) ||
+        request.auth.token.role == 'admin' ||
+        (request.auth.token.role == 'organization' && resource != null && request.auth.uid == resource.data.orgId)
+      );
+      allow write: if false;
+    }
+
+    // Leader-requested feedback on a specific quest occurrence (see
+    // request_quest_feedback/submit_feedback_request_response in
+    // functions/main.py) — doc id is {questId}_{uid}, same convention and
+    // same read shape as photoSubmissions above: the requesting leader,
+    // the owning org, or an admin.
+    match /feedbackRequests/{docId} {
       allow read: if request.auth != null && (
         request.auth.uid == submitterUid(docId) ||
         request.auth.token.role == 'admin' ||

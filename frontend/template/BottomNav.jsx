@@ -77,11 +77,14 @@ function fabCircleStyle(i, n) {
 }
 
 // Unread count for the Journal badge — a live listener (not a one-time
-// fetch), so it updates the moment an organization sends feedback while
-// the app is open, same as the FeedbackToast popup. `read` (not
-// `notified`) is what this counts: see the module note in
+// fetch), so it updates the moment an organization answers a feedback
+// request while the app is open, same as the FeedbackToast popup. `read`
+// (not `notified`) is what this counts: see the module note in
 // functions/main.py's feedback section for why those two flags are kept
-// separate.
+// separate. A journal entry never has `read` set at all until a request
+// completes (see check_in_to_event/submit_feedback_request_response), so
+// this single-field query naturally never matches a quest with no
+// feedback on it.
 function useUnreadFeedbackCount(user, role) {
   const [count, setCount] = useState(0);
 
@@ -90,7 +93,7 @@ function useUnreadFeedbackCount(user, role) {
       setCount(0);
       return undefined;
     }
-    const q = query(collection(db, 'users', user.uid, 'feedback'), where('read', '==', false));
+    const q = query(collection(db, 'users', user.uid, 'journal'), where('read', '==', false));
     return onSnapshot(q, (snap) => setCount(snap.size));
   }, [user, role]);
 

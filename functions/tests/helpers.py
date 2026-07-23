@@ -80,6 +80,46 @@ def seed_photo_submission(fake_firestore, quest_id, uid, **overrides):
     return submission
 
 
+def seed_feedback_request(fake_firestore, quest_id, uid, **overrides):
+    request = {
+        "questId": quest_id,
+        "uid": uid,
+        "orgId": "org-1",
+        "orgName": "Trail Org",
+        "questTitle": "Trail Cleanup",
+        "eventDate": dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1),
+        "requestedAt": dt.datetime.now(dt.timezone.utc),
+        "expiresAt": dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=main.FEEDBACK_REQUEST_WINDOW_DAYS),
+        "status": "pending",
+        "answers": None,
+        "extraThoughts": None,
+        "score": None,
+        "pointsAwarded": 0,
+        "completedAt": None,
+    }
+    request.update(overrides)
+    main._feedback_request_ref(fake_firestore.client(), quest_id, uid).set(request)
+    return request
+
+
+def seed_journal_entry(fake_firestore, uid, quest_id, **overrides):
+    entry = {
+        "questId": quest_id,
+        "questTitle": "Trail Cleanup",
+        "seriesId": quest_id,
+        "orgId": "org-1",
+        "orgName": "Trail Org",
+        "eventDate": dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1),
+        "reflectionBody": "",
+        "reflectionUpdatedAt": None,
+        "createdAt": dt.datetime.now(dt.timezone.utc),
+        "requestStatus": None,
+    }
+    entry.update(overrides)
+    main._journal_ref(fake_firestore.client(), uid, quest_id).set(entry)
+    return entry
+
+
 def seed_org(fake_firestore, uid, **overrides):
     org = {
         "name": "Trail Org",

@@ -89,16 +89,17 @@ DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
 # Three sources count toward a user's points: a flat amount for completing
 # an organization quest, a tiered amount for completing a side/neighborhood
 # quest (isDefault, see _validate_tier and the quest-creation functions
-# below), both awarded at check-in, and a bonus from organization feedback
-# (see submit_quest_feedback_batch further down). Rank (Iron/Bronze/Silver/
-# Gold/Diamond, 100 points each) is derived from `points` by _rank_for_points
-# below and kept in sync on `users/{uid}.rank` by _award_points every time
-# points change — the ladder itself is defined twice on purpose (here and in
-# frontend/template/rank.js), once for each side that needs it; keep the
-# RANKS/POINTS_PER_RANK values in the two files in sync by hand if they ever
-# change.
+# below), both awarded at check-in, and a flat bonus from a leader-requested
+# feedback response that scores well (see submit_feedback_request_response
+# further down — a leader requests it, the org answers a fixed 5-question
+# form, and a passing average awards FEEDBACK_BONUS_POINTS flat, not a
+# graduated amount). Rank (Iron/Bronze/Silver/Gold/Diamond, 100 points each)
+# is derived from `points` by _rank_for_points below and kept in sync on
+# `users/{uid}.rank` by _award_points every time points change — the ladder
+# itself is defined twice on purpose (here and in frontend/template/rank.js),
+# once for each side that needs it; keep the RANKS/POINTS_PER_RANK values in
+# the two files in sync by hand if they ever change.
 ORG_QUEST_BASE_POINTS = 20
-FEEDBACK_BONUS_BY_RATING = {10: 20, 9: 18, 8: 15, 7: 12, 6: 10, 5: 8, 4: 6, 3: 4, 2: 2, 1: 0}
 TIER_BASE_POINTS = {"iron": 10, "bronze": 12, "silver": 15, "gold": 18, "diamond": 20}
 
 RANKS = ["Iron", "Bronze", "Silver", "Gold", "Diamond"]
@@ -290,7 +291,17 @@ def _delete_quest(db, quest_ref):
     # whole series' reviews gone (delete_quest_series with no keepQuestId,
     # delete_organization, delete_account) do that explicitly themselves via
     # _delete_series_reviews.
+    #
+    # Each attendee's feedbackRequests doc and journal entry for this one
+    # occurrence are keyed by questId too, so they'd be orphaned the same
+    # way if not cleaned up here alongside attendance — same reasoning as
+    # the module note above, just for the newer feedback-request/journal
+    # collections rather than attendance itself.
     for doc in db.collection("attendance").where("eventId", "==", quest_ref.id).stream():
+        uid = doc.to_dict().get("userId")
+        if uid:
+            _feedback_request_ref(db, quest_ref.id, uid).delete()
+            _journal_ref(db, uid, quest_ref.id).delete()
         doc.reference.delete()
     quest_ref.delete()
 
@@ -1622,6 +1633,29 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     base_points = ORG_QUEST_BASE_POINTS if quest.get("orgId") else TIER_BASE_POINTS.get(quest.get("tier"), 0)
     _award_points(db, uid, base_points)
 
+    # A private journal entry for this occurrence, created the moment
+    # check-in happens — organization quests only (side quests have no org
+    # to request feedback from, and get their own reflection at photo-
+    # submission time instead, see submit_quest_photo). `requestStatus`
+    # starts unset (not "pending") since no feedback has been requested
+    # yet; `notified`/`read` are deliberately left off the doc entirely
+    # rather than defaulted, so FeedbackToast/BottomNav's `==false` queries
+    # (see the "Organization feedback requests" module note below) never
+    # match a quest with no feedback on it.
+    if quest.get("orgId"):
+        db.collection("users").document(uid).collection("journal").document(quest_id).set({
+            "questId": quest_id,
+            "questTitle": quest.get("title"),
+            "seriesId": quest.get("seriesId") or quest_id,
+            "orgId": quest.get("orgId"),
+            "orgName": quest.get("orgName"),
+            "eventDate": quest.get("eventDate"),
+            "reflectionBody": "",
+            "reflectionUpdatedAt": None,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "requestStatus": None,
+        }, merge=True)
+
     attendance_ref.set({
         "userId": uid,
         "orgId": quest.get("orgId"),
@@ -1842,7 +1876,7 @@ def _record_photo_approval(transaction, ref, reviewer_uid):
 # Callable from the org dashboard's (own quests) or admin dashboard's (side
 # quests) pending-photo queue. Awarding points is a separate step after the
 # transaction above commits — same two-step "record, then award" shape
-# submit_quest_feedback_batch uses for its own bonus.
+# submit_feedback_request_response uses for its own bonus.
 #
 # The +5 photo bonus (PHOTO_BONUS_POINTS) only ever applies to organization
 # quests, which already earned their flat base points at check-in — the
@@ -1944,49 +1978,63 @@ def reject_photo_submission(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
-# Organization feedback & reflections journal --------------------------------
+# Organization feedback requests & reflections journal -----------------------
 #
-# The reverse direction from a review: here the ORGANIZATION rates and
-# messages an individual attendee about their own performance on a specific
-# quest (1-10, see FEEDBACK_BONUS_BY_RATING above), rather than the attendee
-# reviewing the org. Feedback lives at users/{uid}/feedback/{questId} — one
-# doc per person per quest occurrence, self-readable directly via the client
-# SDK (see firestore.rules) since there's nothing sensitive in it, unlike
-# attendance tokens. Writing it is still Cloud-Function-only, same as every
-# other collection. `notified` gates the one-time "you got feedback" popup
+# The reverse direction from a review: here the ORGANIZATION assesses an
+# individual attendee's own performance on a specific quest, rather than the
+# attendee reviewing the org — but unlike a review, this only ever happens
+# when the LEADER asks for it (request_quest_feedback), not automatically.
+# A leader who feels good about how a specific occurrence went can request
+# feedback on it; the org then answers a fixed 5-question form (each 1-10,
+# FEEDBACK_QUESTIONS below) covering engagement/presence/involvement, plus
+# an optional free-text note (submit_feedback_request_response). The
+# resulting average, if it clears FEEDBACK_SCORE_THRESHOLD, awards a flat
+# FEEDBACK_BONUS_POINTS bonus on top of the check-in attendance points —
+# this is a rare, opt-in bonus, not a routine per-quest payout.
+#
+# The request itself lives at feedbackRequests/{questId}_{uid} (doc id via
+# _attendance_doc_id, same convention as photoSubmissions) — a top-level
+# collection, not nested under the user, so the owning org can query across
+# every attendee who's requested feedback for its quests (see
+# frontend/template/PendingFeedbackRequests.jsx and the firestore.rules
+# entry mirroring photoSubmissions'). At most one such doc ever exists per
+# (quest, uid) pair — a leader gets exactly one shot at feedback per
+# occurrence, request_quest_feedback checks existence (not status) to
+# enforce that even after a request has expired or completed.
+#
+# A leader's private journal entry, at users/{uid}/journal/{questId}, is
+# created independently at check-in time (see check_in_to_event) — it no
+# longer depends on feedback existing at all. request_quest_feedback and
+# submit_feedback_request_response both additionally mirror the request's
+# state onto that same journal doc (requestStatus/requestedAt/expiresAt,
+# then answers/score/extraThoughts/pointsAwarded/completedAt) so the
+# mobile Journal page, FeedbackToast, and the BottomNav badge only ever
+# need to watch users/{uid}/journal — never feedbackRequests directly.
+# `notified` gates the one-time "you got feedback" popup
 # (frontend/template/FeedbackToast.jsx); `read` gates the BottomNav journal
 # badge — the two are deliberately separate, since dismissing the popup
-# shouldn't itself mark the journal entry as read.
-#
-# Writing feedback is a two-step flow: generate_quest_feedback_drafts uses
-# Gemini (Google's free-tier-eligible API — see the GEMINI_API_KEY secret
-# below) to write a first-pass rating+message per checked-in attendee (so an
-# org with many attendees doesn't have to write N messages from scratch),
-# then the org reviews/edits in the frontend and submit_quest_feedback_batch
-# persists whatever it actually decided to send. Nothing is written to
-# Firestore until that second step.
+# shouldn't itself mark the journal entry as read. Both are left unset on
+# the journal doc until a request actually completes (see check_in_to_event
+# and the module note there) rather than defaulted to some value, since a
+# Firestore `==false` query never matches a doc where the field is simply
+# absent — exactly the behavior wanted for a quest with no feedback on it.
 
-FEEDBACK_MESSAGE_MAX_LENGTH = 600
-DEFAULT_FEEDBACK_RATING = 10
+FEEDBACK_REQUEST_WINDOW_DAYS = 14  # how long a pending request stays answerable
+FEEDBACK_REQUEST_MONTHLY_CAP = 3  # completed requests per calendar month, per leader
+FEEDBACK_SCORE_THRESHOLD = 6  # average (out of 10) needed to earn the bonus
+FEEDBACK_BONUS_POINTS = 20  # flat — deliberately not graduated by score
+EXTRA_THOUGHTS_MAX_LENGTH = 800
 
-_FEEDBACK_DRAFT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "feedback": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "uid": {"type": "string"},
-                    "message": {"type": "string"},
-                },
-                "required": ["uid", "message"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": ["feedback"],
-    "additionalProperties": False,
+# The org-facing question text doubles as the source of truth for which
+# answer keys are valid — request_quest_feedback/submit_feedback_request_
+# response both validate against this dict's keys rather than a separate
+# list, so there's exactly one place to add/reword a question.
+FEEDBACK_QUESTIONS = {
+    "engagement": "How actively did they participate and engage during the quest?",
+    "presence": "How present and attentive were they throughout?",
+    "involvement": "How involved were they in contributing to the group or task?",
+    "initiative": "How much initiative did they show — stepping up or helping without being asked?",
+    "attitude": "How positive and cooperative was their attitude?",
 }
 
 
@@ -2007,201 +2055,198 @@ def _get_quest_or_404(db, quest_id: str) -> dict:
     return snap.to_dict()
 
 
-# Callable from the org dashboard's "Give Feedback" button on a quest (own
-# quests only, or admin for any). Every checked-in attendee who doesn't
-# already have a feedback doc for this quest gets a draft — the org's own
-# name is never sent to Gemini, only the quest's title/description and each
-# attendee's name, so the model has nothing to invent specific actions from
-# and is told not to. Ratings default to the max (10); the org can lower
-# any of them, or edit any message, before anything is actually sent (see
-# submit_quest_feedback_batch). Nothing is persisted here — this only
-# returns a proposal.
-@https_fn.on_call(secrets=["GEMINI_API_KEY"])
-def generate_quest_feedback_drafts(req: https_fn.CallableRequest) -> dict:
-    _require_role(req, "organization", "admin")
+def _feedback_request_ref(db, quest_id: str, uid: str):
+    return db.collection("feedbackRequests").document(_attendance_doc_id(quest_id, uid))
+
+
+def _journal_ref(db, uid: str, quest_id: str):
+    return db.collection("users").document(uid).collection("journal").document(quest_id)
+
+
+def _month_start(now: datetime) -> datetime:
+    # A completed request counts toward whichever calendar month its
+    # completedAt falls in — deliberately not the month it was originally
+    # requested in (see the module note above and the cap-recheck in
+    # submit_feedback_request_response, which relies on this same anchor).
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _completed_feedback_requests_this_month(db, uid: str) -> int:
+    # Filters completedAt in Python rather than via a third `.where(...)`
+    # clause — a leader's own completed-request count is small enough that
+    # streaming all of it and filtering here is simpler than a three-field
+    # composite index for what's otherwise just a two-equality-field query
+    # (uid, status) already needed elsewhere.
+    month_start = _month_start(datetime.now(timezone.utc))
+    query = db.collection("feedbackRequests").where("uid", "==", uid).where("status", "==", "completed")
+    return sum(1 for doc in query.stream() if _to_utc(doc.to_dict()["completedAt"]) >= month_start)
+
+
+# Callable from the mobile Journal page — a leader requesting feedback on
+# one specific occurrence they attended, because they felt good about how
+# it went. Capped at FEEDBACK_REQUEST_MONTHLY_CAP *completed* requests per
+# calendar month (see submit_feedback_request_response for why a pending
+# request doesn't itself consume a slot, and how that's still enforced
+# without letting several orgs' pending responses stack past the cap).
+@https_fn.on_call()
+def request_quest_feedback(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
 
     quest_id = req.data.get("questId")
     if not quest_id:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
 
     db = firestore.client()
+    uid = req.auth.uid
     quest = _get_quest_or_404(db, quest_id)
-    _require_owning_org_or_admin(req, quest, "generate feedback")
-
     if not quest.get("orgId"):
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "This quest has no organization to give feedback as.",
+            "This quest has no organization to request feedback from.",
         )
 
-    already_given = set(quest.get("feedbackGivenUids") or [])
-    attendees = []
-    # Attendance lives in its own top-level collection now (see
-    # check_in_to_event) — existence for (eventId, uid) means checked-in.
-    for doc in db.collection("attendance").where("eventId", "==", quest_id).stream():
-        uid = doc.to_dict()["userId"]
-        if uid in already_given:
-            continue
-        user_snap = db.collection("users").document(uid).get()
-        name = (user_snap.to_dict().get("name") if user_snap.exists else None) or "there"
-        attendees.append({"uid": uid, "name": name})
-
-    if not attendees:
-        return {"questTitle": quest.get("title"), "attendees": []}
-
-    people_lines = "\n".join(f'- uid "{a["uid"]}": {a["name"]}' for a in attendees)
-    prompt = (
-        f'Write a short (2-3 sentence), warm, encouraging feedback message for each of the '
-        f'following people, who each just completed the community quest "{quest.get("title")}" '
-        f'({quest.get("description")}).\n\n'
-        f"Vary the phrasing, structure, and opening line across people so the set doesn't read like "
-        f"a mail-merge template with names swapped in. You don't know what any specific person "
-        f"actually did during the quest — don't invent specific actions or achievements for them. "
-        f"Keep each message grounded in the quest itself and a genuine tone of thanks.\n\n"
-        f"People:\n{people_lines}\n\n"
-        f'Return one entry per person in `feedback`, each with that exact `uid` value copied back '
-        f"and your generated `message`."
-    )
-
-    # genai.Client() reads GEMINI_API_KEY from the environment on its own —
-    # created here, not at module level, so a missing/misconfigured secret
-    # only breaks this one function's cold start, not every function in
-    # this file (see the ORG_QUEST_BASE_POINTS module note for the same
-    # reasoning applied to Firestore access elsewhere).
-    #
-    # NOTE for whoever touches this next: ai.google.dev's own docs (as of
-    # this writing) describe a client.interactions.create(...) method that
-    # doesn't match what the google-genai SDK's own GitHub README documents
-    # (client.models.generate_content(...), used below) — sourced from the
-    # README since it's tied directly to the installed package version,
-    # not a docs page that may be ahead of or behind it. Worth
-    # re-verifying if this starts throwing AttributeErrors after a SDK
-    # upgrade.
-    client = genai.Client()
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config=genai_types.GenerateContentConfig(
-            max_output_tokens=2048,
-            response_mime_type="application/json",
-            response_json_schema=_FEEDBACK_DRAFT_SCHEMA,
-        ),
-    )
-    text = response.text
-    if not text:
+    if not _attendance_ref(db, quest_id, uid).get().exists:
         raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.INTERNAL,
-            "The AI didn't return any feedback drafts. Try again.",
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "You can only request feedback for a quest you actually checked into.",
         )
-    messages_by_uid = {item["uid"]: item["message"] for item in json.loads(text).get("feedback", [])}
 
-    return {
+    request_ref = _feedback_request_ref(db, quest_id, uid)
+    if request_ref.get().exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "You've already requested feedback for this quest.",
+        )
+
+    if _completed_feedback_requests_this_month(db, uid) >= FEEDBACK_REQUEST_MONTHLY_CAP:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            f"You've already received {FEEDBACK_REQUEST_MONTHLY_CAP} pieces of feedback this month. Try again next month.",
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=FEEDBACK_REQUEST_WINDOW_DAYS)
+
+    batch = db.batch()
+    batch.set(request_ref, {
+        "questId": quest_id,
+        "uid": uid,
+        "orgId": quest.get("orgId"),
+        "orgName": quest.get("orgName"),
         "questTitle": quest.get("title"),
-        "attendees": [
-            {
-                "uid": a["uid"],
-                "name": a["name"],
-                "rating": DEFAULT_FEEDBACK_RATING,
-                "message": messages_by_uid.get(a["uid"], ""),
-            }
-            for a in attendees
-        ],
-    }
+        "eventDate": quest.get("eventDate"),
+        "requestedAt": firestore.SERVER_TIMESTAMP,
+        "expiresAt": expires_at,
+        "status": "pending",
+        "answers": None,
+        "extraThoughts": None,
+        "score": None,
+        "pointsAwarded": 0,
+        "completedAt": None,
+    })
+    batch.update(_journal_ref(db, uid, quest_id), {
+        "requestStatus": "pending",
+        "requestedAt": firestore.SERVER_TIMESTAMP,
+        "expiresAt": expires_at,
+    })
+    batch.commit()
+
+    return {"success": True, "expiresAt": expires_at.isoformat()}
 
 
-# Callable from the org dashboard, once the org has reviewed (and possibly
-# edited) the drafts from generate_quest_feedback_drafts. Persists exactly
-# what's passed in — an entry for a uid that isn't actually a checked-in
-# attendee, or one that already has feedback for this quest, is silently
-# skipped (stale UI, not necessarily tampering) rather than failing the
-# whole batch; a malformed rating/message DOES fail the whole batch, since
-# that can only come from a broken client, not a stale one.
+# Callable from the org dashboard's pending feedback requests queue (own
+# quests only, or admin for any) — answering one specific leader's request
+# with the fixed 5-question form plus an optional note. Always persists the
+# real answers/score once submitted, even if the leader's monthly cap has
+# already been used up elsewhere (see the cap-recheck below) — only the
+# bonus points are conditional, not the feedback itself.
 @https_fn.on_call()
-def submit_quest_feedback_batch(req: https_fn.CallableRequest) -> dict:
+def submit_feedback_request_response(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "organization", "admin")
 
     quest_id = req.data.get("questId")
-    feedback_list = req.data.get("feedback")
-    if not quest_id or not isinstance(feedback_list, list) or not feedback_list:
+    uid = req.data.get("uid")
+    answers = req.data.get("answers")
+    extra_thoughts = req.data.get("extraThoughts")
+    if not quest_id or not uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId and uid are required.")
+
+    if not isinstance(answers, dict) or set(answers) != set(FEEDBACK_QUESTIONS):
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "questId and a non-empty feedback list are required.",
+            f"answers must include exactly these ratings: {', '.join(FEEDBACK_QUESTIONS)}.",
         )
+    for value in answers.values():
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "Every answer must be an integer between 1 and 10.",
+            )
+    if extra_thoughts is not None:
+        if not isinstance(extra_thoughts, str):
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "extraThoughts must be a string.")
+        if len(extra_thoughts) > EXTRA_THOUGHTS_MAX_LENGTH:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"extraThoughts must be at most {EXTRA_THOUGHTS_MAX_LENGTH} characters.",
+            )
+        extra_thoughts = extra_thoughts.strip() or None
 
     db = firestore.client()
-    quest_ref = db.collection("quests").document(quest_id)
     quest = _get_quest_or_404(db, quest_id)
-    _require_owning_org_or_admin(req, quest, "submit feedback")
+    _require_owning_org_or_admin(req, quest, "respond to feedback for")
 
-    # Attendance now lives in its own top-level collection (see
-    # check_in_to_event) — its mere existence for (eventId, uid) means
-    # checked-in, there's no separate status field to filter on anymore.
-    checked_in_uids = {
-        doc.to_dict()["userId"]
-        for doc in db.collection("attendance").where("eventId", "==", quest_id).stream()
+    request_ref = _feedback_request_ref(db, quest_id, uid)
+    request_snap = request_ref.get()
+    if not request_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No feedback request found.")
+    request = request_snap.to_dict()
+    if request.get("status") != "pending":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This request has already been answered.",
+        )
+    now = datetime.now(timezone.utc)
+    if now >= _to_utc(request["expiresAt"]):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "This request has expired.",
+        )
+
+    score = round(sum(answers.values()) / len(answers), 1)
+    # Re-check the cap here, not just in request_quest_feedback — several
+    # orgs' requests can be pending at once (nothing caps pending count,
+    # only completed count), so this is the only point that can see the
+    # leader's true completed-this-month total including this submission.
+    # The request still completes with its real score either way; only the
+    # bonus is withheld once the cap's already been used up elsewhere.
+    under_cap = _completed_feedback_requests_this_month(db, uid) < FEEDBACK_REQUEST_MONTHLY_CAP
+    points = FEEDBACK_BONUS_POINTS if score >= FEEDBACK_SCORE_THRESHOLD and under_cap else 0
+
+    completion_fields = {
+        "status": "completed",
+        "answers": answers,
+        "extraThoughts": extra_thoughts,
+        "score": score,
+        "pointsAwarded": points,
+        "completedAt": firestore.SERVER_TIMESTAMP,
     }
-    already_given = set(quest.get("feedbackGivenUids") or [])
-
-    # Validate every entry before writing anything — a malformed entry must
-    # fail the whole request with nothing persisted (see the module note
-    # above), including no points awarded. Points are applied via
-    # _award_points (its own transaction, for the same points+rank atomicity
-    # as check_in_attendee) only after the feedback-doc batch below has
-    # actually committed.
-    valid_entries = []
-    for entry in feedback_list:
-        uid = entry.get("uid")
-        if uid not in checked_in_uids or uid in already_given:
-            continue
-
-        rating = entry.get("rating")
-        message = entry.get("message")
-        if isinstance(rating, bool) or not isinstance(rating, int) or rating not in FEEDBACK_BONUS_BY_RATING:
-            raise https_fn.HttpsError(
-                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                "rating must be an integer between 1 and 10.",
-            )
-        if not isinstance(message, str) or not message.strip():
-            raise https_fn.HttpsError(
-                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                "message is required for every entry.",
-            )
-        if len(message) > FEEDBACK_MESSAGE_MAX_LENGTH:
-            raise https_fn.HttpsError(
-                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                f"message must be at most {FEEDBACK_MESSAGE_MAX_LENGTH} characters.",
-            )
-        valid_entries.append((uid, rating, message.strip()))
-
     batch = db.batch()
-    sent_uids = []
-    for uid, rating, message in valid_entries:
-        bonus = FEEDBACK_BONUS_BY_RATING[rating]
-        feedback_ref = db.collection("users").document(uid).collection("feedback").document(quest_id)
-        batch.set(feedback_ref, {
-            "questId": quest_id,
-            "questTitle": quest.get("title"),
-            "seriesId": quest.get("seriesId") or quest_id,
-            "orgId": quest.get("orgId"),
-            "orgName": quest.get("orgName"),
-            "rating": rating,
-            "message": message,
-            "pointsAwarded": bonus,
-            "notified": False,
-            "read": False,
-            "reflectionBody": "",
-            "reflectionUpdatedAt": None,
-            "createdAt": firestore.SERVER_TIMESTAMP,
-        })
-        sent_uids.append(uid)
+    batch.update(request_ref, completion_fields)
+    batch.update(_journal_ref(db, uid, quest_id), {
+        "requestStatus": "completed",
+        "answers": answers,
+        "extraThoughts": extra_thoughts,
+        "score": score,
+        "pointsAwarded": points,
+        "completedAt": firestore.SERVER_TIMESTAMP,
+        "notified": False,
+        "read": False,
+    })
+    batch.commit()
+    _award_points(db, uid, points)
 
-    if sent_uids:
-        batch.update(quest_ref, {"feedbackGivenUids": firestore.ArrayUnion(sent_uids)})
-        batch.commit()
-        for uid, rating, _ in valid_entries:
-            _award_points(db, uid, FEEDBACK_BONUS_BY_RATING[rating])
-
-    return {"success": True, "sentUids": sent_uids}
+    return {"success": True, "score": score, "pointsAwarded": points}
 
 
 # AI-ranked ordering of organization quests on the Quests page — not a
@@ -2303,8 +2348,10 @@ def _generate_quest_recommendations(db, uid: str) -> None:
     )
 
     # genai.Client() reads GEMINI_API_KEY from the environment on its own —
-    # see generate_quest_feedback_drafts above for why this is created here
-    # rather than at module level.
+    # created here, not at module level, so a missing/misconfigured secret
+    # only breaks this one function's cold start, not every function in
+    # this file (see the ORG_QUEST_BASE_POINTS module note for the same
+    # reasoning applied to Firestore access elsewhere).
     client = genai.Client()
     response = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -2323,7 +2370,7 @@ def _generate_quest_recommendations(db, uid: str) -> None:
     # A questId Gemini returns that isn't actually one we offered (or a
     # repeat of a series already placed) is silently dropped rather than
     # trusted — same "unrecognized entries are skipped" precedent as
-    # submit_quest_feedback_batch above.
+    # submit_feedback_request_response above.
     order = []
     reasons = {}
     placed_series = set()
@@ -2372,7 +2419,7 @@ def mark_feedback_notified(req: https_fn.CallableRequest) -> dict:
     quest_id = req.data.get("questId")
     if not quest_id:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
-    firestore.client().collection("users").document(req.auth.uid).collection("feedback").document(quest_id).update({
+    firestore.client().collection("users").document(req.auth.uid).collection("journal").document(quest_id).update({
         "notified": True,
     })
     return {"success": True}
@@ -2386,7 +2433,7 @@ def mark_feedback_read(req: https_fn.CallableRequest) -> dict:
     quest_id = req.data.get("questId")
     if not quest_id:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
-    firestore.client().collection("users").document(req.auth.uid).collection("feedback").document(quest_id).update({
+    firestore.client().collection("users").document(req.auth.uid).collection("journal").document(quest_id).update({
         "read": True,
     })
     return {"success": True}
@@ -2396,9 +2443,12 @@ REFLECTION_MAX_LENGTH = 4000
 
 
 # Callable from the Journal page's reflection textarea. Requires the
-# feedback doc to already exist — reflections are written in response to
-# organization feedback, not before it. Purely private (see firestore.rules:
-# only the owner or an admin can ever read it); doesn't affect rank.
+# journal doc to already exist — it's created at check-in time (see
+# check_in_to_event), so this is really just "have you checked into this
+# organization quest," not anything to do with feedback (unlike before this
+# journal/feedback split, a reflection no longer depends on feedback ever
+# arriving). Purely private (see firestore.rules: only the owner or an
+# admin can ever read it); doesn't affect rank.
 @https_fn.on_call()
 def submit_quest_reflection(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -2413,11 +2463,11 @@ def submit_quest_reflection(req: https_fn.CallableRequest) -> dict:
             f"body must be a string of at most {REFLECTION_MAX_LENGTH} characters.",
         )
 
-    ref = firestore.client().collection("users").document(req.auth.uid).collection("feedback").document(quest_id)
+    ref = firestore.client().collection("users").document(req.auth.uid).collection("journal").document(quest_id)
     if not ref.get().exists:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.NOT_FOUND,
-            "No feedback found for this quest yet.",
+            "No journal entry found for this quest yet.",
         )
     ref.update({"reflectionBody": body.strip(), "reflectionUpdatedAt": firestore.SERVER_TIMESTAMP})
     return {"success": True}
@@ -3128,6 +3178,17 @@ def delete_account(req: https_fn.CallableRequest) -> dict:
         for quest_doc in db.collection("quests").where("rsvpd", "array_contains", uid).stream():
             quest_doc.reference.update({"rsvpd": firestore.ArrayRemove([uid])})
             _attendance_ref(db, quest_doc.id, uid).delete()
+        # A pending feedbackRequests doc left behind here would let an org
+        # later call submit_feedback_request_response against a uid whose
+        # users/{uid} doc no longer exists — _award_points' transaction.
+        # update() throws on a nonexistent doc, which would surface as a
+        # confusing failure for the org, for reasons entirely unrelated to
+        # anything they did. Deleting both collections here, not just the
+        # journal one, is what actually prevents that.
+        for doc in db.collection("users").document(uid).collection("journal").stream():
+            doc.reference.delete()
+        for doc in db.collection("feedbackRequests").where("uid", "==", uid).stream():
+            doc.reference.delete()
 
     # Safe unconditionally — Firestore .delete() on a doc that doesn't exist
     # (e.g. no ORGREQ was ever filed, or the account is an admin with no

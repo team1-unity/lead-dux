@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callMarkFeedbackRead, callSubmitQuestReflection } from '@shared/fetch.jsx';
+import { callMarkFeedbackRead, callRequestQuestFeedback, callSubmitQuestReflection } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -23,11 +23,98 @@ const REFLECTION_PROMPTS = [
   'How did this quest reflect your leadership growth?',
 ];
 
+// Mirrors FEEDBACK_QUESTIONS in functions/main.py by hand, same as every
+// other constant kept in sync across the two sides of this app.
+const FEEDBACK_QUESTIONS = {
+  engagement: 'How actively did they participate and engage during the quest?',
+  presence: 'How present and attentive were they throughout?',
+  involvement: 'How involved were they in contributing to the group or task?',
+  initiative: 'How much initiative did they show — stepping up or helping without being asked?',
+  attitude: 'How positive and cooperative was their attitude?',
+};
+
+const FEEDBACK_REQUEST_MONTHLY_CAP = 3; // mirrors FEEDBACK_REQUEST_MONTHLY_CAP in functions/main.py
+
+function toDate(value) {
+  return value.toDate ? value.toDate() : new Date(value);
+}
+
+// The section covering a requested/answered piece of feedback for this
+// entry — entirely separate from the always-present reflection below it.
+// `requestsUsedThisMonth` is just a client-side hint for the "you've used
+// N of 3" copy; the real cap enforcement is server-side in
+// request_quest_feedback/submit_feedback_request_response.
+function FeedbackSection({ entry, requestsUsedThisMonth, onRequested }) {
+  const [requesting, setRequesting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function request() {
+    setError('');
+    setRequesting(true);
+    try {
+      await onRequested(entry.id);
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  if (!entry.requestStatus) {
+    const atCap = requestsUsedThisMonth >= FEEDBACK_REQUEST_MONTHLY_CAP;
+    return (
+      <div className="journal-feedback">
+        <p style={{ margin: 0 }} className="data-stat">
+          Feeling good about how this one went? You can ask the organization for feedback on it — up to{' '}
+          {FEEDBACK_REQUEST_MONTHLY_CAP} times a month.
+        </p>
+        {error && <p className="box-danger">{error}</p>}
+        <StampButton type="button" onClick={request} disabled={requesting || atCap} style={{ marginTop: 8 }}>
+          {requesting ? 'Requesting...' : atCap ? "You've used all your requests this month" : 'Request feedback'}
+        </StampButton>
+      </div>
+    );
+  }
+
+  if (entry.requestStatus === 'pending') {
+    const expired = entry.expiresAt && toDate(entry.expiresAt).getTime() < Date.now();
+    return (
+      <div className="journal-feedback">
+        <p style={{ margin: 0 }} className="data-stat">
+          {expired
+            ? "Expired — the organization didn't respond in time."
+            : 'Feedback requested — waiting on the organization to respond.'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="journal-feedback">
+      <span className="journal-rating">{entry.score}/10</span>
+      <ul style={{ marginTop: 8 }}>
+        {Object.entries(FEEDBACK_QUESTIONS).map(([key, question]) => (
+          <li key={key}>
+            {question} — <strong>{entry.answers?.[key]}/10</strong>
+          </li>
+        ))}
+      </ul>
+      {entry.extraThoughts && <p style={{ margin: 0 }}>{entry.extraThoughts}</p>}
+      {entry.orgName && <p className="quest-org-line" style={{ marginTop: 6 }}>— {entry.orgName}</p>}
+      {entry.pointsAwarded > 0 && (
+        <p className="box-success" style={{ marginTop: 8 }}>
+          You earned {entry.pointsAwarded} points for this!
+        </p>
+      )}
+    </div>
+  );
+}
+
 // One "tab" — an iPhone Notes-style entry, collapsed to just the quest
 // title until opened. Opening it is also what marks it read (clears the
 // BottomNav badge for this entry) — the live popup that pointed here
 // doesn't do that itself, see functions/main.py's feedback module note.
-function JournalEntry({ entry }) {
+function JournalEntry({ entry, requestsUsedThisMonth, onRequestFeedback }) {
   const [open, setOpen] = useState(false);
   // savedBody is the source of truth for what's actually persisted;
   // `editing` starts false whenever there's already something saved, so a
@@ -54,7 +141,11 @@ function JournalEntry({ entry }) {
   async function toggle() {
     const next = !open;
     setOpen(next);
-    if (next && !entry.read) {
+    // Only entries with an actually-completed request ever have anything
+    // to mark read — an entry with no feedback yet has never had `read`
+    // set at all, so there's nothing for the BottomNav badge to be
+    // counting here in the first place.
+    if (next && entry.requestStatus === 'completed' && !entry.read) {
       try {
         await callMarkFeedbackRead(entry.id);
       } catch {
@@ -97,18 +188,18 @@ function JournalEntry({ entry }) {
       <button type="button" className="journal-entry-head" onClick={toggle} aria-expanded={open}>
         <span className="journal-entry-title">
           {entry.questTitle}
-          {!entry.read && <span className="journal-entry-new">New</span>}
+          {!entry.read && entry.requestStatus === 'completed' && <span className="journal-entry-new">New</span>}
         </span>
         <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
       </button>
 
       {open && (
         <div className="journal-entry-body">
-          <div className="journal-feedback">
-            <span className="journal-rating">{entry.rating}/10</span>
-            <p style={{ margin: '8px 0 0' }}>{entry.message}</p>
-            {entry.orgName && <p className="quest-org-line" style={{ marginTop: 6 }}>— {entry.orgName}</p>}
-          </div>
+          <FeedbackSection
+            entry={entry}
+            requestsUsedThisMonth={requestsUsedThisMonth}
+            onRequested={onRequestFeedback}
+          />
 
           <div className="journal-reflection">
             <h3>Your Reflection</h3>
@@ -168,22 +259,34 @@ function JournalEntry({ entry }) {
   );
 }
 
-// Every quest a user has received organization feedback on, one entry per
-// completed quest — an entry only exists once feedback actually arrives
-// (see submit_quest_feedback_batch), not the moment someone checks in.
-// Live (onSnapshot), same as the BottomNav badge and FeedbackToast, so a
-// freshly-sent piece of feedback appears here without a reload.
+// Every organization quest a user has checked into, one entry per
+// occurrence — created the moment check-in happens (see check_in_to_event),
+// independent of whether feedback is ever requested for it. Live
+// (onSnapshot), same as the BottomNav badge and FeedbackToast, so a
+// freshly-answered feedback request appears here without a reload.
 export function Journal() {
   const { user, loading } = useAuth();
   const [entries, setEntries] = useState(null);
 
   useEffect(() => {
     if (!user) return undefined;
-    const q = query(collection(db, 'users', user.uid, 'feedback'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'users', user.uid, 'journal'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snap) => {
       setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
   }, [user]);
+
+  // Cosmetic only (see FeedbackSection) — how many requests have already
+  // completed this calendar month, across every entry.
+  const requestsUsedThisMonth = useMemo(() => {
+    if (!entries) return 0;
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    return entries.filter(
+      (e) => e.requestStatus === 'completed' && e.completedAt && toDate(e.completedAt) >= monthStart,
+    ).length;
+  }, [entries]);
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
@@ -196,12 +299,17 @@ export function Journal() {
       ) : entries.length === 0 ? (
         <div className="quest-empty">
           <h2>No Entries Yet</h2>
-          <p>Complete a quest and get feedback from the organization to start your first journal entry.</p>
+          <p>Check into an organization quest to start your first journal entry.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-md">
           {entries.map((entry) => (
-            <JournalEntry key={entry.id} entry={entry} />
+            <JournalEntry
+              key={entry.id}
+              entry={entry}
+              requestsUsedThisMonth={requestsUsedThisMonth}
+              onRequestFeedback={callRequestQuestFeedback}
+            />
           ))}
         </div>
       )}

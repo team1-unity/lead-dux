@@ -24,6 +24,7 @@ import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
+import { PendingFeedbackRequests } from '@shared/PendingFeedbackRequests.jsx';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import {
   IconPlus,
@@ -680,6 +681,7 @@ export function Dashboard() {
       <AmbientParticles />
       <TopBar title={org ? org.name : 'Organization'} hero />
       <PendingPhotoSubmissions scopeField="orgId" scopeValue={user.uid} />
+      <PendingFeedbackRequests scopeField="orgId" scopeValue={user.uid} />
       <OrgQuests />
     </PageMotion>
   );
