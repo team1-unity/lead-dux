@@ -129,15 +129,15 @@
    ========================================================================= */
 
 @font-face {
-  font-family: 'Crushed';
-  src: url('/fonts/crushed-v32-latin-400.woff2') format('woff2');
+  font-family: 'Anton';
+  src: url('/fonts/anton-v27-latin-400.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Cuprum';
-  src: url('/fonts/cuprum-v29-latin-variable.woff2') format('woff2');
+  font-family: 'Karla';
+  src: url('/fonts/karla-v33-latin-variable.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
@@ -146,6 +146,13 @@
   font-family: 'DM Sans';
   src: url('/fonts/dm-sans-v17-latin-variable.woff2') format('woff2');
   font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/space-mono-v17-latin-400.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -158,14 +165,14 @@
   --brand-blue: #356ac8;
   --brand-orange: #ee9b43;
 
-  /* surfaces */
-  --paper: #f4f1ea;
-  --paper-card: #ffffff;
-  --paper-well: #ece7d9;
-  --line: #26301f;
-  --line-soft: #5c6355;
-  --border: #e1dccb;
-  --shadow: rgba(38, 48, 31, 0.14);
+  /* surfaces — warm butter/cream, hand-inked linework */
+  --paper: #f5ecc4;
+  --paper-card: #fffdf3;
+  --paper-well: #ecdc9c;
+  --line: #2a2115;
+  --line-soft: #6b5f42;
+  --border: #e2d18d;
+  --shadow: rgba(42, 33, 21, 0.18);
 
   /* pastel tag rack — one per quest interest tag, all rooted in the brand hues */
   --tag-environment: #cfead9;
@@ -217,13 +224,13 @@
   --link: var(--brand-blue);
   --focus-ring: var(--brand-blue);
 
-  --font-display: 'Crushed', 'Arial Narrow', sans-serif;
-  --font-heading: 'Cuprum', 'Arial Narrow', sans-serif;
+  --font-display: 'Anton', 'Arial Narrow', sans-serif;
+  --font-heading: 'Karla', 'Arial Narrow', sans-serif;
   --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-body);
+  --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  --radius: 14px;
-  --radius-lg: 20px;
+  --radius: 12px;
+  --radius-lg: 22px;
   --radius-full: 999px;
   --nav-height: 64px;
   --nav-height-desktop: 76px;
@@ -232,13 +239,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #182019;
-    --paper-card: #212b22;
-    --paper-well: #1a231b;
-    --line: #eef3ea;
-    --line-soft: #a9b3a2;
-    --border: #33402f;
-    --shadow: rgba(0, 0, 0, 0.4);
+    /* flat neutral gray, not a green tint — classic app-dark-mode surface */
+    --paper: #1a1a1a;
+    --paper-card: #242424;
+    --paper-well: #2e2e2e;
+    --line: #f2f2ef;
+    --line-soft: #a8a8a4;
+    --border: #3a3a3a;
+    --shadow: rgba(0, 0, 0, 0.5);
 
     --tag-environment: #23422f;
     --tag-environment-ink: #a9e0bc;
@@ -274,7 +282,7 @@
     --rank-diamond: #1c3c48;
     --rank-diamond-ink: #a6dcef;
 
-    --accent-soft: #223a29;
+    --accent-soft: #2a332c;
     --secondary-ink: #f3d873;
     --success: #6fce93;
     --warning: #e0ab5c;
@@ -285,13 +293,13 @@
   }
 }
 :root[data-theme='dark'] {
-  --paper: #182019;
-  --paper-card: #212b22;
-  --paper-well: #1a231b;
-  --line: #eef3ea;
-  --line-soft: #a9b3a2;
-  --border: #33402f;
-  --shadow: rgba(0, 0, 0, 0.4);
+  --paper: #1a1a1a;
+  --paper-card: #242424;
+  --paper-well: #2e2e2e;
+  --line: #f2f2ef;
+  --line-soft: #a8a8a4;
+  --border: #3a3a3a;
+  --shadow: rgba(0, 0, 0, 0.5);
 
   --tag-environment: #23422f;
   --tag-environment-ink: #a9e0bc;
@@ -314,7 +322,7 @@
   --tag-rejected: #3a2420;
   --tag-rejected-ink: #e08a78;
 
-  --accent-soft: #223a29;
+  --accent-soft: #2a332c;
   --secondary-ink: #f3d873;
   --success: #6fce93;
   --warning: #e0ab5c;
@@ -324,13 +332,13 @@
   --focus-ring: #8fb4ec;
 }
 :root[data-theme='light'] {
-  --paper: #f4f1ea;
-  --paper-card: #ffffff;
-  --paper-well: #ece7d9;
-  --line: #26301f;
-  --line-soft: #5c6355;
-  --border: #e1dccb;
-  --shadow: rgba(38, 48, 31, 0.14);
+  --paper: #f5ecc4;
+  --paper-card: #fffdf3;
+  --paper-well: #ecdc9c;
+  --line: #2a2115;
+  --line-soft: #6b5f42;
+  --border: #e2d18d;
+  --shadow: rgba(42, 33, 21, 0.18);
 
   --tag-environment: #cfead9;
   --tag-environment-ink: #1e5c3c;
