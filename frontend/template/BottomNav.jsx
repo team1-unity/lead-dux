@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { cloneElement, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
@@ -7,6 +7,23 @@ import { useIsDesktop } from './useIsDesktop.js';
 import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus, IconMap } from './icons.jsx';
 import { Logo } from './Logo.jsx';
 import { getInitials } from './initials.js';
+import { FirstTimeHint } from './FirstTimeHint.jsx';
+
+// One-time callout per nav destination, shown until the visitor dismisses
+// it (any click, anywhere — see FirstTimeHint.jsx). Keyed by path so the
+// same copy applies whether the item shows up in the mobile tab bar, the
+// desktop topbar, or tucked behind the mobile "+" FAB.
+const HINT_COPY = {
+  '/': 'Browse quests near you',
+  '/org': 'Post quests for future leaders',
+  '/map': 'See what’s happening nearby',
+  '/badges': 'Track what you’ve earned',
+  '/journal': 'Reflect after each quest',
+  '/org/journal': 'Reflect on quests you’ve hosted',
+  '/check-in': 'Scan to check in',
+  '/profile': 'Your account & progress',
+  '/settings': 'Display & account settings',
+};
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
 // desktop — same items, same component, just a different flex direction
@@ -103,13 +120,15 @@ export function BottomNav() {
   const isDesktop = useIsDesktop();
   const [displayName, setDisplayName] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const unreadFeedback = useUnreadFeedbackCount(user, role);
 
-  // A route change (including one triggered by picking a FAB menu item)
-  // always closes the menu — BottomNav stays mounted across navigations
-  // (see AppShell), so nothing else would close it otherwise.
+  // A route change (including one triggered by picking a FAB or avatar menu
+  // item) always closes both menus — BottomNav stays mounted across
+  // navigations (see AppShell), so nothing else would close them otherwise.
   useEffect(() => {
     setFabOpen(false);
+    setAvatarMenuOpen(false);
   }, [location.pathname]);
 
   // Only fetched for roles that render an avatar (desktop only) — an
@@ -139,9 +158,11 @@ export function BottomNav() {
   const features = FEATURES_BY_ROLE[role] || [];
   // Settings joins Badges/Journal behind the mobile FAB for the user view
   // specifically (matching the reference sketch: Quests stays left, Profile
-  // stays right, everything else tucks behind the +) — every other role,
-  // and the user view itself on desktop, keeps Settings as its own normal
-  // pill.
+  // stays right, everything else tucks behind the +) — every other role
+  // keeps Settings as its own normal pill on mobile. On desktop, whichever
+  // role gets the avatar also gets Settings folded into that avatar's
+  // dropdown (alongside Profile) instead of a separate pill — see
+  // avatarOnDesktop above.
   const settingsInFab = !isDesktop && (role === 'user' || role === 'pending_org');
   const fabMenuItems = !isDesktop
     ? [...features, ...(settingsInFab ? [{ to: '/settings', icon: IconGear, label: 'Settings' }] : [])]
@@ -150,7 +171,7 @@ export function BottomNav() {
     ...(PRIMARY_BY_ROLE[role] || []),
     ...(isDesktop ? features : []),
     ...(avatarOnDesktop ? [] : [{ to: '/profile', icon: IconPerson, label: 'Profile' }]),
-    ...(settingsInFab ? [] : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
+    ...(settingsInFab || avatarOnDesktop ? [] : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
   ];
 
   return (
@@ -160,7 +181,16 @@ export function BottomNav() {
     // reproduce it). The ARIA role gives screen readers the same landmark
     // without the engine quirk.
     <>
-      {fabOpen && <div className="fab-backdrop" onClick={() => setFabOpen(false)} aria-hidden="true" />}
+      {(fabOpen || avatarMenuOpen) && (
+        <div
+          className="fab-backdrop"
+          onClick={() => {
+            setFabOpen(false);
+            setAvatarMenuOpen(false);
+          }}
+          aria-hidden="true"
+        />
+      )}
       <div className="bottom-nav" role="navigation" aria-label="Primary">
         <Link to="/" className="bottom-nav-brand" aria-hidden="true" tabIndex={-1}>
           <Logo size={24} />
@@ -168,9 +198,14 @@ export function BottomNav() {
         {items.map((item, i) => {
           const Icon = item.icon;
           const current = location.pathname === item.to;
-          const row = (
+          // Map's hint reads differently for an organization (checking its
+          // own pin) than for everyone else (browsing what's nearby) — the
+          // one path-keyed copy that needs a role override.
+          const hintText = role === 'organization' && item.to === '/map'
+            ? 'See your quests the way members do'
+            : HINT_COPY[item.to];
+          const link = (
             <Link
-              key={item.to}
               to={item.to}
               className="bottom-nav-item"
               aria-current={current ? 'page' : undefined}
@@ -182,6 +217,17 @@ export function BottomNav() {
               </span>
               <span>{item.label}</span>
             </Link>
+          );
+          // Only /admin has no hint copy today (admin wasn't part of the
+          // ask) — falls straight through to the plain link, no wrapper,
+          // so it doesn't pick up hint-anchor's inline-flex sizing for
+          // nothing.
+          const row = hintText ? (
+            <FirstTimeHint key={item.to} id={`nav-${item.to}`} text={hintText} placement={isDesktop ? 'bottom' : 'top'}>
+              {link}
+            </FirstTimeHint>
+          ) : (
+            cloneElement(link, { key: item.to })
           );
           // The FAB sits right after the primary tab(s), matching the
           // wireframe's Quests / + / Badges order — mobile only, and only
@@ -225,15 +271,28 @@ export function BottomNav() {
           return row;
         })}
         {avatarOnDesktop && (
-          <Link
-            to="/profile"
-            className="bottom-nav-avatar-link"
-            aria-current={location.pathname === '/profile' ? 'page' : undefined}
-            title="Profile"
-          >
-            {showNameNextToAvatar && displayName && <span className="bottom-nav-org-name">{displayName}</span>}
-            <span className="nav-avatar">{getInitials(displayName)}</span>
-          </Link>
+          <div className="bottom-nav-avatar-wrap">
+            <button
+              type="button"
+              className="bottom-nav-avatar-link"
+              aria-haspopup="menu"
+              aria-expanded={avatarMenuOpen}
+              onClick={() => setAvatarMenuOpen((v) => !v)}
+            >
+              {showNameNextToAvatar && displayName && <span className="bottom-nav-org-name">{displayName}</span>}
+              <span className="nav-avatar">{getInitials(displayName)}</span>
+            </button>
+            {avatarMenuOpen && (
+              <div className="bottom-nav-avatar-menu" role="menu">
+                <Link to="/profile" role="menuitem" aria-current={location.pathname === '/profile' ? 'page' : undefined}>
+                  <IconPerson /> Profile
+                </Link>
+                <Link to="/settings" role="menuitem" aria-current={location.pathname === '/settings' ? 'page' : undefined}>
+                  <IconGear /> Settings
+                </Link>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </>

@@ -1,22 +1,26 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
-import { computeBadges } from '@shared/badges.js';
+import { callMarkBadgesSeen } from '@shared/fetch.jsx';
+import { computeBadges, getLocallySeenBadgeIds, markBadgesSeenLocally } from '@shared/badges.js';
+import { badgeSpritePosition } from '@shared/badgeSprite.js';
 import { hashTone } from '@shared/tagTones.js';
 import { getInitials } from '@shared/initials.js';
-import { IconHeart, IconLock } from '@shared/icons.jsx';
+import { IconLock } from '@shared/icons.jsx';
 
-// A single badge's ring — earned (tag-tinted fill + heart), in-progress
-// (plain ring), or undiscovered (locked, muted fill). The name/description
-// only ever reaches the DOM as visually-hidden text: the wireframe this
-// screen matches is deliberately iconography-only, but a screen reader user
-// still needs to know what each circle means.
-function BadgeRing({ badge, size, locked = false }) {
+// A single badge's ring — earned (tag-tinted fill + its sprite icon),
+// in-progress (plain ring), or undiscovered (locked, muted fill). The
+// name/description only ever reaches the DOM as visually-hidden text: the
+// wireframe this screen matches is deliberately iconography-only, but a
+// screen reader user still needs to know what each circle means.
+// `isNew` draws a small ribbon for a badge earned since the last visit —
+// see Badges.jsx's seen-tracking effect.
+function BadgeRing({ badge, size, locked = false, isNew = false }) {
   const tone = badge.tone || hashTone(badge.id);
   const state = locked ? 'locked' : badge.earned ? 'earned' : 'in-progress';
   const style = {
@@ -27,8 +31,11 @@ function BadgeRing({ badge, size, locked = false }) {
   };
   return (
     <div className="badge-ring" data-state={state} style={style}>
-      {state === 'earned' && <IconHeart className="badge-heart" />}
+      {state === 'earned' && (
+        <span className="badge-sprite-icon" style={{ backgroundPosition: badgeSpritePosition(badge.id) }} />
+      )}
       {state === 'locked' && <IconLock className="badge-lock" />}
+      {isNew && <span className="badge-new-ribbon">New</span>}
       <span className="visually-hidden">
         {badge.name}: {badge.description}
         {locked ? ' (undiscovered)' : badge.earned ? ' (earned)' : ` (${badge.progress}/${badge.target})`}
@@ -58,7 +65,7 @@ function BadgesMobileHeader({ displayName }) {
   );
 }
 
-function BadgesMobile({ earned, inProgress, undiscovered, displayName }) {
+function BadgesMobile({ earned, inProgress, undiscovered, displayName, newIds }) {
   return (
     <>
       <BadgesMobileHeader displayName={displayName} />
@@ -66,11 +73,11 @@ function BadgesMobile({ earned, inProgress, undiscovered, displayName }) {
       {earned.length > 0 ? (
         <div className="badges-earned-row">
           {earned.map((b) => (
-            <BadgeRing key={b.id} badge={b} size={74} />
+            <BadgeRing key={b.id} badge={b} size={74} isNew={newIds.has(b.id)} />
           ))}
         </div>
       ) : (
-        <p className="data-stat" style={{ marginBottom: 18 }}>No badges earned yet — RSVP to a quest to get started.</p>
+        <p className="data-stat" style={{ marginBottom: 18 }}>No badges earned yet — complete a quest to get started.</p>
       )}
 
       {inProgress.length > 0 && (
@@ -98,7 +105,7 @@ function BadgesMobile({ earned, inProgress, undiscovered, displayName }) {
   );
 }
 
-function BadgesDesktop({ earned, inProgress, undiscovered }) {
+function BadgesDesktop({ earned, inProgress, undiscovered, newIds }) {
   return (
     <>
       <div className="page-greeting">
@@ -110,11 +117,11 @@ function BadgesDesktop({ earned, inProgress, undiscovered }) {
         {earned.length > 0 ? (
           <div className="badges-desktop-row">
             {earned.map((b) => (
-              <BadgeRing key={b.id} badge={b} size={78} />
+              <BadgeRing key={b.id} badge={b} size={78} isNew={newIds.has(b.id)} />
             ))}
           </div>
         ) : (
-          <p className="data-stat" style={{ margin: 0 }}>No badges earned yet — RSVP to a quest to get started.</p>
+          <p className="data-stat" style={{ margin: 0 }}>No badges earned yet — complete a quest to get started.</p>
         )}
       </section>
 
@@ -146,16 +153,45 @@ function BadgesDesktop({ earned, inProgress, undiscovered }) {
 export function Badges() {
   const { user } = useAuth();
   const [badges, setBadges] = useState(null);
+  const [newIds, setNewIds] = useState(() => new Set());
   const [displayName, setDisplayName] = useState(null);
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    getDocs(collection(db, 'quests')).then((snap) => {
+    Promise.all([
+      getDocs(collection(db, 'quests')),
+      getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid))),
+      getDoc(doc(db, 'users', user.uid)),
+    ]).then(([questsSnap, attendanceSnap, userSnap]) => {
       if (cancelled) return;
-      const quests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setBadges(computeBadges(quests, user.uid));
+      const questsById = new Map(questsSnap.docs.map((d) => [d.id, d.data()]));
+      const attendance = attendanceSnap.docs.map((d) => d.data());
+      const userData = userSnap.exists() ? userSnap.data() : {};
+
+      const computed = computeBadges({
+        attendance,
+        questsById,
+        rank: userData.rank,
+        createdAt: userData.createdAt,
+      });
+      setBadges(computed);
+
+      // A badge is "new" if it's earned but hasn't been marked seen yet
+      // anywhere — localStorage (this browser) or the user doc (any
+      // device). Once shown, mark it seen in both places so the ribbon
+      // doesn't come back.
+      const alreadySeen = new Set([...getLocallySeenBadgeIds(), ...(userData.seenBadgeIds || [])]);
+      const freshlyEarnedIds = computed.filter((b) => b.earned && !alreadySeen.has(b.id)).map((b) => b.id);
+      if (freshlyEarnedIds.length > 0) {
+        setNewIds(new Set(freshlyEarnedIds));
+        markBadgesSeenLocally(freshlyEarnedIds);
+        callMarkBadgesSeen(freshlyEarnedIds).catch(() => {
+          // Non-critical — worst case the ribbon reappears once more on a
+          // later visit if this retry never lands.
+        });
+      }
     });
     return () => {
       cancelled = true;
@@ -180,9 +216,9 @@ export function Badges() {
   return (
     <PageMotion>
       {isDesktop ? (
-        <BadgesDesktop earned={earned} inProgress={inProgress} undiscovered={undiscovered} />
+        <BadgesDesktop earned={earned} inProgress={inProgress} undiscovered={undiscovered} newIds={newIds} />
       ) : (
-        <BadgesMobile earned={earned} inProgress={inProgress} undiscovered={undiscovered} displayName={displayName} />
+        <BadgesMobile earned={earned} inProgress={inProgress} undiscovered={undiscovered} displayName={displayName} newIds={newIds} />
       )}
     </PageMotion>
   );

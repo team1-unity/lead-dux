@@ -457,6 +457,15 @@ export async function callGetUserRank(targetUid) {
   return result.data;
 }
 
+// Self-only: records that the caller has seen these just-earned badges
+// (see Badges.jsx), so the "New" ribbon doesn't reappear on a later visit
+// or a different device.
+export async function callMarkBadgesSeen(badgeIds) {
+  const fn = httpsCallable(functions, 'mark_badges_seen');
+  const result = await fn({ badgeIds });
+  return result.data;
+}
+
 // admin: every user who has reached Diamond rank, with whether they've
 // already been issued a certificate.
 export async function callListDiamondUsers() {

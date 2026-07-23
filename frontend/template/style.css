@@ -129,6 +129,33 @@
    ========================================================================= */
 
 @font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/bricolage-grotesque-v9-latin-variable.woff2') format('woff2');
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Mulish';
+  src: url('/fonts/mulish-v18-latin-variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/space-mono-v17-latin-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Crushed/Cuprum/DM Sans aren't the ambient UI font anymore (see
+   --font-* below), but Certificate.jsx still draws its canvas text
+   directly in these families for the Diamond-rank certificate's own
+   fixed "stamped" look — keep these registered so that canvas text
+   doesn't silently fall back to a system font. */
+@font-face {
   font-family: 'Crushed';
   src: url('/fonts/crushed-v32-latin-400.woff2') format('woff2');
   font-weight: 400;
@@ -151,33 +178,35 @@
 }
 
 :root {
-  /* brand hues — rarely used raw; almost everything below derives from these */
-  --brand-green: #319e5f;
-  --brand-green-deep: #488858;
-  --brand-mustard: #f3cf31;
-  --brand-blue: #356ac8;
+  /* brand hues — rarely used raw; almost everything below derives from these.
+     Matches the app-wireframe-alignment design handoff exactly (green/yellow/
+     blue + Bricolage Grotesque/Mulish), not the earlier sketchy-vibe pass. */
+  --brand-green: #2f8a4e;
+  --brand-green-deep: #2f7d45;
+  --brand-mustard: #f2c94c;
+  --brand-blue: #3457c4;
   --brand-orange: #ee9b43;
 
   /* surfaces */
-  --paper: #f4f1ea;
+  --paper: #efe9df;
   --paper-card: #ffffff;
-  --paper-well: #ece7d9;
-  --line: #26301f;
-  --line-soft: #5c6355;
-  --border: #e1dccb;
-  --shadow: rgba(38, 48, 31, 0.14);
+  --paper-well: #f3eee3;
+  --line: #223018;
+  --line-soft: #6b6b63;
+  --border: rgba(0, 0, 0, 0.08);
+  --shadow: rgba(34, 48, 24, 0.1);
 
   /* pastel tag rack — one per quest interest tag, all rooted in the brand hues */
-  --tag-environment: #cfead9;
-  --tag-environment-ink: #1e5c3c;
-  --tag-community: #fbeba9;
-  --tag-community-ink: #6b4e05;
+  --tag-environment: #dcefdc;
+  --tag-environment-ink: #3f7a49;
+  --tag-community: #f2edc7;
+  --tag-community-ink: #8f7f1e;
   --tag-youth: #d7e4f7;
   --tag-youth-ink: #1e3a73;
   --tag-education: #d6ecf7;
   --tag-education-ink: #1b4e66;
-  --tag-outdoors: #fbe1c4;
-  --tag-outdoors-ink: #7a4413;
+  --tag-outdoors: #f7e4cf;
+  --tag-outdoors-ink: #b06d26;
   --tag-technology: #cfe9e6;
   --tag-technology-ink: #15574f;
   --tag-fitness: #f6d6d0;
@@ -186,10 +215,10 @@
   --tag-food-security-ink: #52480a;
   --tag-arts: #e3d6f0;
   --tag-arts-ink: #48276e;
-  --tag-verified: #cfead9;
-  --tag-verified-ink: #1e5c3c;
+  --tag-verified: #dcefdc;
+  --tag-verified-ink: #3f7a49;
   --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c04a3c;
+  --tag-rejected-ink: #c0402f;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
   --rank-iron: #dfe3e6;
@@ -206,24 +235,24 @@
   /* semantic */
   --accent: var(--brand-green-deep);
   --accent-contrast: #ffffff;
-  --accent-soft: #e3efe6;
+  --accent-soft: #d4e7d0;
   --secondary: var(--brand-mustard);
   --secondary-ink: #6b4e05;
   --info: var(--brand-blue);
   --success: #2f8a53;
-  --warning: #a86a12;
-  --danger: #c04a3c;
-  --danger-soft: #f8e6e3;
+  --warning: #a35d16;
+  --danger: #c0402f;
+  --danger-soft: #fbe3df;
   --link: var(--brand-blue);
   --focus-ring: var(--brand-blue);
 
-  --font-display: 'Crushed', 'Arial Narrow', sans-serif;
-  --font-heading: 'Cuprum', 'Arial Narrow', sans-serif;
-  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-body);
+  --font-display: 'Bricolage Grotesque', 'Arial Narrow', sans-serif;
+  --font-heading: 'Bricolage Grotesque', 'Arial Narrow', sans-serif;
+  --font-body: 'Mulish', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
 
   --radius: 14px;
-  --radius-lg: 20px;
+  --radius-lg: 18px;
   --radius-full: 999px;
   --nav-height: 64px;
   --nav-height-desktop: 76px;
@@ -232,13 +261,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #182019;
-    --paper-card: #212b22;
-    --paper-well: #1a231b;
-    --line: #eef3ea;
-    --line-soft: #a9b3a2;
-    --border: #33402f;
-    --shadow: rgba(0, 0, 0, 0.4);
+    /* flat neutral gray, not a green tint — classic app-dark-mode surface */
+    --paper: #1a1a1a;
+    --paper-card: #242424;
+    --paper-well: #2e2e2e;
+    --line: #f2f2ef;
+    --line-soft: #a8a8a4;
+    --border: #3a3a3a;
+    --shadow: rgba(0, 0, 0, 0.5);
 
     --tag-environment: #23422f;
     --tag-environment-ink: #a9e0bc;
@@ -274,7 +304,7 @@
     --rank-diamond: #1c3c48;
     --rank-diamond-ink: #a6dcef;
 
-    --accent-soft: #223a29;
+    --accent-soft: #2a332c;
     --secondary-ink: #f3d873;
     --success: #6fce93;
     --warning: #e0ab5c;
@@ -285,13 +315,13 @@
   }
 }
 :root[data-theme='dark'] {
-  --paper: #182019;
-  --paper-card: #212b22;
-  --paper-well: #1a231b;
-  --line: #eef3ea;
-  --line-soft: #a9b3a2;
-  --border: #33402f;
-  --shadow: rgba(0, 0, 0, 0.4);
+  --paper: #1a1a1a;
+  --paper-card: #242424;
+  --paper-well: #2e2e2e;
+  --line: #f2f2ef;
+  --line-soft: #a8a8a4;
+  --border: #3a3a3a;
+  --shadow: rgba(0, 0, 0, 0.5);
 
   --tag-environment: #23422f;
   --tag-environment-ink: #a9e0bc;
@@ -314,7 +344,7 @@
   --tag-rejected: #3a2420;
   --tag-rejected-ink: #e08a78;
 
-  --accent-soft: #223a29;
+  --accent-soft: #2a332c;
   --secondary-ink: #f3d873;
   --success: #6fce93;
   --warning: #e0ab5c;
@@ -324,24 +354,24 @@
   --focus-ring: #8fb4ec;
 }
 :root[data-theme='light'] {
-  --paper: #f4f1ea;
+  --paper: #efe9df;
   --paper-card: #ffffff;
-  --paper-well: #ece7d9;
-  --line: #26301f;
-  --line-soft: #5c6355;
-  --border: #e1dccb;
-  --shadow: rgba(38, 48, 31, 0.14);
+  --paper-well: #f3eee3;
+  --line: #223018;
+  --line-soft: #6b6b63;
+  --border: rgba(0, 0, 0, 0.08);
+  --shadow: rgba(34, 48, 24, 0.1);
 
-  --tag-environment: #cfead9;
-  --tag-environment-ink: #1e5c3c;
-  --tag-community: #fbeba9;
-  --tag-community-ink: #6b4e05;
+  --tag-environment: #dcefdc;
+  --tag-environment-ink: #3f7a49;
+  --tag-community: #f2edc7;
+  --tag-community-ink: #8f7f1e;
   --tag-youth: #d7e4f7;
   --tag-youth-ink: #1e3a73;
   --tag-education: #d6ecf7;
   --tag-education-ink: #1b4e66;
-  --tag-outdoors: #fbe1c4;
-  --tag-outdoors-ink: #7a4413;
+  --tag-outdoors: #f7e4cf;
+  --tag-outdoors-ink: #b06d26;
   --tag-technology: #cfe9e6;
   --tag-technology-ink: #15574f;
   --tag-fitness: #f6d6d0;
@@ -350,10 +380,10 @@
   --tag-food-security-ink: #52480a;
   --tag-arts: #e3d6f0;
   --tag-arts-ink: #48276e;
-  --tag-verified: #cfead9;
-  --tag-verified-ink: #1e5c3c;
+  --tag-verified: #dcefdc;
+  --tag-verified-ink: #3f7a49;
   --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c04a3c;
+  --tag-rejected-ink: #c0402f;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
   --rank-iron: #dfe3e6;
@@ -367,12 +397,12 @@
   --rank-diamond: #d3ecf5;
   --rank-diamond-ink: #144a63;
 
-  --accent-soft: #e3efe6;
+  --accent-soft: #d4e7d0;
   --secondary-ink: #6b4e05;
   --success: #2f8a53;
-  --warning: #a86a12;
-  --danger: #c04a3c;
-  --danger-soft: #f8e6e3;
+  --warning: #a35d16;
+  --danger: #c0402f;
+  --danger-soft: #fbe3df;
   --link: var(--brand-blue);
   --focus-ring: var(--brand-blue);
 }
@@ -1132,17 +1162,23 @@ nav {
   background: transparent;
 }
 
-/* An organization's own Profile destination, desktop only — a top-right
-   avatar instead of a pill alongside Dashboard/Settings. Only rendered at
-   >=860px (see BottomNav.jsx); mobile keeps the normal Profile tab. */
+/* A top-right avatar, desktop only, that opens a Profile/Settings dropdown
+   instead of two separate nav pills (see BottomNav.jsx's avatarOnDesktop).
+   Only rendered at >=860px; mobile keeps the normal Profile/Settings tabs. */
+.bottom-nav-avatar-wrap {
+  position: relative;
+  margin-left: auto;
+}
 .bottom-nav-avatar-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
   padding: 4px 4px 4px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
   border-radius: var(--radius-full);
-  text-decoration: none;
 }
 .bottom-nav-org-name {
   font-family: var(--font-body);
@@ -1166,8 +1202,44 @@ nav {
   font-weight: 700;
   font-size: 0.85rem;
 }
-.bottom-nav-avatar-link[aria-current='page'] .nav-avatar {
+.bottom-nav-avatar-link[aria-expanded='true'] .nav-avatar {
   border-color: var(--accent);
+}
+.bottom-nav-avatar-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: 6px;
+  background: var(--paper-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px var(--shadow);
+}
+.bottom-nav-avatar-menu a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: calc(var(--radius) - 4px);
+  color: var(--line);
+  text-decoration: none;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.bottom-nav-avatar-menu a:hover,
+.bottom-nav-avatar-menu a[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.bottom-nav-avatar-menu a svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
 }
 
 /* Generic page heading block (title + subtitle) — shared by any top-level
@@ -1584,7 +1656,40 @@ button.quest-card-head:hover:not(:disabled) {
   padding-bottom: 4px;
   margin-bottom: 20px;
   max-width: 640px;
+  /* Still scrolls horizontally when tags overflow — just without a visible
+     scrollbar track cluttering a row of pills. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tag-filter-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Themed thin scrollbar for the few places content genuinely scrolls
+   inside its own box (a quest list beside a sticky detail pane) — a bare
+   OS scrollbar there is a real signal there's more to see, unlike the
+   tag row above, so this stays visible but styled instead of hidden. */
+.quest-list,
+.events-map-list-pane {
   scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.quest-list::-webkit-scrollbar,
+.events-map-list-pane::-webkit-scrollbar {
+  width: 6px;
+}
+.quest-list::-webkit-scrollbar-track,
+.events-map-list-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+.quest-list::-webkit-scrollbar-thumb,
+.events-map-list-pane::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+.quest-list::-webkit-scrollbar-thumb:hover,
+.events-map-list-pane::-webkit-scrollbar-thumb:hover {
+  background: var(--line-soft);
 }
 .tag-filter-row .tag-stamp {
   flex: none;
@@ -2152,6 +2257,27 @@ button.data-row:active:not(:disabled) {
   background: var(--tag-color);
   border: 2px solid var(--tag-ink);
 }
+.badge-sprite-icon {
+  position: absolute;
+  inset: 20%;
+  background-image: url('/badges-sprite.jpg');
+  background-size: 900% 600%;
+  background-repeat: no-repeat;
+  mix-blend-mode: multiply;
+  border-radius: var(--radius-full);
+}
+.badge-new-ribbon {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 1px 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow);
+}
 .badge-ring[data-state='in-progress'] {
   background: var(--paper-card);
   border: 2px solid var(--border);
@@ -2159,12 +2285,6 @@ button.data-row:active:not(:disabled) {
 .badge-ring[data-state='locked'] {
   background: var(--paper-well);
   border: 2px solid transparent;
-}
-.badge-heart {
-  position: absolute;
-  top: -3px;
-  right: -1px;
-  color: var(--danger);
 }
 .badge-lock {
   color: var(--line-soft);
@@ -2506,18 +2626,96 @@ button.data-row:active:not(:disabled) {
   gap: 12px;
   margin-bottom: 14px;
 }
+
+/* Mobile: a genuine two-region split screen, not a scroll-position trick.
+   The whole page becomes a fixed-height flex shell filling the strip above
+   the bottom nav (negative margin cancels #root's own padding, same move
+   .mobile-page-header uses elsewhere) — TopBar/banner/map stay put at
+   their natural height, and only .events-map-list-pane (flex:1) scrolls.
+   This deliberately replaces an earlier position:sticky attempt: Framer
+   Motion's PageMotion wrapper (removed from this page) applies a
+   persistent inline transform after its mount animation settles, and any
+   transformed ancestor confines position:sticky to *its* box instead of
+   the viewport — the map never actually stuck. A fixed-height flex shell
+   sidesteps that class of bug entirely instead of fighting it. */
+@media (max-width: 859px) {
+  .events-map-page {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    margin: -24px -16px calc(-1 * (var(--nav-height) + 32px));
+    padding: 24px 16px 16px;
+    overflow: hidden;
+  }
+  .events-map-location-banner {
+    flex: none;
+  }
+  .events-map-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 12px;
+  }
+  .events-map-pane {
+    flex: none;
+  }
+  .events-map-list-pane {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+}
 .events-map-container {
   width: 100%;
-  height: 320px;
+  height: 38vh;
+  min-height: 220px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   overflow: hidden;
   margin-bottom: 14px;
   background: var(--paper-well);
 }
+.events-map-list-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+/* This row sits alone, full-bleed above the map+list split — the 320px/
+   640px caps that make sense when search/tags share a row with a page
+   title elsewhere just leave it looking stranded here. */
+.events-map-list-controls .search-field {
+  max-width: none;
+  width: 100%;
+}
+.events-map-list-controls .tag-filter-row {
+  max-width: none;
+}
+
+/* Desktop: side-by-side instead of stacked — map fills the flexible left
+   column, quest list is a fixed-width scrollable right column. Mirrors
+   .quest-feed-layout's sticky-pane/scrolling-list split (org/Dashboard.jsx),
+   just with map and list swapping which side is fixed-width. */
 @media (min-width: 860px) {
+  .events-map-layout {
+    display: grid;
+    grid-template-columns: 1fr minmax(320px, 420px);
+    align-items: start;
+    gap: 24px;
+  }
+  .events-map-pane {
+    position: sticky;
+    top: calc(var(--nav-height-desktop) + 40px);
+  }
   .events-map-container {
-    height: 440px;
+    height: calc(100vh - var(--nav-height-desktop) - 80px);
+  }
+  .events-map-list-pane {
+    max-height: calc(100vh - var(--nav-height-desktop) - 80px);
+    overflow-y: auto;
+    padding-right: 4px;
   }
 }
 .events-map-selected {
@@ -2538,16 +2736,31 @@ button.data-row:active:not(:disabled) {
   gap: 10px;
 }
 .events-map-list-row {
+  padding: 12px 14px;
+}
+.events-map-list-row[data-active='true'] {
+  border-color: var(--accent);
+}
+.events-map-list-row-head {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
   text-align: left;
-  padding: 12px 14px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
 }
-.events-map-list-row[data-active='true'] {
-  border-color: var(--accent);
+.events-map-list-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .events-map-list-meta {
   flex: 1;
@@ -2559,4 +2772,59 @@ button.data-row:active:not(:disabled) {
   font-size: 0.82rem;
   color: var(--line-soft);
   white-space: nowrap;
+}
+
+/* ---------- FirstTimeHint.jsx — one-time nav callouts ---------- */
+
+.hint-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.hint-bubble {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: max-content;
+  max-width: 160px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--line);
+  text-align: center;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 4px 10px var(--shadow);
+  pointer-events: none;
+}
+.hint-bubble[data-placement='top'] {
+  bottom: calc(100% + 10px);
+}
+.hint-bubble[data-placement='bottom'] {
+  top: calc(100% + 10px);
+}
+.hint-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--accent);
+  transform: translateX(-50%) rotate(45deg);
+}
+.hint-bubble[data-placement='top']::after {
+  bottom: -6px;
+  border-top: none;
+  border-left: none;
+}
+.hint-bubble[data-placement='bottom']::after {
+  top: -6px;
+  border-bottom: none;
+  border-right: none;
 }

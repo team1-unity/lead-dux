@@ -6,12 +6,14 @@ import { useAuth } from './AuthContext.jsx';
 import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from './questSeries.js';
 import { loadMapsLibrary, loadMarkerLibrary } from './googleMaps.js';
 import { hashTone, TONE_HEX } from './tagTones.js';
+import { useIsDesktop } from './useIsDesktop.js';
 import { TopBar } from './TopBar.jsx';
-import { PageMotion } from './PageMotion.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { OrgAvatar } from './OrgAvatar.jsx';
-import { IconPin, IconCalendar } from './icons.jsx';
+import { TagStamp } from './TagStamp.jsx';
+import { DuckMark } from './Logo.jsx';
+import { IconPin, IconCalendar, IconSearch } from './icons.jsx';
 
 // Continental-US center — only ever shown when geolocation is denied/
 // unavailable AND no quest with coordinates exists to center on instead,
@@ -26,19 +28,19 @@ const EARTH_RADIUS_KM = 6371;
 // --paper/--line/--accent tokens) and stripped of the business/POI icon
 // clutter that would otherwise compete with our own quest pins.
 const MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#f4f1ea' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#5c6355' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f4f1ea' }] },
+  { elementType: 'geometry', stylers: [{ color: '#efe9df' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#4a4a42' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f4f1ea' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c3d6cd' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#efe9df' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cfe0da' }] },
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#ece7d9' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ece7d9' }] },
-  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#5c6355' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d8d2bf' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0d9c9' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e0d9c9' }] },
+  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a42' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#c9c0a9' }] },
   { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
 ];
 
@@ -92,11 +94,14 @@ function formatEventDate(value) {
 // one point, so they're correctly absent, not a bug.
 export function EventsMap() {
   const { user, loading } = useAuth();
+  const isDesktop = useIsDesktop();
   const [seriesList, setSeriesList] = useState(null);
   const [userPos, setUserPos] = useState(null);
   const [locationState, setLocationState] = useState('idle'); // idle | granted | denied | unavailable
   const [selectedSeriesId, setSelectedSeriesId] = useState(null);
   const [mapReady, setMapReady] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeTag, setActiveTag] = useState(null);
 
   const mapContainerRef = useRef(null);
   const mapObjRef = useRef(null);
@@ -151,7 +156,29 @@ export function EventsMap() {
       });
   }, [seriesList, userPos]);
 
-  const selected = withDistance.find((g) => g.seriesId === selectedSeriesId) || null;
+  // Tags/search narrow what's plotted and listed together — searching
+  // "kitchen" should hide non-matching pins too, not just list rows, so the
+  // map stays in sync with what's actually visible below it.
+  const availableTags = useMemo(() => {
+    const seen = new Set();
+    withDistance.forEach((g) => (g.primary.tags || []).forEach((t) => seen.add(t)));
+    return [...seen];
+  }, [withDistance]);
+
+  const visibleSeries = useMemo(() => {
+    let list = withDistance;
+    if (activeTag) list = list.filter((g) => (g.primary.tags || []).includes(activeTag));
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((g) => {
+        const { title, orgName, location } = g.primary;
+        return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
+      });
+    }
+    return list;
+  }, [withDistance, activeTag, search]);
+
+  const selected = visibleSeries.find((g) => g.seriesId === selectedSeriesId) || null;
 
   // Create the map exactly once, as soon as the container div exists — not
   // gated on quests/location being ready yet, so the map itself appears
@@ -181,8 +208,9 @@ export function EventsMap() {
     };
   }, []);
 
-  // Re-sync quest markers whenever the (already-sorted) list changes.
-  // Cheap to just clear and rebuild at this app's scale — no diffing.
+  // Re-sync quest markers whenever the (already-sorted, already-filtered)
+  // list changes. Cheap to just clear and rebuild at this app's scale — no
+  // diffing.
   useEffect(() => {
     if (!mapReady) return;
     markersRef.current.forEach((marker) => {
@@ -190,7 +218,7 @@ export function EventsMap() {
     });
     markersRef.current = new Map();
 
-    withDistance.forEach((g) => {
+    visibleSeries.forEach((g) => {
       const marker = new markerCtorRef.current({
         map: mapObjRef.current,
         position: { lat: g.primary.lat, lng: g.primary.lng },
@@ -200,7 +228,7 @@ export function EventsMap() {
       marker.addListener('click', () => setSelectedSeriesId(g.seriesId));
       markersRef.current.set(g.seriesId, marker);
     });
-  }, [mapReady, withDistance]);
+  }, [mapReady, visibleSeries]);
 
   // The user's own position: a distinct marker, and the map recenters on
   // it exactly once (the first successful fix) — not every render, so a
@@ -243,9 +271,18 @@ export function EventsMap() {
     mapObjRef.current.setZoom(11);
   }, [mapReady, withDistance]);
 
+  // The map/list swap from stacked to side-by-side (see .events-map-layout,
+  // style.css) resizes the map's container without the window itself
+  // resizing — Google Maps doesn't notice that on its own and leaves tiles
+  // laid out for the old size until nudged.
+  useEffect(() => {
+    if (!mapReady) return;
+    window.google.maps.event.trigger(mapObjRef.current, 'resize');
+  }, [mapReady, isDesktop]);
+
   function focusSeries(seriesId) {
     setSelectedSeriesId(seriesId);
-    const g = withDistance.find((s) => s.seriesId === seriesId);
+    const g = visibleSeries.find((s) => s.seriesId === seriesId);
     if (g && mapObjRef.current) {
       mapObjRef.current.panTo({ lat: g.primary.lat, lng: g.primary.lng });
       mapObjRef.current.setZoom(14);
@@ -256,7 +293,7 @@ export function EventsMap() {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <PageMotion>
+    <div className="events-map-page">
       <TopBar title="Nearby" />
 
       {locationState === 'denied' || locationState === 'unavailable' ? (
@@ -274,61 +311,124 @@ export function EventsMap() {
         </div>
       ) : null}
 
-      <div className="events-map-container" ref={mapContainerRef} />
-
-      {selected && (
-        <div className="ink-card events-map-selected">
-          <div className="events-map-selected-head">
-            <div className="quest-thumb">
-              <OrgAvatar name={selected.primary.orgName} seed={selected.primary.orgId || selected.seriesId} />
-            </div>
-            <div>
-              <p className="quest-title" style={{ margin: 0 }}>{selected.primary.title}</p>
-              {selected.primary.orgName && <p className="quest-org-line">{selected.primary.orgName}</p>}
-            </div>
+      {seriesList !== null && withDistance.length > 0 && (
+        <div className="events-map-list-controls">
+          <div className="search-field">
+            <IconSearch />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search"
+              aria-label="Search nearby quests"
+            />
           </div>
-          <p className="quest-meta-row">
-            <IconCalendar /> {formatEventDate(selected.primary.eventDate)}
-          </p>
-          <p className="quest-meta-row">
-            <IconPin /> {selected.primary.location}
-            {selected.distanceKm != null && ` · ${formatDistance(selected.distanceKm)}`}
-          </p>
-          <Link to={`/quests/${selected.seriesId}`}>
-            <StampButton type="button" variant="primary">View quest</StampButton>
-          </Link>
+          {availableTags.length > 0 && (
+            <div className="tag-filter-row">
+              <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
+                All
+              </TagStamp>
+              {availableTags.map((tag) => (
+                <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
+                  {tag}
+                </TagStamp>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {seriesList === null ? (
-        <LoadingSpinner label="Loading nearby quests..." />
-      ) : withDistance.length === 0 ? (
-        <div className="quest-empty">
-          <h2>No Mappable Quests Yet</h2>
-          <p>Once an organization posts a quest with a real address, it'll show up here.</p>
-        </div>
-      ) : (
-        <div className="events-map-list">
-          {withDistance.map((g) => (
-            <button
-              type="button"
-              key={g.seriesId}
-              className="ink-card events-map-list-row"
-              data-active={g.seriesId === selectedSeriesId ? 'true' : undefined}
-              onClick={() => focusSeries(g.seriesId)}
-            >
-              <div className="quest-thumb">
-                <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} />
+      <div className="events-map-layout">
+        <div className="events-map-pane">
+          <div className="events-map-container" ref={mapContainerRef} />
+
+          {/* Desktop only — mobile expands the tapped row itself in place
+              instead of stealing height from the map (see the list below). */}
+          {isDesktop && selected && (
+            <div className="ink-card events-map-selected">
+              <div className="events-map-selected-head">
+                <div className="quest-thumb">
+                  <OrgAvatar name={selected.primary.orgName} seed={selected.primary.orgId || selected.seriesId} />
+                </div>
+                <div>
+                  <p className="quest-title" style={{ margin: 0 }}>{selected.primary.title}</p>
+                  {selected.primary.orgName && <p className="quest-org-line">{selected.primary.orgName}</p>}
+                </div>
               </div>
-              <div className="events-map-list-meta">
-                <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>
-                <p className="quest-org-line">{g.primary.orgName}</p>
-              </div>
-              {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
-            </button>
-          ))}
+              <p className="quest-meta-row">
+                <IconCalendar /> {formatEventDate(selected.primary.eventDate)}
+              </p>
+              <p className="quest-meta-row">
+                <IconPin /> {selected.primary.location}
+                {selected.distanceKm != null && ` · ${formatDistance(selected.distanceKm)}`}
+              </p>
+              <Link to={`/quests/${selected.seriesId}`}>
+                <StampButton type="button" variant="primary">View quest</StampButton>
+              </Link>
+            </div>
+          )}
         </div>
-      )}
-    </PageMotion>
+
+        <div className="events-map-list-pane">
+          {seriesList === null ? (
+            <LoadingSpinner label="Loading nearby quests..." />
+          ) : withDistance.length === 0 ? (
+            <div className="quest-empty">
+              <DuckMark size={96} />
+              <h2>No Mappable Quests Yet</h2>
+              <p>Once an organization posts a quest with a real address, it'll show up here.</p>
+            </div>
+          ) : visibleSeries.length === 0 ? (
+            <p>No quests match that filter.</p>
+          ) : (
+            <div className="events-map-list">
+              {visibleSeries.map((g) => {
+                const isOpen = g.seriesId === selectedSeriesId;
+                return (
+                  <div
+                    key={g.seriesId}
+                    className="ink-card events-map-list-row"
+                    data-active={isOpen ? 'true' : undefined}
+                  >
+                    <button
+                      type="button"
+                      className="events-map-list-row-head"
+                      aria-expanded={isDesktop ? undefined : isOpen}
+                      onClick={() => focusSeries(g.seriesId)}
+                    >
+                      <div className="quest-thumb">
+                        <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} />
+                      </div>
+                      <div className="events-map-list-meta">
+                        <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>
+                        <p className="quest-org-line">{g.primary.orgName}</p>
+                      </div>
+                      {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
+                    </button>
+                    {/* Mobile only — the row expands itself in place instead of a
+                        separate card competing with the map for space; desktop
+                        already shows this same info in the sticky side pane. */}
+                    {!isDesktop && isOpen && (
+                      <div className="events-map-list-detail">
+                        <p className="quest-meta-row">
+                          <IconCalendar /> {formatEventDate(g.primary.eventDate)}
+                        </p>
+                        <p className="quest-meta-row">
+                          <IconPin /> {g.primary.location}
+                          {g.distanceKm != null && ` · ${formatDistance(g.distanceKm)}`}
+                        </p>
+                        <Link to={`/quests/${g.seriesId}`}>
+                          <StampButton type="button" variant="primary">View quest</StampButton>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
