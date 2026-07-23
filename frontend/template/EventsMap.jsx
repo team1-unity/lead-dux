@@ -8,11 +8,11 @@ import { loadMapsLibrary, loadMarkerLibrary } from './googleMaps.js';
 import { hashTone, TONE_HEX } from './tagTones.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { TopBar } from './TopBar.jsx';
-import { PageMotion } from './PageMotion.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { OrgAvatar } from './OrgAvatar.jsx';
-import { IconPin, IconCalendar } from './icons.jsx';
+import { TagStamp } from './TagStamp.jsx';
+import { IconPin, IconCalendar, IconSearch } from './icons.jsx';
 
 // Continental-US center — only ever shown when geolocation is denied/
 // unavailable AND no quest with coordinates exists to center on instead,
@@ -99,6 +99,8 @@ export function EventsMap() {
   const [locationState, setLocationState] = useState('idle'); // idle | granted | denied | unavailable
   const [selectedSeriesId, setSelectedSeriesId] = useState(null);
   const [mapReady, setMapReady] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeTag, setActiveTag] = useState(null);
 
   const mapContainerRef = useRef(null);
   const mapObjRef = useRef(null);
@@ -153,7 +155,29 @@ export function EventsMap() {
       });
   }, [seriesList, userPos]);
 
-  const selected = withDistance.find((g) => g.seriesId === selectedSeriesId) || null;
+  // Tags/search narrow what's plotted and listed together — searching
+  // "kitchen" should hide non-matching pins too, not just list rows, so the
+  // map stays in sync with what's actually visible below it.
+  const availableTags = useMemo(() => {
+    const seen = new Set();
+    withDistance.forEach((g) => (g.primary.tags || []).forEach((t) => seen.add(t)));
+    return [...seen];
+  }, [withDistance]);
+
+  const visibleSeries = useMemo(() => {
+    let list = withDistance;
+    if (activeTag) list = list.filter((g) => (g.primary.tags || []).includes(activeTag));
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((g) => {
+        const { title, orgName, location } = g.primary;
+        return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
+      });
+    }
+    return list;
+  }, [withDistance, activeTag, search]);
+
+  const selected = visibleSeries.find((g) => g.seriesId === selectedSeriesId) || null;
 
   // Create the map exactly once, as soon as the container div exists — not
   // gated on quests/location being ready yet, so the map itself appears
@@ -183,8 +207,9 @@ export function EventsMap() {
     };
   }, []);
 
-  // Re-sync quest markers whenever the (already-sorted) list changes.
-  // Cheap to just clear and rebuild at this app's scale — no diffing.
+  // Re-sync quest markers whenever the (already-sorted, already-filtered)
+  // list changes. Cheap to just clear and rebuild at this app's scale — no
+  // diffing.
   useEffect(() => {
     if (!mapReady) return;
     markersRef.current.forEach((marker) => {
@@ -192,7 +217,7 @@ export function EventsMap() {
     });
     markersRef.current = new Map();
 
-    withDistance.forEach((g) => {
+    visibleSeries.forEach((g) => {
       const marker = new markerCtorRef.current({
         map: mapObjRef.current,
         position: { lat: g.primary.lat, lng: g.primary.lng },
@@ -202,7 +227,7 @@ export function EventsMap() {
       marker.addListener('click', () => setSelectedSeriesId(g.seriesId));
       markersRef.current.set(g.seriesId, marker);
     });
-  }, [mapReady, withDistance]);
+  }, [mapReady, visibleSeries]);
 
   // The user's own position: a distinct marker, and the map recenters on
   // it exactly once (the first successful fix) — not every render, so a
@@ -256,7 +281,7 @@ export function EventsMap() {
 
   function focusSeries(seriesId) {
     setSelectedSeriesId(seriesId);
-    const g = withDistance.find((s) => s.seriesId === seriesId);
+    const g = visibleSeries.find((s) => s.seriesId === seriesId);
     if (g && mapObjRef.current) {
       mapObjRef.current.panTo({ lat: g.primary.lat, lng: g.primary.lng });
       mapObjRef.current.setZoom(14);
@@ -267,7 +292,7 @@ export function EventsMap() {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <PageMotion>
+    <div className="events-map-page">
       <TopBar title="Nearby" />
 
       {locationState === 'denied' || locationState === 'unavailable' ? (
@@ -285,7 +310,7 @@ export function EventsMap() {
         </div>
       ) : null}
 
-      <div className={isDesktop ? 'events-map-layout' : undefined}>
+      <div className="events-map-layout">
         <div className="events-map-pane">
           <div className="events-map-container" ref={mapContainerRef} />
 
@@ -315,6 +340,33 @@ export function EventsMap() {
         </div>
 
         <div className="events-map-list-pane">
+          {seriesList !== null && withDistance.length > 0 && (
+            <div className="events-map-list-controls">
+              <div className="search-field">
+                <IconSearch />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search"
+                  aria-label="Search nearby quests"
+                />
+              </div>
+              {availableTags.length > 0 && (
+                <div className="tag-filter-row">
+                  <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
+                    All
+                  </TagStamp>
+                  {availableTags.map((tag) => (
+                    <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
+                      {tag}
+                    </TagStamp>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {seriesList === null ? (
             <LoadingSpinner label="Loading nearby quests..." />
           ) : withDistance.length === 0 ? (
@@ -322,9 +374,11 @@ export function EventsMap() {
               <h2>No Mappable Quests Yet</h2>
               <p>Once an organization posts a quest with a real address, it'll show up here.</p>
             </div>
+          ) : visibleSeries.length === 0 ? (
+            <p>No quests match that filter.</p>
           ) : (
             <div className="events-map-list">
-              {withDistance.map((g) => (
+              {visibleSeries.map((g) => (
                 <button
                   type="button"
                   key={g.seriesId}
@@ -346,6 +400,6 @@ export function EventsMap() {
           )}
         </div>
       </div>
-    </PageMotion>
+    </div>
   );
 }

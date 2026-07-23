@@ -84,13 +84,17 @@ service cloud.firestore {
     }
 
     // Attendance records — one per successful check-in (see
-    // check_in_to_event in functions/main.py). Nobody reads or writes these
-    // directly: an org sees who's checked in via list_quest_attendees, a
-    // member checks themself in via check_in_to_event, both through the
-    // Admin SDK. Explicitly denied (rather than relying on "no rule
-    // matches") so it's clear this is deliberate, same as config/** below.
+    // check_in_to_event in functions/main.py). An org still only sees who's
+    // checked in via list_quest_attendees (Admin SDK) — this client-facing
+    // read is scoped to the caller's own docs only, so Badges.jsx can query
+    // `where('userId', '==', uid)` to compute completion-based badges
+    // without a round trip through a Cloud Function.
     match /attendance/{docId} {
-      allow read, write: if false;
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.userId ||
+        request.auth.token.role == 'admin'
+      );
+      allow write: if false;
     }
 
     // Reviews and their aggregate rating live at the series level, not

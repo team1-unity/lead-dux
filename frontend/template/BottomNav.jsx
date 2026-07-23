@@ -120,13 +120,15 @@ export function BottomNav() {
   const isDesktop = useIsDesktop();
   const [displayName, setDisplayName] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const unreadFeedback = useUnreadFeedbackCount(user, role);
 
-  // A route change (including one triggered by picking a FAB menu item)
-  // always closes the menu — BottomNav stays mounted across navigations
-  // (see AppShell), so nothing else would close it otherwise.
+  // A route change (including one triggered by picking a FAB or avatar menu
+  // item) always closes both menus — BottomNav stays mounted across
+  // navigations (see AppShell), so nothing else would close them otherwise.
   useEffect(() => {
     setFabOpen(false);
+    setAvatarMenuOpen(false);
   }, [location.pathname]);
 
   // Only fetched for roles that render an avatar (desktop only) — an
@@ -156,9 +158,11 @@ export function BottomNav() {
   const features = FEATURES_BY_ROLE[role] || [];
   // Settings joins Badges/Journal behind the mobile FAB for the user view
   // specifically (matching the reference sketch: Quests stays left, Profile
-  // stays right, everything else tucks behind the +) — every other role,
-  // and the user view itself on desktop, keeps Settings as its own normal
-  // pill.
+  // stays right, everything else tucks behind the +) — every other role
+  // keeps Settings as its own normal pill on mobile. On desktop, whichever
+  // role gets the avatar also gets Settings folded into that avatar's
+  // dropdown (alongside Profile) instead of a separate pill — see
+  // avatarOnDesktop above.
   const settingsInFab = !isDesktop && (role === 'user' || role === 'pending_org');
   const fabMenuItems = !isDesktop
     ? [...features, ...(settingsInFab ? [{ to: '/settings', icon: IconGear, label: 'Settings' }] : [])]
@@ -167,7 +171,7 @@ export function BottomNav() {
     ...(PRIMARY_BY_ROLE[role] || []),
     ...(isDesktop ? features : []),
     ...(avatarOnDesktop ? [] : [{ to: '/profile', icon: IconPerson, label: 'Profile' }]),
-    ...(settingsInFab ? [] : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
+    ...(settingsInFab || avatarOnDesktop ? [] : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
   ];
 
   return (
@@ -177,7 +181,16 @@ export function BottomNav() {
     // reproduce it). The ARIA role gives screen readers the same landmark
     // without the engine quirk.
     <>
-      {fabOpen && <div className="fab-backdrop" onClick={() => setFabOpen(false)} aria-hidden="true" />}
+      {(fabOpen || avatarMenuOpen) && (
+        <div
+          className="fab-backdrop"
+          onClick={() => {
+            setFabOpen(false);
+            setAvatarMenuOpen(false);
+          }}
+          aria-hidden="true"
+        />
+      )}
       <div className="bottom-nav" role="navigation" aria-label="Primary">
         <Link to="/" className="bottom-nav-brand" aria-hidden="true" tabIndex={-1}>
           <Logo size={24} />
@@ -258,15 +271,28 @@ export function BottomNav() {
           return row;
         })}
         {avatarOnDesktop && (
-          <Link
-            to="/profile"
-            className="bottom-nav-avatar-link"
-            aria-current={location.pathname === '/profile' ? 'page' : undefined}
-            title="Profile"
-          >
-            {showNameNextToAvatar && displayName && <span className="bottom-nav-org-name">{displayName}</span>}
-            <span className="nav-avatar">{getInitials(displayName)}</span>
-          </Link>
+          <div className="bottom-nav-avatar-wrap">
+            <button
+              type="button"
+              className="bottom-nav-avatar-link"
+              aria-haspopup="menu"
+              aria-expanded={avatarMenuOpen}
+              onClick={() => setAvatarMenuOpen((v) => !v)}
+            >
+              {showNameNextToAvatar && displayName && <span className="bottom-nav-org-name">{displayName}</span>}
+              <span className="nav-avatar">{getInitials(displayName)}</span>
+            </button>
+            {avatarMenuOpen && (
+              <div className="bottom-nav-avatar-menu" role="menu">
+                <Link to="/profile" role="menuitem" aria-current={location.pathname === '/profile' ? 'page' : undefined}>
+                  <IconPerson /> Profile
+                </Link>
+                <Link to="/settings" role="menuitem" aria-current={location.pathname === '/settings' ? 'page' : undefined}>
+                  <IconGear /> Settings
+                </Link>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </>
