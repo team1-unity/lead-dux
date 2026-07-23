@@ -6,6 +6,7 @@ import { useAuth } from './AuthContext.jsx';
 import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from './questSeries.js';
 import { loadMapsLibrary, loadMarkerLibrary } from './googleMaps.js';
 import { hashTone, TONE_HEX } from './tagTones.js';
+import { useIsDesktop } from './useIsDesktop.js';
 import { TopBar } from './TopBar.jsx';
 import { PageMotion } from './PageMotion.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
@@ -92,6 +93,7 @@ function formatEventDate(value) {
 // one point, so they're correctly absent, not a bug.
 export function EventsMap() {
   const { user, loading } = useAuth();
+  const isDesktop = useIsDesktop();
   const [seriesList, setSeriesList] = useState(null);
   const [userPos, setUserPos] = useState(null);
   const [locationState, setLocationState] = useState('idle'); // idle | granted | denied | unavailable
@@ -243,6 +245,15 @@ export function EventsMap() {
     mapObjRef.current.setZoom(11);
   }, [mapReady, withDistance]);
 
+  // The map/list swap from stacked to side-by-side (see .events-map-layout,
+  // style.css) resizes the map's container without the window itself
+  // resizing — Google Maps doesn't notice that on its own and leaves tiles
+  // laid out for the old size until nudged.
+  useEffect(() => {
+    if (!mapReady) return;
+    window.google.maps.event.trigger(mapObjRef.current, 'resize');
+  }, [mapReady, isDesktop]);
+
   function focusSeries(seriesId) {
     setSelectedSeriesId(seriesId);
     const g = withDistance.find((s) => s.seriesId === seriesId);
@@ -274,61 +285,67 @@ export function EventsMap() {
         </div>
       ) : null}
 
-      <div className="events-map-container" ref={mapContainerRef} />
+      <div className={isDesktop ? 'events-map-layout' : undefined}>
+        <div className="events-map-pane">
+          <div className="events-map-container" ref={mapContainerRef} />
 
-      {selected && (
-        <div className="ink-card events-map-selected">
-          <div className="events-map-selected-head">
-            <div className="quest-thumb">
-              <OrgAvatar name={selected.primary.orgName} seed={selected.primary.orgId || selected.seriesId} />
+          {selected && (
+            <div className="ink-card events-map-selected">
+              <div className="events-map-selected-head">
+                <div className="quest-thumb">
+                  <OrgAvatar name={selected.primary.orgName} seed={selected.primary.orgId || selected.seriesId} />
+                </div>
+                <div>
+                  <p className="quest-title" style={{ margin: 0 }}>{selected.primary.title}</p>
+                  {selected.primary.orgName && <p className="quest-org-line">{selected.primary.orgName}</p>}
+                </div>
+              </div>
+              <p className="quest-meta-row">
+                <IconCalendar /> {formatEventDate(selected.primary.eventDate)}
+              </p>
+              <p className="quest-meta-row">
+                <IconPin /> {selected.primary.location}
+                {selected.distanceKm != null && ` · ${formatDistance(selected.distanceKm)}`}
+              </p>
+              <Link to={`/quests/${selected.seriesId}`}>
+                <StampButton type="button" variant="primary">View quest</StampButton>
+              </Link>
             </div>
-            <div>
-              <p className="quest-title" style={{ margin: 0 }}>{selected.primary.title}</p>
-              {selected.primary.orgName && <p className="quest-org-line">{selected.primary.orgName}</p>}
-            </div>
-          </div>
-          <p className="quest-meta-row">
-            <IconCalendar /> {formatEventDate(selected.primary.eventDate)}
-          </p>
-          <p className="quest-meta-row">
-            <IconPin /> {selected.primary.location}
-            {selected.distanceKm != null && ` · ${formatDistance(selected.distanceKm)}`}
-          </p>
-          <Link to={`/quests/${selected.seriesId}`}>
-            <StampButton type="button" variant="primary">View quest</StampButton>
-          </Link>
+          )}
         </div>
-      )}
 
-      {seriesList === null ? (
-        <LoadingSpinner label="Loading nearby quests..." />
-      ) : withDistance.length === 0 ? (
-        <div className="quest-empty">
-          <h2>No Mappable Quests Yet</h2>
-          <p>Once an organization posts a quest with a real address, it'll show up here.</p>
+        <div className="events-map-list-pane">
+          {seriesList === null ? (
+            <LoadingSpinner label="Loading nearby quests..." />
+          ) : withDistance.length === 0 ? (
+            <div className="quest-empty">
+              <h2>No Mappable Quests Yet</h2>
+              <p>Once an organization posts a quest with a real address, it'll show up here.</p>
+            </div>
+          ) : (
+            <div className="events-map-list">
+              {withDistance.map((g) => (
+                <button
+                  type="button"
+                  key={g.seriesId}
+                  className="ink-card events-map-list-row"
+                  data-active={g.seriesId === selectedSeriesId ? 'true' : undefined}
+                  onClick={() => focusSeries(g.seriesId)}
+                >
+                  <div className="quest-thumb">
+                    <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} />
+                  </div>
+                  <div className="events-map-list-meta">
+                    <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>
+                    <p className="quest-org-line">{g.primary.orgName}</p>
+                  </div>
+                  {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="events-map-list">
-          {withDistance.map((g) => (
-            <button
-              type="button"
-              key={g.seriesId}
-              className="ink-card events-map-list-row"
-              data-active={g.seriesId === selectedSeriesId ? 'true' : undefined}
-              onClick={() => focusSeries(g.seriesId)}
-            >
-              <div className="quest-thumb">
-                <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} />
-              </div>
-              <div className="events-map-list-meta">
-                <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>
-                <p className="quest-org-line">{g.primary.orgName}</p>
-              </div>
-              {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      </div>
     </PageMotion>
   );
 }

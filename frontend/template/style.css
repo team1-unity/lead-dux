@@ -2152,6 +2152,27 @@ button.data-row:active:not(:disabled) {
   background: var(--tag-color);
   border: 2px solid var(--tag-ink);
 }
+.badge-sprite-icon {
+  position: absolute;
+  inset: 20%;
+  background-image: url('/badges-sprite.jpg');
+  background-size: 900% 600%;
+  background-repeat: no-repeat;
+  mix-blend-mode: multiply;
+  border-radius: var(--radius-full);
+}
+.badge-new-ribbon {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 1px 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow);
+}
 .badge-ring[data-state='in-progress'] {
   background: var(--paper-card);
   border: 2px solid var(--border);
@@ -2159,12 +2180,6 @@ button.data-row:active:not(:disabled) {
 .badge-ring[data-state='locked'] {
   background: var(--paper-well);
   border: 2px solid transparent;
-}
-.badge-heart {
-  position: absolute;
-  top: -3px;
-  right: -1px;
-  color: var(--danger);
 }
 .badge-lock {
   color: var(--line-soft);
@@ -2515,9 +2530,38 @@ button.data-row:active:not(:disabled) {
   margin-bottom: 14px;
   background: var(--paper-well);
 }
-@media (min-width: 860px) {
+/* Mobile: map docks under the topbar and stays put while the quest list
+   scrolls past underneath it — a plain sticky offset, no JS. */
+@media (max-width: 859px) {
   .events-map-container {
-    height: 440px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+}
+
+/* Desktop: side-by-side instead of stacked — map fills the flexible left
+   column, quest list is a fixed-width scrollable right column. Mirrors
+   .quest-feed-layout's sticky-pane/scrolling-list split (org/Dashboard.jsx),
+   just with map and list swapping which side is fixed-width. */
+@media (min-width: 860px) {
+  .events-map-layout {
+    display: grid;
+    grid-template-columns: 1fr minmax(320px, 420px);
+    align-items: start;
+    gap: 24px;
+  }
+  .events-map-pane {
+    position: sticky;
+    top: calc(var(--nav-height-desktop) + 40px);
+  }
+  .events-map-container {
+    height: calc(100vh - var(--nav-height-desktop) - 80px);
+  }
+  .events-map-list-pane {
+    max-height: calc(100vh - var(--nav-height-desktop) - 80px);
+    overflow-y: auto;
+    padding-right: 4px;
   }
 }
 .events-map-selected {
@@ -2559,4 +2603,59 @@ button.data-row:active:not(:disabled) {
   font-size: 0.82rem;
   color: var(--line-soft);
   white-space: nowrap;
+}
+
+/* ---------- FirstTimeHint.jsx — one-time nav callouts ---------- */
+
+.hint-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.hint-bubble {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: max-content;
+  max-width: 160px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--line);
+  text-align: center;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 4px 10px var(--shadow);
+  pointer-events: none;
+}
+.hint-bubble[data-placement='top'] {
+  bottom: calc(100% + 10px);
+}
+.hint-bubble[data-placement='bottom'] {
+  top: calc(100% + 10px);
+}
+.hint-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--accent);
+  transform: translateX(-50%) rotate(45deg);
+}
+.hint-bubble[data-placement='top']::after {
+  bottom: -6px;
+  border-top: none;
+  border-left: none;
+}
+.hint-bubble[data-placement='bottom']::after {
+  top: -6px;
+  border-bottom: none;
+  border-right: none;
 }

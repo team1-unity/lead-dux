@@ -3011,6 +3011,28 @@ def get_user_rank(req: https_fn.CallableRequest) -> dict:
     }
 
 
+# Called by Badges.jsx right after showing a "New" ribbon on a
+# just-earned badge, so it doesn't show as new again on a later visit or
+# a different device — localStorage alone (see badges.js) only covers
+# "this browser," this is the cross-device source of truth. Self-only,
+# arrayUnion so concurrent calls (or a retry) can't drop an id.
+@https_fn.on_call()
+def mark_badges_seen(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    badge_ids = req.data.get("badgeIds")
+    if not isinstance(badge_ids, list) or not badge_ids:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "badgeIds must be a non-empty list.",
+        )
+
+    firestore.client().collection("users").document(req.auth.uid).update({
+        "seenBadgeIds": firestore.ArrayUnion(badge_ids),
+    })
+    return {"success": True}
+
+
 # Callable from the quest list — self-only (same shape as get_user_rank's
 # default case) so the frontend can gray out side quests the caller either
 # hasn't unlocked yet (tier above their rank) or can't take on right now

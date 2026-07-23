@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { cloneElement, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
@@ -7,6 +7,23 @@ import { useIsDesktop } from './useIsDesktop.js';
 import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus, IconMap } from './icons.jsx';
 import { Logo } from './Logo.jsx';
 import { getInitials } from './initials.js';
+import { FirstTimeHint } from './FirstTimeHint.jsx';
+
+// One-time callout per nav destination, shown until the visitor dismisses
+// it (any click, anywhere — see FirstTimeHint.jsx). Keyed by path so the
+// same copy applies whether the item shows up in the mobile tab bar, the
+// desktop topbar, or tucked behind the mobile "+" FAB.
+const HINT_COPY = {
+  '/': 'Browse quests near you',
+  '/org': 'Post quests for future leaders',
+  '/map': 'See what’s happening nearby',
+  '/badges': 'Track what you’ve earned',
+  '/journal': 'Reflect after each quest',
+  '/org/journal': 'Reflect on quests you’ve hosted',
+  '/check-in': 'Scan to check in',
+  '/profile': 'Your account & progress',
+  '/settings': 'Display & account settings',
+};
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
 // desktop — same items, same component, just a different flex direction
@@ -168,9 +185,14 @@ export function BottomNav() {
         {items.map((item, i) => {
           const Icon = item.icon;
           const current = location.pathname === item.to;
-          const row = (
+          // Map's hint reads differently for an organization (checking its
+          // own pin) than for everyone else (browsing what's nearby) — the
+          // one path-keyed copy that needs a role override.
+          const hintText = role === 'organization' && item.to === '/map'
+            ? 'See your quests the way members do'
+            : HINT_COPY[item.to];
+          const link = (
             <Link
-              key={item.to}
               to={item.to}
               className="bottom-nav-item"
               aria-current={current ? 'page' : undefined}
@@ -182,6 +204,17 @@ export function BottomNav() {
               </span>
               <span>{item.label}</span>
             </Link>
+          );
+          // Only /admin has no hint copy today (admin wasn't part of the
+          // ask) — falls straight through to the plain link, no wrapper,
+          // so it doesn't pick up hint-anchor's inline-flex sizing for
+          // nothing.
+          const row = hintText ? (
+            <FirstTimeHint key={item.to} id={`nav-${item.to}`} text={hintText} placement={isDesktop ? 'bottom' : 'top'}>
+              {link}
+            </FirstTimeHint>
+          ) : (
+            cloneElement(link, { key: item.to })
           );
           // The FAB sits right after the primary tab(s), matching the
           // wireframe's Quests / + / Badges order — mobile only, and only
