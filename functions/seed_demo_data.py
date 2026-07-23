@@ -155,61 +155,96 @@ QUEST_TEMPLATES = {
         {"key": "B", "title": "Thanksgiving Food Drive Sorting", "days": -60, "capacity": 10, "count": 6, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
         {"key": "upcoming", "title": "Weeknight Dinner Service", "days": 10, "capacity": 15, "count": 4, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
         {"key": "near_full", "title": "Holiday Meal Packing Day", "days": 5, "capacity": 15, "count": 14, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
+        {"key": "upcoming2", "title": "Community Fridge Restock", "days": 20, "capacity": 12, "count": 3, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
     ],
     "hudson-youth-leadership": [
         {"key": "A", "title": "Public Speaking Workshop for Teens", "days": -28, "capacity": 20, "count": 15, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
         {"key": "B", "title": "Civic Leadership Roundtable", "days": -50, "capacity": 12, "count": 7, "tags": ["youth", "community"], "location": "Union City Library"},
         {"key": "upcoming", "title": "Youth Leadership Training: Goal Setting", "days": 14, "capacity": 20, "count": 5, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
         {"key": "full", "title": "Student Council Bootcamp", "days": 7, "capacity": 12, "count": 12, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
+        {"key": "upcoming2", "title": "Debate Club Kickoff Night", "days": 21, "capacity": 18, "count": 5, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
     ],
     "green-tomorrow-nj": [
         {"key": "A", "title": "Third River Park Cleanup", "days": -21, "capacity": 20, "count": 18, "tags": ["environment", "outdoors"], "location": "Third River Park, Montclair"},
         {"key": "B", "title": "Native Plant Restoration Day", "days": -45, "capacity": 12, "count": 9, "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair"},
         {"key": "upcoming", "title": "Fall Leaf Composting Workshop", "days": 12, "capacity": 25, "count": 6, "tags": ["environment"], "location": "Edgemont Park, Montclair"},
         {"key": "near_full", "title": "Branch Brook Park Cleanup", "days": 4, "capacity": 25, "count": 22, "tags": ["environment", "outdoors"], "location": "Branch Brook Park, Montclair"},
+        {"key": "upcoming2", "title": "Pollinator Garden Planting", "days": 25, "capacity": 18, "count": 4, "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair"},
     ],
     "hoboken-animal-rescue": [
         {"key": "A", "title": "Adoption Fair Volunteer Day", "days": -30, "capacity": 12, "count": 10, "tags": ["community", "outdoors"], "location": "Church Square Park, Hoboken"},
         {"key": "B", "title": "Shelter Deep-Clean & Enrichment Day", "days": -55, "capacity": 8, "count": 5, "tags": ["community"], "location": "Hoboken Animal Rescue Shelter"},
         {"key": "upcoming", "title": "Foster Orientation Night", "days": 9, "capacity": 10, "count": 3, "tags": ["community", "education"], "location": "Hoboken Animal Rescue Shelter"},
         {"key": "full", "title": "Winter Coat & Supply Drive", "days": 6, "capacity": 8, "count": 8, "tags": ["community"], "location": "Hoboken Animal Rescue Shelter"},
+        {"key": "upcoming2", "title": "Dog Walking Volunteer Morning", "days": 22, "capacity": 14, "count": 6, "tags": ["community", "outdoors"], "location": "Church Square Park, Hoboken"},
     ],
     "nextgen-mentors": [
         {"key": "A", "title": "Mentor Match Night", "days": -24, "capacity": 20, "count": 14, "tags": ["education", "youth"], "location": "Newark Public Library"},
         {"key": "B", "title": "Resume & Interview Workshop", "days": -48, "capacity": 10, "count": 6, "tags": ["education"], "location": "NextGen Mentors HQ, Newark"},
         {"key": "upcoming", "title": "New Mentor Orientation", "days": 16, "capacity": 12, "count": 4, "tags": ["education", "community"], "location": "NextGen Mentors HQ, Newark"},
         {"key": "near_full", "title": "Career Panel: Careers in Tech", "days": 5, "capacity": 20, "count": 18, "tags": ["education", "technology"], "location": "Newark Public Library"},
+        {"key": "upcoming2", "title": "Mock Interview Night: Finance Track", "days": 23, "capacity": 14, "count": 3, "tags": ["education", "youth"], "location": "NextGen Mentors HQ, Newark"},
     ],
     "garden-state-volunteers": [
         {"key": "A", "title": "Grocery Run for Seniors", "days": -33, "capacity": 10, "count": 8, "tags": ["community"], "location": "Bayonne Senior Center"},
         {"key": "B", "title": "Tech Help Desk for Seniors", "days": -62, "capacity": 6, "count": 4, "tags": ["community", "technology"], "location": "Bayonne Senior Center"},
         {"key": "upcoming", "title": "Friendly Visits Volunteer Training", "days": 11, "capacity": 10, "count": 2, "tags": ["community"], "location": "Bayonne Senior Center"},
         {"key": "full", "title": "Senior Center Holiday Party Setup", "days": 8, "capacity": 10, "count": 10, "tags": ["community"], "location": "Bayonne Senior Center"},
+        {"key": "upcoming2", "title": "Holiday Card Writing for Seniors", "days": 17, "capacity": 12, "count": 4, "tags": ["community"], "location": "Bayonne Senior Center"},
     ],
     "riverfront-community-garden": [
         {"key": "A", "title": "Fall Harvest Volunteer Day", "days": -26, "capacity": 20, "count": 16, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
         {"key": "B", "title": "Compost Bin Build Day", "days": -52, "capacity": 10, "count": 7, "tags": ["environment", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
         {"key": "upcoming", "title": "Spring Bed Prep Workshop", "days": 18, "capacity": 20, "count": 5, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
         {"key": "near_full", "title": "Community Planting Day", "days": 3, "capacity": 20, "count": 19, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
+        {"key": "upcoming2", "title": "Pollinator Bed Planting", "days": 26, "capacity": 16, "count": 5, "tags": ["environment", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
     ],
     "liberty-youth-sports": [
         {"key": "A", "title": "Fall Soccer Coaching Clinic", "days": -20, "capacity": 15, "count": 11, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
         {"key": "B", "title": "Flag Football Jamboree Volunteer Day", "days": -44, "capacity": 10, "count": 6, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
         {"key": "upcoming", "title": "Winter Track Coaching Signup Night", "days": 13, "capacity": 15, "count": 3, "tags": ["youth", "fitness"], "location": "Liberty Youth Sports HQ, Jersey City"},
         {"key": "full", "title": "Youth Soccer Tournament Volunteer Day", "days": 6, "capacity": 15, "count": 15, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
+        {"key": "upcoming2", "title": "Spring Sign-Up Fair Volunteer Day", "days": 19, "capacity": 20, "count": 6, "tags": ["youth", "fitness"], "location": "Liberty Youth Sports HQ, Jersey City"},
     ],
     "downtown-neighborhood-alliance": [
         {"key": "A", "title": "Neighborhood Safety Walk", "days": -29, "capacity": 12, "count": 9, "tags": ["community"], "location": "Downtown Jersey City"},
         {"key": "B", "title": "Fall Block Party Cleanup", "days": -58, "capacity": 15, "count": 13, "tags": ["community", "outdoors"], "location": "Van Vorst Park, Jersey City"},
         {"key": "upcoming", "title": "Monthly Neighbor Potluck", "days": 10, "capacity": 30, "count": 6, "tags": ["community"], "location": "Van Vorst Park, Jersey City"},
         {"key": "near_full", "title": "Downtown Mural Cleanup Day", "days": 4, "capacity": 20, "count": 17, "tags": ["community", "arts"], "location": "Downtown Jersey City"},
+        {"key": "upcoming2", "title": "Storefront Window Painting", "days": 15, "capacity": 15, "count": 4, "tags": ["community", "arts"], "location": "Downtown Jersey City"},
     ],
     "creative-futures-collective": [
         {"key": "A", "title": "Open Studio Volunteer Night", "days": -23, "capacity": 12, "count": 9, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
         {"key": "B", "title": "Gallery Install Volunteer Day", "days": -49, "capacity": 8, "count": 5, "tags": ["arts"], "location": "Halsey Street Studio, Newark"},
         {"key": "upcoming", "title": "Youth Art Workshop: Community Murals", "days": 15, "capacity": 16, "count": 4, "tags": ["arts", "youth"], "location": "Halsey Street Studio, Newark"},
         {"key": "full", "title": "Halsey Street Pop-Up Gallery Fundraiser", "days": 5, "capacity": 10, "count": 10, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
+        {"key": "upcoming2", "title": "Open Mic Night Volunteer Crew", "days": 28, "capacity": 12, "count": 3, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
     ],
+}
+
+# Real-world coordinates for every `location` string used in QUEST_TEMPLATES
+# below — without these, EventsMap.jsx correctly (by design) excludes a
+# quest from the map entirely, which is what made earlier seeded org quests
+# invisible there. DEFAULT_IRON_QUESTS deliberately stays uncoordinated
+# (its locations are genuinely "anywhere," not a specific point).
+LOCATION_COORDS = {
+    "JC Community Kitchen, Jersey City": (40.7178, -74.0431),
+    "Hudson Youth Leadership Center, Union City": (40.7795, -74.0246),
+    "Union City Library": (40.7724, -74.0396),
+    "Third River Park, Montclair": (40.8259, -74.2090),
+    "Edgemont Park, Montclair": (40.8177, -74.2196),
+    "Branch Brook Park, Montclair": (40.7690, -74.1735),
+    "Church Square Park, Hoboken": (40.7440, -74.0341),
+    "Hoboken Animal Rescue Shelter": (40.7439, -74.0324),
+    "Newark Public Library": (40.7395, -74.1723),
+    "NextGen Mentors HQ, Newark": (40.7357, -74.1724),
+    "Bayonne Senior Center": (40.6687, -74.1143),
+    "Riverfront Community Garden, Weehawken": (40.7695, -74.0110),
+    "Lincoln Park, Jersey City": (40.7247, -74.0793),
+    "Liberty Youth Sports HQ, Jersey City": (40.7178, -74.0648),
+    "Downtown Jersey City": (40.7178, -74.0431),
+    "Van Vorst Park, Jersey City": (40.7188, -74.0447),
+    "Halsey Street Studio, Newark": (40.7368, -74.1686),
 }
 
 QUEST_DESCRIPTIONS = {
@@ -253,6 +288,16 @@ QUEST_DESCRIPTIONS = {
     "Gallery Install Volunteer Day": "Hang and light this season's gallery show alongside our curators.",
     "Youth Art Workshop: Community Murals": "Teens design and paint a mural panel with guidance from a working muralist.",
     "Halsey Street Pop-Up Gallery Fundraiser": "A one-night pop-up gallery and fundraiser supporting next year's studio scholarships.",
+    "Community Fridge Restock": "Stock and organize the neighborhood community fridge with fresh donated groceries.",
+    "Debate Club Kickoff Night": "Help launch this semester's teen debate club with practice rounds and topic drafting.",
+    "Pollinator Garden Planting": "Plant a new native pollinator bed to support local bees and butterflies.",
+    "Dog Walking Volunteer Morning": "Give shelter dogs a morning walk and some one-on-one attention before adoption hours.",
+    "Mock Interview Night: Finance Track": "Mentors run mock interviews for students prepping for finance internships and entry-level roles.",
+    "Holiday Card Writing for Seniors": "Write and decorate holiday cards for homebound seniors in our friendly-visits program.",
+    "Pollinator Bed Planting": "Plant this season's pollinator-friendly bed alongside garden members and neighborhood families.",
+    "Spring Sign-Up Fair Volunteer Day": "Staff tables and greet families at our spring rec-league sign-up fair.",
+    "Storefront Window Painting": "Paint seasonal designs on downtown storefront windows alongside local shop owners.",
+    "Open Mic Night Volunteer Crew": "Run sound, seating, and sign-ups for this month's open mic night at the studio.",
 }
 
 
@@ -442,6 +487,46 @@ def seed_users():
     return user_uids
 
 
+# Wipes only documents this script itself would have created (every seed
+# quest/series/attendance doc id is deterministically prefixed "seed-" — see
+# quest_id above and check_in_to_event's {eventId}_{uid} attendance id
+# convention in main.py) — never touches a real org's real quest data, even
+# if this runs against a project that has both. Run before reseeding so a
+# fix to LOCATION_COORDS/QUEST_TEMPLATES (or a template dropped from the
+# list) actually lands, rather than just upserting on top of stale docs.
+def wipe_old_seed_data():
+    def delete_prefixed(collection_name):
+        deleted = 0
+        batch = db.batch()
+        pending = 0
+        for doc in db.collection(collection_name).stream():
+            if not doc.id.startswith("seed-"):
+                continue
+            batch.delete(doc.reference)
+            deleted += 1
+            pending += 1
+            if pending >= 400:
+                batch.commit()
+                batch = db.batch()
+                pending = 0
+        if pending > 0:
+            batch.commit()
+        print(f"  Deleted {deleted} old seed docs from {collection_name}")
+
+    # questSeries/{id}/reviews is a subcollection — deleting the parent doc
+    # doesn't cascade, so clear it first or it'd linger unreachable-but-not-
+    # actually-gone.
+    for series_doc in db.collection("questSeries").stream():
+        if not series_doc.id.startswith("seed-"):
+            continue
+        for review_doc in series_doc.reference.collection("reviews").stream():
+            review_doc.reference.delete()
+
+    delete_prefixed("questSeries")
+    delete_prefixed("quests")
+    delete_prefixed("attendance")
+
+
 def seed_org_quests(org_uids, user_uids):
     """Returns a list of completed-quest records (with attendee uids) so
     reviews can be drawn from real attendees."""
@@ -464,11 +549,14 @@ def seed_org_quests(org_uids, user_uids):
                 attendees.append(user_uids[attendee_cursor % n_users]["uid"])
                 attendee_cursor += 1
 
+            lat, lng = LOCATION_COORDS.get(template["location"], (None, None))
             quest_ref.set({
                 "title": template["title"],
                 "description": QUEST_DESCRIPTIONS[template["title"]],
                 "tags": template["tags"],
                 "location": template["location"],
+                "lat": lat,
+                "lng": lng,
                 "timezone": "America/New_York",
                 "capacity": template["capacity"],
                 "seriesId": quest_id,
@@ -593,6 +681,9 @@ def print_demo_accounts(org_uids, user_uids):
 
 
 def main_seed():
+    print("Wiping old seed quest/series/attendance docs...")
+    wipe_old_seed_data()
+
     print("Seeding admin...")
     seed_admin()
 

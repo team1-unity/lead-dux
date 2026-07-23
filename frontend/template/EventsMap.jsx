@@ -27,19 +27,19 @@ const EARTH_RADIUS_KM = 6371;
 // --paper/--line/--accent tokens) and stripped of the business/POI icon
 // clutter that would otherwise compete with our own quest pins.
 const MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#f4f1ea' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#5c6355' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f4f1ea' }] },
+  { elementType: 'geometry', stylers: [{ color: '#efe9df' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#4a4a42' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f4f1ea' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c3d6cd' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#efe9df' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cfe0da' }] },
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#ece7d9' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ece7d9' }] },
-  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#5c6355' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d8d2bf' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0d9c9' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e0d9c9' }] },
+  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a42' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#c9c0a9' }] },
   { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
 ];
 
