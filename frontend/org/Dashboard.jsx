@@ -37,8 +37,14 @@ import {
   IconUsers,
 } from '@shared/icons.jsx';
 
-// One entrance per row, staggered from the parent's transition.
+// One entrance per row, staggered from the parent's transition — same
+// values as mobile/Quests.jsx's own copy (not exported from there, so
+// duplicated here rather than shared).
 const listVariants = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+};
 
 // The compact left-column row — title, review rating if any, and an
 // upcoming-dates/date summary. Every quest here belongs to this same org,
