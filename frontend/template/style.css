@@ -1656,7 +1656,40 @@ button.quest-card-head:hover:not(:disabled) {
   padding-bottom: 4px;
   margin-bottom: 20px;
   max-width: 640px;
+  /* Still scrolls horizontally when tags overflow — just without a visible
+     scrollbar track cluttering a row of pills. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tag-filter-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Themed thin scrollbar for the few places content genuinely scrolls
+   inside its own box (a quest list beside a sticky detail pane) — a bare
+   OS scrollbar there is a real signal there's more to see, unlike the
+   tag row above, so this stays visible but styled instead of hidden. */
+.quest-list,
+.events-map-list-pane {
   scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.quest-list::-webkit-scrollbar,
+.events-map-list-pane::-webkit-scrollbar {
+  width: 6px;
+}
+.quest-list::-webkit-scrollbar-track,
+.events-map-list-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+.quest-list::-webkit-scrollbar-thumb,
+.events-map-list-pane::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+.quest-list::-webkit-scrollbar-thumb:hover,
+.events-map-list-pane::-webkit-scrollbar-thumb:hover {
+  background: var(--line-soft);
 }
 .tag-filter-row .tag-stamp {
   flex: none;
@@ -2649,6 +2682,16 @@ button.data-row:active:not(:disabled) {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 12px;
+}
+/* This row sits alone, full-bleed above the map+list split — the 320px/
+   640px caps that make sense when search/tags share a row with a page
+   title elsewhere just leave it looking stranded here. */
+.events-map-list-controls .search-field {
+  max-width: none;
+  width: 100%;
+}
+.events-map-list-controls .tag-filter-row {
+  max-width: none;
 }
 
 /* Desktop: side-by-side instead of stacked — map fills the flexible left
