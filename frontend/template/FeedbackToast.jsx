@@ -7,10 +7,13 @@ import { useAuth } from './AuthContext.jsx';
 import { callMarkFeedbackNotified } from './fetch.jsx';
 import { StampButton } from './StampButton.jsx';
 
-// Fires the moment an organization sends feedback while the signed-in
-// leader has the app open — a live Firestore listener on their own
-// feedback subcollection (self-readable, see firestore.rules), not a
-// check-on-load poll. Acting on it (either button) marks that one entry
+// Fires the moment an organization answers a leader-requested feedback
+// form while the signed-in leader has the app open — a live Firestore
+// listener on their own journal subcollection (self-readable, see
+// firestore.rules), not a check-on-load poll. A journal entry never has
+// `notified` set until a request actually completes (see check_in_to_event/
+// submit_feedback_request_response), so this naturally never fires for a
+// quest with no feedback. Acting on it (either button) marks that one entry
 // `notified` so it never pops up again; the journal's own unread badge is
 // a separate flag (`read`) that only clears when the entry is actually
 // opened, so dismissing this popup doesn't silently mark it as read.
@@ -22,7 +25,7 @@ export function FeedbackToast() {
 
   useEffect(() => {
     if (!user || (role !== 'user' && role !== 'pending_org')) return undefined;
-    const q = query(collection(db, 'users', user.uid, 'feedback'), where('notified', '==', false));
+    const q = query(collection(db, 'users', user.uid, 'journal'), where('notified', '==', false));
     return onSnapshot(q, (snap) => {
       setPending(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
@@ -56,10 +59,15 @@ export function FeedbackToast() {
           role="alertdialog"
           aria-label="New quest feedback"
         >
-          <h2>Congratulations!</h2>
+          <h2>Your feedback is in!</h2>
           <p>
-            You completed <strong>{current.questTitle}</strong> and earned{' '}
-            <strong>{current.pointsAwarded} points</strong>. View your feedback in your journal!
+            An organization answered your feedback request for <strong>{current.questTitle}</strong>
+            {current.pointsAwarded > 0 ? (
+              <>
+                {' '}and you earned <strong>{current.pointsAwarded} points</strong>
+              </>
+            ) : null}
+            . View it in your journal!
           </p>
           <div className="flex gap-sm">
             <StampButton type="button" variant="primary" onClick={viewInJournal} style={{ flex: 1 }}>

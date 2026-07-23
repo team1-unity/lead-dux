@@ -4,7 +4,7 @@ import pytest
 from firebase_functions import https_fn
 
 import main
-from tests.helpers import seed_attendance, seed_quest, seed_user
+from tests.helpers import seed_quest, seed_user
 
 
 class TestRankForPoints:
@@ -129,44 +129,6 @@ class TestCreateDefaultQuestTierValidation:
         ))
         quest = fake_firestore.client().collection("quests").document(result["questId"]).get().to_dict()
         assert quest["tier"] == "gold"
-
-
-class TestFeedbackBonusAwardsPointsAndRank:
-    def _seed_checked_in(self, fake_firestore):
-        seed_quest(fake_firestore, "quest-1", rsvpd=["user-1"], orgId="org-1", orgName="Trail Org")
-        seed_attendance(fake_firestore, "quest-1", "user-1", token="t", status="checked_in")
-        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
-
-    def test_awards_bonus_and_sets_rank(self, fake_firestore, make_request, call):
-        self._seed_checked_in(fake_firestore)
-
-        call(main.submit_quest_feedback_batch, make_request(
-            data={"questId": "quest-1", "feedback": [{"uid": "user-1", "rating": 10, "message": "Great job!"}]},
-            uid="org-1", role="organization",
-        ))
-
-        user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
-        assert user["points"] == 20
-        assert user["rank"] == "Iron"
-
-    def test_invalid_entry_awards_no_points_to_anyone(self, fake_firestore, make_request, call):
-        seed_quest(fake_firestore, "quest-1", rsvpd=["user-1", "user-2"], orgId="org-1", orgName="Trail Org")
-        seed_attendance(fake_firestore, "quest-1", "user-1", token="t1", status="checked_in")
-        seed_attendance(fake_firestore, "quest-1", "user-2", token="t2", status="checked_in")
-        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
-        seed_user(fake_firestore, "user-2", "Bo", "bo@example.com")
-
-        with pytest.raises(https_fn.HttpsError):
-            call(main.submit_quest_feedback_batch, make_request(
-                data={"questId": "quest-1", "feedback": [
-                    {"uid": "user-1", "rating": 10, "message": "Great job!"},
-                    {"uid": "user-2", "rating": 11, "message": "Bad rating"},
-                ]},
-                uid="org-1", role="organization",
-            ))
-
-        user1 = fake_firestore.client().collection("users").document("user-1").get().to_dict()
-        assert user1.get("points", 0) == 0
 
 
 class TestGetUserRank:

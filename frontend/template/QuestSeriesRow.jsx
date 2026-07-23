@@ -1,117 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuestSeriesActions } from './useQuestSeriesActions.js';
-import { callGenerateQuestFeedbackDrafts, callSubmitQuestFeedbackBatch } from './fetch.jsx';
 import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
-import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
-
-const FEEDBACK_RATINGS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-
-// AI-drafted feedback for every checked-in attendee who doesn't already
-// have feedback for this quest — one call generates the whole batch (see
-// generate_quest_feedback_drafts), the org edits inline, one call sends
-// the whole batch (submit_quest_feedback_batch). Re-mounts (via `key` on
-// questId at the call site) whenever the selected date changes, so drafts
-// never leak between occurrences.
-function GiveFeedbackPanel({ questId, onSent }) {
-  const [loading, setLoading] = useState(true);
-  const [drafts, setDrafts] = useState([]);
-  const [error, setError] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sentCount, setSentCount] = useState(null);
-
-  async function loadDrafts() {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await callGenerateQuestFeedbackDrafts(questId);
-      setDrafts(data.attendees);
-    } catch (err) {
-      setError(err.message || 'Could not generate feedback drafts.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadDrafts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questId]);
-
-  function updateDraft(uid, field, value) {
-    setDrafts((prev) => prev.map((d) => (d.uid === uid ? { ...d, [field]: value } : d)));
-  }
-
-  async function sendAll() {
-    setError('');
-    setSending(true);
-    try {
-      const result = await callSubmitQuestFeedbackBatch({
-        questId,
-        feedback: drafts.map((d) => ({ uid: d.uid, rating: d.rating, message: d.message })),
-      });
-      setSentCount(result.sentUids.length);
-      onSent();
-    } catch (err) {
-      setError(err.message || 'Something went wrong.');
-    } finally {
-      setSending(false);
-    }
-  }
-
-  if (loading) return <LoadingSpinner label="Writing feedback drafts..." />;
-
-  if (sentCount !== null) {
-    return <p className="box-success">Feedback sent to {sentCount} attendee{sentCount === 1 ? '' : 's'}.</p>;
-  }
-
-  if (error && drafts.length === 0) {
-    return <p className="box-danger">{error}</p>;
-  }
-
-  if (drafts.length === 0) {
-    return <p style={{ marginTop: 12 }}>Everyone who checked in already has feedback.</p>;
-  }
-
-  return (
-    <div className="ink-card" style={{ marginTop: 12 }}>
-      <h3 style={{ marginTop: 0 }}>Give Feedback</h3>
-      <p style={{ marginTop: 0, marginBottom: 14 }} className="data-stat">
-        Reviewed by you before sending — your comments are shared with each attendee.
-      </p>
-      {error && <p className="box-danger">{error}</p>}
-      <div className="flex flex-col gap-md">
-        {drafts.map((d) => (
-          <div key={d.uid} className="feedback-draft-row">
-            <div className="flex justify-between items-center gap-sm" style={{ flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, fontWeight: 700 }}>{d.name}</p>
-              <label className="flex items-center gap-sm" style={{ fontWeight: 400 }}>
-                Rating
-                <select value={d.rating} onChange={(e) => updateDraft(d.uid, 'rating', Number(e.target.value))}>
-                  {FEEDBACK_RATINGS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <textarea value={d.message} onChange={(e) => updateDraft(d.uid, 'message', e.target.value)} />
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-sm" style={{ marginTop: 14 }}>
-        <StampButton type="button" onClick={loadDrafts} disabled={sending}>
-          Regenerate
-        </StampButton>
-        <StampButton type="button" variant="primary" onClick={sendAll} disabled={sending} style={{ flex: 1 }}>
-          {sending ? 'Sending...' : `Send All (${drafts.length})`}
-        </StampButton>
-      </div>
-    </div>
-  );
-}
 
 export function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
@@ -197,13 +88,6 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
   const { primary, occurrences } = series;
   const a = useQuestSeriesActions(series, onChanged);
   const { selected, selectedId, isSeries } = a;
-  // Not part of useQuestSeriesActions — feedback is org-only (see the
-  // primary.orgId gate below) and doesn't apply to QuestSeriesListItem/
-  // QuestSeriesDetailPane's split view, so it stays local to this row.
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  useEffect(() => {
-    setFeedbackOpen(false);
-  }, [selectedId]);
   // Unlike feedback (per-date) or attendees, the share link is per-series
   // (see ShareQuestBox) — it doesn't need to reset when switchDate changes
   // which occurrence is selected.
@@ -253,11 +137,6 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
         {primary.orgId && (
           <StampButton type="button" onClick={a.toggleReviews} disabled={a.busy}>
             {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
-          </StampButton>
-        )}
-        {primary.orgId && (
-          <StampButton type="button" onClick={() => setFeedbackOpen((v) => !v)} disabled={a.busy}>
-            {feedbackOpen ? 'Hide feedback' : 'Give feedback'}
           </StampButton>
         )}
         {primary.orgId && (
@@ -369,7 +248,6 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           <p className="data-stat">Attendees scan this from the app's Check In screen.</p>
         </div>
       )}
-      {feedbackOpen && <GiveFeedbackPanel key={selected.id} questId={selected.id} onSent={onChanged} />}
       {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
       {a.attendeesOpen && a.attendees && (
         <ul className="data-sublist">
