@@ -12,6 +12,7 @@ import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { OrgAvatar } from './OrgAvatar.jsx';
 import { TagStamp } from './TagStamp.jsx';
+import { DuckMark } from './Logo.jsx';
 import { IconPin, IconCalendar, IconSearch } from './icons.jsx';
 
 // Continental-US center — only ever shown when geolocation is denied/
@@ -373,6 +374,7 @@ export function EventsMap() {
             <LoadingSpinner label="Loading nearby quests..." />
           ) : withDistance.length === 0 ? (
             <div className="quest-empty">
+              <DuckMark size={96} />
               <h2>No Mappable Quests Yet</h2>
               <p>Once an organization posts a quest with a real address, it'll show up here.</p>
             </div>
