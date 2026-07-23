@@ -310,11 +310,40 @@ export function EventsMap() {
         </div>
       ) : null}
 
+      {seriesList !== null && withDistance.length > 0 && (
+        <div className="events-map-list-controls">
+          <div className="search-field">
+            <IconSearch />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search"
+              aria-label="Search nearby quests"
+            />
+          </div>
+          {availableTags.length > 0 && (
+            <div className="tag-filter-row">
+              <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
+                All
+              </TagStamp>
+              {availableTags.map((tag) => (
+                <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
+                  {tag}
+                </TagStamp>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="events-map-layout">
         <div className="events-map-pane">
           <div className="events-map-container" ref={mapContainerRef} />
 
-          {selected && (
+          {/* Desktop only — mobile expands the tapped row itself in place
+              instead of stealing height from the map (see the list below). */}
+          {isDesktop && selected && (
             <div className="ink-card events-map-selected">
               <div className="events-map-selected-head">
                 <div className="quest-thumb">
@@ -340,33 +369,6 @@ export function EventsMap() {
         </div>
 
         <div className="events-map-list-pane">
-          {seriesList !== null && withDistance.length > 0 && (
-            <div className="events-map-list-controls">
-              <div className="search-field">
-                <IconSearch />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search"
-                  aria-label="Search nearby quests"
-                />
-              </div>
-              {availableTags.length > 0 && (
-                <div className="tag-filter-row">
-                  <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
-                    All
-                  </TagStamp>
-                  {availableTags.map((tag) => (
-                    <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
-                      {tag}
-                    </TagStamp>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {seriesList === null ? (
             <LoadingSpinner label="Loading nearby quests..." />
           ) : withDistance.length === 0 ? (
@@ -378,24 +380,49 @@ export function EventsMap() {
             <p>No quests match that filter.</p>
           ) : (
             <div className="events-map-list">
-              {visibleSeries.map((g) => (
-                <button
-                  type="button"
-                  key={g.seriesId}
-                  className="ink-card events-map-list-row"
-                  data-active={g.seriesId === selectedSeriesId ? 'true' : undefined}
-                  onClick={() => focusSeries(g.seriesId)}
-                >
-                  <div className="quest-thumb">
-                    <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} />
+              {visibleSeries.map((g) => {
+                const isOpen = g.seriesId === selectedSeriesId;
+                return (
+                  <div
+                    key={g.seriesId}
+                    className="ink-card events-map-list-row"
+                    data-active={isOpen ? 'true' : undefined}
+                  >
+                    <button
+                      type="button"
+                      className="events-map-list-row-head"
+                      aria-expanded={isDesktop ? undefined : isOpen}
+                      onClick={() => focusSeries(g.seriesId)}
+                    >
+                      <div className="quest-thumb">
+                        <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} />
+                      </div>
+                      <div className="events-map-list-meta">
+                        <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>
+                        <p className="quest-org-line">{g.primary.orgName}</p>
+                      </div>
+                      {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
+                    </button>
+                    {/* Mobile only — the row expands itself in place instead of a
+                        separate card competing with the map for space; desktop
+                        already shows this same info in the sticky side pane. */}
+                    {!isDesktop && isOpen && (
+                      <div className="events-map-list-detail">
+                        <p className="quest-meta-row">
+                          <IconCalendar /> {formatEventDate(g.primary.eventDate)}
+                        </p>
+                        <p className="quest-meta-row">
+                          <IconPin /> {g.primary.location}
+                          {g.distanceKm != null && ` · ${formatDistance(g.distanceKm)}`}
+                        </p>
+                        <Link to={`/quests/${g.seriesId}`}>
+                          <StampButton type="button" variant="primary">View quest</StampButton>
+                        </Link>
+                      </div>
+                    )}
                   </div>
-                  <div className="events-map-list-meta">
-                    <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>
-                    <p className="quest-org-line">{g.primary.orgName}</p>
-                  </div>
-                  {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
