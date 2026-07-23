@@ -104,6 +104,14 @@ export async function callDeleteOrganization(targetUid) {
   return result.data;
 }
 
+// Called once a first-time leader or organization dismisses (or finishes)
+// WelcomeTour.jsx's one-time feature walkthrough — never shows again.
+export async function callMarkIntroSeen() {
+  const fn = httpsCallable(functions, 'mark_intro_seen');
+  const result = await fn();
+  return result.data;
+}
+
 // The org-details form's submit, for an account currently onboarding_org
 // (the state a brand-new org signup reaches directly). Creates the ORGREQ
 // and moves the caller to pending_org.

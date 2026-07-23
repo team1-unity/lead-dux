@@ -8,6 +8,7 @@ import { BottomNav } from '@shared/BottomNav.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { FeedbackToast } from '@shared/FeedbackToast.jsx';
+import { WelcomeTour } from '@shared/WelcomeTour.jsx';
 import { EventsMap } from '@shared/EventsMap.jsx';
 import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
@@ -124,6 +125,7 @@ function AppShell() {
     <>
       <Outlet />
       {showNav && <BottomNav />}
+      <WelcomeTour />
     </>
   );
 }
