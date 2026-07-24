@@ -4,49 +4,59 @@ import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/fire
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
-import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus, IconMap } from './icons.jsx';
+import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus, IconMap, IconHome } from './icons.jsx';
 import { Logo } from './Logo.jsx';
 import { getInitials } from './initials.js';
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
 // desktop — same items, same component, just a different flex direction
 // (see style.css). Each role's primary destination differs (a "user"
-// browses the quest feed; an "organization" manages its own dashboard; an
-// "admin" has both a feed and a data page) — this is deliberately
-// role-aware rather than one generic list of icons, since forcing every
-// role through the same tab set doesn't match how the app is actually
-// routed.
+// browses Home first, then Quests; an "organization" gets its own Home
+// then Your Quests, mirroring that same shape; an "admin" has both a feed
+// and a data page) — this is deliberately role-aware rather than one
+// generic list of icons, since forcing every role through the same tab set
+// doesn't match how the app is actually routed.
 //
-// No separate "+ create" icon: for organization/admin, quest creation
-// already lives inline on the same dashboard page their primary icon
-// points to, so a second icon to the identical route would be a decorative
-// duplicate rather than a real action. Profile/Settings are both always
-// present — every account, regardless of role, needs a way to its own
-// profile and to display settings/account deletion.
+// No separate "+ create" icon: for organization, quest creation lives
+// inline on Your Quests (org/Quests.jsx) itself; for admin, on the Data
+// page — so a second icon to an identical route would be a decorative
+// duplicate rather than a real action. Profile is always present — every
+// account needs a way to its own profile. Settings is reached from there
+// (a gear icon on the Profile page itself) for `user` now instead of a nav
+// slot — see settingsInFab below.
 const PRIMARY_BY_ROLE = {
-  user: [{ to: '/', icon: IconList, label: 'Quests' }],
+  user: [
+    { to: '/', icon: IconHome, label: 'Home' },
+    { to: '/quests', icon: IconList, label: 'Quests' },
+  ],
   pending_org: [{ to: '/', icon: IconList, label: 'Quests' }],
-  organization: [{ to: '/org', icon: IconList, label: 'Dashboard' }],
+  organization: [
+    { to: '/org', icon: IconHome, label: 'Home' },
+    { to: '/org/quests', icon: IconList, label: 'Your Quests' },
+  ],
   admin: [
     { to: '/', icon: IconList, label: 'Quests' },
     { to: '/admin', icon: IconGrid, label: 'Data' },
   ],
 };
 
-// Extra feature destinations beyond a role's primary tab — shown as a
-// normal nav pill on desktop (matching the wireframe's horizontal nav), but
-// tucked behind the mobile "+" FAB instead of crowding the tab bar (matching
-// the wireframe's Quests/+/Badges bottom nav). Journal carries `badge: true`
-// so its unread-feedback count (see useUnreadFeedbackCount below) still
-// surfaces on its FAB circle even though it's no longer a standalone tab.
-// Map is the one feature every role gets — check-in/badges/journal are
-// participant-only concepts, but "where is this happening" is useful to an
-// organization checking its own pin or an admin browsing what's live, too.
+// Extra feature destinations beyond a role's primary tab(s). For `user`
+// this is now a flat, always-visible nav item (the redesigned wireframe's
+// Home/Quests/Map/Journal/Profile bar has no FAB at all) — Check-in and
+// Badges dropped out of this list entirely for `user`: Check-in is now a
+// button on Home/Profile pointing straight at /check-in, and Badges is a
+// preview section on Profile linking to /badges, so neither needs its own
+// nav slot. `pending_org` keeps the older shape (shown as a normal nav pill
+// on desktop, tucked behind the mobile "+" FAB) unchanged — that role isn't
+// part of this redesign pass. Journal carries `badge: true` so its
+// unread-feedback count (see useUnreadFeedbackCount below) surfaces
+// wherever it renders. Map is the one feature every role gets — check-in/
+// badges/journal are participant-only concepts, but "where is this
+// happening" is useful to an organization checking its own pin or an admin
+// browsing what's live, too.
 const FEATURES_BY_ROLE = {
   user: [
-    { to: '/check-in', icon: IconQrCode, label: 'Check In' },
     { to: '/map', icon: IconMap, label: 'Map' },
-    { to: '/badges', icon: IconTrophy, label: 'Badges' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],
   pending_org: [
@@ -55,9 +65,13 @@ const FEATURES_BY_ROLE = {
     { to: '/badges', icon: IconTrophy, label: 'Badges' },
     { to: '/journal', icon: IconJournal, label: 'Journal', badge: true },
   ],
+  // Map and the old host-reflection Journal (still at /org/journal, just no
+  // longer linked from nav — see org/Journal.jsx) are dropped for this
+  // redesign; Photo Submissions/Feedback Requests are the org's real daily
+  // work, surfaced instead.
   organization: [
-    { to: '/map', icon: IconMap, label: 'Map' },
-    { to: '/org/journal', icon: IconJournal, label: 'Journal' },
+    { to: '/org/photo-submissions', icon: IconGrid, label: 'Photo Submissions' },
+    { to: '/org/feedback-requests', icon: IconJournal, label: 'Feedback Requests' },
   ],
   admin: [{ to: '/map', icon: IconMap, label: 'Map' }],
 };
@@ -142,22 +156,29 @@ export function BottomNav() {
   // that wireframe); the user view's avatar stands alone.
   const showNameNextToAvatar = role === 'organization';
   const features = FEATURES_BY_ROLE[role] || [];
-  // Settings joins Badges/Journal behind the mobile FAB for the user view
-  // specifically (matching the reference sketch: Quests stays left, Profile
-  // stays right, everything else tucks behind the +) — every other role
-  // keeps Settings as its own normal pill on mobile. On desktop, whichever
+  // `user` and `organization` both get the redesigned flat nav — no FAB at
+  // all, features always shown as normal pills (mobile and desktop alike).
+  // `pending_org`/`admin` keep the older shape: features tucked behind the
+  // mobile "+" FAB, shown inline only on desktop.
+  const flatNav = role === 'user' || role === 'organization';
+  const showFeaturesInline = isDesktop || flatNav;
+  // Settings joins Badges/Journal behind the mobile FAB for pending_org
+  // specifically — every other role that still uses a FAB keeps Settings
+  // as its own normal pill there. `user` no longer gets a Settings nav slot
+  // on mobile at all: the gear icon on the Profile page (see Profile.jsx)
+  // is the only way there now, matching the wireframe. On desktop, whichever
   // role gets the avatar also gets Settings folded into that avatar's
   // dropdown (alongside Profile) instead of a separate pill — see
   // avatarOnDesktop above.
-  const settingsInFab = !isDesktop && (role === 'user' || role === 'pending_org');
-  const fabMenuItems = !isDesktop
+  const settingsInFab = !isDesktop && role === 'pending_org';
+  const fabMenuItems = !isDesktop && !flatNav
     ? [...features, ...(settingsInFab ? [{ to: '/settings', icon: IconGear, label: 'Settings' }] : [])]
     : [];
   const items = [
     ...(PRIMARY_BY_ROLE[role] || []),
-    ...(isDesktop ? features : []),
+    ...(showFeaturesInline ? features : []),
     ...(avatarOnDesktop ? [] : [{ to: '/profile', icon: IconPerson, label: 'Profile' }]),
-    ...(settingsInFab || avatarOnDesktop ? [] : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
+    ...(settingsInFab || avatarOnDesktop || flatNav ? [] : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
   ];
 
   return (

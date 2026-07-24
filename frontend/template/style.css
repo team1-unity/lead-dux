@@ -1255,29 +1255,6 @@ nav {
   color: var(--line-soft);
 }
 
-/* A compact white header bar (title + circular avatar), mobile only — the
-   negative margin undoes #root's own padding so it sits flush with the
-   viewport edges instead of inset like the rest of the page content.
-   Desktop already gets an avatar from BottomNav, so this hides there. */
-.mobile-page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--paper-card);
-  padding: 14px 18px;
-  margin: -24px -16px 20px;
-  border-bottom: 1.5px solid var(--border);
-}
-.mobile-page-header h1 {
-  margin: 0;
-  font-size: 1.4rem;
-}
-@media (min-width: 860px) {
-  .mobile-page-header {
-    display: none;
-  }
-}
-
 /* unread-count badge on a nav icon (Journal today) — positioned relative
    to a wrapping span rather than the icon itself, since the icon is a
    plain <svg> with no box of its own to anchor an absolute child to. */
@@ -1352,6 +1329,41 @@ nav {
   flex: 1;
   min-width: 0;
   padding: 0;
+  position: relative;
+}
+
+/* Quests.jsx's flat card layout: a stretched-link overlay covers the whole
+   card for the "view details" action, while .quest-row-content's real
+   content (notably the org avatar link) sits visually on top and stays
+   independently clickable — org/Dashboard.jsx's own quest list still uses
+   the older button.quest-card-head shape above, untouched. */
+.quest-card-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  border-radius: inherit;
+  cursor: pointer;
+}
+.quest-row-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  pointer-events: none;
+}
+/* Only the avatar link re-enables pointer-events — everything else in the
+   row (title, tap hint) stays click-through so a tap there reaches
+   .quest-card-overlay underneath instead of hitting dead, non-interactive
+   text. */
+.quest-row-content .quest-thumb {
+  pointer-events: auto;
 }
 
 .quest-card-head {
@@ -1383,12 +1395,16 @@ button.quest-card-head:hover:not(:disabled) {
 }
 
 .quest-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 48px;
   height: 48px;
   flex: none;
   border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--paper-well);
+  text-decoration: none;
 }
 
 .org-avatar {
@@ -1419,20 +1435,32 @@ button.quest-card-head:hover:not(:disabled) {
   margin: 0;
   color: var(--line);
 }
+.quest-card-description {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--line-soft);
+  margin: 4px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .quest-org-line {
   font-family: var(--font-body);
   font-size: 0.82rem;
   color: var(--line-soft);
   margin-top: 3px;
 }
-.quest-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--brand-green);
-  margin-right: 6px;
-  vertical-align: middle;
+.quest-tap-hint {
+  flex: none;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--line-soft);
+  white-space: nowrap;
 }
 
 .quest-chevron {
@@ -1471,21 +1499,6 @@ button.quest-card-head:hover:not(:disabled) {
 .quest-content-col[data-gated] {
   opacity: 0.6;
 }
-.quest-gate-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-body);
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--line-soft);
-  margin-top: 3px;
-}
-.quest-gate-badge svg {
-  width: 14px;
-  height: 14px;
-}
-
 .side-quest-gate {
   display: flex;
   align-items: flex-start;
@@ -1527,6 +1540,26 @@ button.quest-card-head:hover:not(:disabled) {
 .quest-meta-row svg {
   flex: none;
   color: var(--line-soft);
+}
+
+/* .quest-meta-row doubling as a clickable link/button (location → map,
+   spots → View Attendees, see org/Quests.jsx) — strips the button/anchor
+   chrome the global reset would otherwise add, keeping the same plain-text
+   look with just a hover cue that it's interactive. */
+.quest-meta-link {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+}
+.quest-meta-link:hover:not(:disabled) {
+  color: var(--line);
+  text-decoration: underline;
+  box-shadow: none;
+  transform: none;
 }
 
 .quest-description {
@@ -1597,6 +1630,63 @@ button.quest-card-head:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  text-decoration: none;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
+}
+a.stat-hero-tile:hover {
+  box-shadow: 0 4px 12px var(--shadow);
+  transform: translateY(-1px);
+  opacity: 1;
+}
+
+/* Org Home's greeting + stat-card grid (see org/Home.jsx) — three tiles
+   instead of the admin dashboard's two, so this gets its own responsive
+   grid rather than reusing .stat-hero-row's fixed 2-column layout. */
+.org-home-greeting {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.org-home-greeting h1 {
+  margin: 0 0 6px;
+}
+.org-home-avatar-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  text-decoration: none;
+}
+.org-home-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+  max-width: 720px;
+}
+/* White cards, not the admin dashboard's colored .stat-hero-tile — same
+   number/label typography (.stat-hero-number/.stat-hero-label), just
+   inheriting dark text from .ink-card instead of the colored tiles' white. */
+.org-home-stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-decoration: none;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
+}
+a.org-home-stat-tile:hover {
+  box-shadow: 0 4px 12px var(--shadow);
+  transform: translateY(-1px);
+  opacity: 1;
 }
 .stat-hero-number {
   font-family: var(--font-display);
@@ -1612,40 +1702,21 @@ button.quest-card-head:hover:not(:disabled) {
   opacity: 0.9;
 }
 
-/* org / side-quests segmented toggle (option 1c, mobile only) — "side-quests"
-   are the admin-created neighborhood quests (isDefault), "org" is everything
-   an organization posted itself; see Quests.jsx's segmentedList. */
-.segmented-toggle {
+/* Search + the org/side-quests toggle button share one row (see
+   Quests.jsx) — the search field grows to fill the remaining space next to
+   the fixed-width toggle pill. */
+.quest-search-row {
   display: flex;
-  gap: 0;
-  background: var(--paper-well);
-  border-radius: var(--radius-full);
-  padding: 4px;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 14px;
-  max-width: 640px;
 }
-.segmented-toggle button {
+.quest-search-row .search-field {
   flex: 1;
-  text-align: center;
-  padding: 8px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: none;
-  box-shadow: none;
-  font-family: var(--font-heading);
-  font-weight: 600;
-  font-size: 0.82rem;
-  color: var(--line-soft);
+  max-width: none;
 }
-.segmented-toggle button:hover {
-  transform: none;
-  box-shadow: none;
-}
-.segmented-toggle button[aria-pressed='true'] {
-  background: var(--paper-card);
-  color: var(--line);
-  font-weight: 700;
-  box-shadow: 0 1px 3px var(--shadow);
+.quest-search-row .stamp-btn {
+  flex: none;
 }
 
 .tag-filter-row {
@@ -1691,7 +1762,8 @@ button.quest-card-head:hover:not(:disabled) {
 .events-map-list-pane::-webkit-scrollbar-thumb:hover {
   background: var(--line-soft);
 }
-.tag-filter-row .tag-stamp {
+.tag-filter-row .tag-stamp,
+.tag-filter-row .stamp-btn {
   flex: none;
 }
 
@@ -1797,6 +1869,49 @@ button.quest-card-head:hover:not(:disabled) {
   padding: 7px 13px;
   font-size: 0.82rem;
 }
+
+/* Photo submissions grouped by quest (see PendingPhotoSubmissions.jsx) — a
+   bento-style grid of per-user cards inside each quest's collapsible
+   section. Only the photo itself is a tap target (opens the shared
+   .photo-lightbox-* modal, same as PhotoGallery.jsx) — name/reflection/
+   actions below it are plain, always-visible content. */
+.submission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+.submission-card-name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.submission-thumb-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.submission-thumb-btn:hover:not(:disabled) {
+  box-shadow: none;
+  transform: none;
+  opacity: 0.85;
+}
+.submission-thumb-img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  object-fit: cover;
+  background: var(--paper-well);
+  display: block;
+}
 .data-sublist {
   list-style: none;
   margin: 4px 0 0;
@@ -1809,8 +1924,33 @@ button.quest-card-head:hover:not(:disabled) {
   gap: 4px;
 }
 
+/* Share/Edit/Delete icon trio, top-right of a quest's detail view (see
+   org/Quests.jsx's QuestSeriesDetailPane) — matches the wireframe's three
+   icon buttons rather than full-width text buttons. */
+.quest-detail-icon-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  gap: 8px;
+}
+.quest-icon-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.quest-icon-btn-danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 /* ---------- event QR code (org/admin generate-view-refresh, see
-   QuestSeriesRow.jsx / org/Dashboard.jsx's QuestSeriesDetailPane) ---------- */
+   QuestSeriesRow.jsx / org/Quests.jsx's QuestSeriesDetailPane) ---------- */
 .event-qr-display {
   margin-top: 12px;
   text-align: center;
@@ -1819,6 +1959,56 @@ button.quest-card-head:hover:not(:disabled) {
   max-width: 220px;
   width: 100%;
   border-radius: var(--radius);
+}
+
+/* Delete's dropdown for a recurring series (see org/Quests.jsx) — same
+   floating-menu shape as .bottom-nav-avatar-menu, buttons instead of links. */
+.delete-dropdown-wrap {
+  position: relative;
+  display: inline-block;
+}
+.delete-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--paper-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px var(--shadow);
+}
+.delete-dropdown-menu button {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  box-shadow: none;
+  border-radius: calc(var(--radius) - 4px);
+  text-align: left;
+  color: var(--danger);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.delete-dropdown-menu button:hover {
+  background: var(--accent-soft);
+  transform: none;
+  box-shadow: none;
+}
+
+/* View Attendees / View Reviews expandable sections (see
+   org/Quests.jsx's QuestSeriesDetailPane) — a border between them and the
+   buttons above is the only extra structure needed; the toggle button
+   itself reuses .quest-card-head/.quest-card-titles/.quest-chevron. */
+.quest-expand-section {
+  border-top: 1.5px solid var(--border);
+  margin-top: 12px;
 }
 
 /* ---------- Check In confirmation (see CheckIn.jsx) ---------- */
@@ -1924,14 +2114,8 @@ button.data-row:active:not(:disabled) {
   }
 }
 
-/* ---------- org dashboard: search/filter toolbar, floating create
-   button ---------- */
+/* ---------- org dashboard: floating create button ---------- */
 
-.org-quests-toolbar {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-}
 .search-field {
   max-width: 320px;
   display: flex;
@@ -1957,51 +2141,6 @@ button.data-row:active:not(:disabled) {
   outline: none;
   box-shadow: none;
 }
-.filter-icon-btn {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  flex: none;
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.filter-icon-btn[aria-pressed='true'] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* Anchored to the sticky detail pane (its containing block — position:
-   sticky establishes one same as relative/absolute would), so it stays in
-   view without its own scroll handling. Desktop only; mobile keeps the
-   original inline dashed toggle button instead. */
-.quest-fab {
-  position: absolute;
-  bottom: 24px;
-  right: 24px;
-  z-index: 2;
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-size: 1.8rem;
-  font-weight: 300;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 40%, transparent);
-}
-.quest-fab:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
 .quest-detail-edit-btn {
   position: absolute;
   top: 0;
@@ -2067,8 +2206,47 @@ button.data-row:active:not(:disabled) {
   margin: 0;
   color: var(--line-soft);
 }
-.profile-logout {
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 14px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--line-soft);
+  text-decoration: none;
+}
+.back-link:hover {
+  color: var(--line);
+  opacity: 1;
+}
+.back-link svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.profile-settings-link {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  color: var(--line-soft);
+  flex: none;
+}
+.profile-settings-link:hover {
+  color: var(--line);
+  background: var(--paper-well);
+}
+
+.profile-preview-badges {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .profile-grid {
@@ -2293,24 +2471,6 @@ button.data-row:active:not(:disabled) {
   color: var(--line-soft);
 }
 
-/* ---------- collapsible "create" affordance (org quest form) ---------- */
-
-.quest-create-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 16px;
-  margin-bottom: 16px;
-  font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 1.05rem;
-  border-style: dashed;
-  border-width: 2px;
-  border-color: var(--border);
-}
-
 /* ---------- badges (options 1d/1e) ----------
    Badges have no backend of their own (see @shared/badges.js) — earned,
    in-progress, and undiscovered are all client-computed from real RSVP
@@ -2434,6 +2594,40 @@ button.data-row:active:not(:disabled) {
   height: 100%;
   border-radius: var(--radius-full);
   background: var(--accent);
+}
+
+/* Vertically centers Home's whole content block in the space between
+   #root's own top/bottom padding (24px top, nav-height + 32px bottom — see
+   #root above) instead of it sitting flush at the top of the page. */
+.home-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - var(--nav-height) - 56px);
+}
+
+.home-greeting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 20px 32px;
+  margin-bottom: 16px;
+}
+.home-greeting h1 {
+  margin: 12px 0 0;
+}
+
+.home-progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.home-progress-card .rank-progress-track {
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .rank-milestones {
@@ -2701,9 +2895,9 @@ button.data-row:active:not(:disabled) {
 
 /* Mobile: a genuine two-region split screen, not a scroll-position trick.
    The whole page becomes a fixed-height flex shell filling the strip above
-   the bottom nav (negative margin cancels #root's own padding, same move
-   .mobile-page-header uses elsewhere) — TopBar/banner/map stay put at
-   their natural height, and only .events-map-list-pane (flex:1) scrolls.
+   the bottom nav (negative margin cancels #root's own padding) — TopBar/
+   banner/map stay put at their natural height, and only
+   .events-map-list-pane (flex:1) scrolls.
    This deliberately replaces an earlier position:sticky attempt: Framer
    Motion's PageMotion wrapper (removed from this page) applies a
    persistent inline transform after its mount animation settles, and any

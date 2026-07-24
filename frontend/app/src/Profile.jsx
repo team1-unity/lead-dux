@@ -1,24 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callUpdateInterests, callUpdateAccommodationNeeds, callUpdateOrganizationTags, callUpdateOrganizationProfile } from '@shared/fetch.jsx';
-import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
-import { TagStamp } from '@shared/TagStamp.jsx';
-import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
-import { TrustTag } from '@shared/TrustTag.jsx';
-import { getTrustStatus } from '@shared/questSeries.js';
-import { IconCheck, IconChevron, IconLock } from '@shared/icons.jsx';
-import { INTEREST_OPTIONS } from '@shared/interests.js';
-import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
-import { hashTone } from '@shared/tagTones.js';
+import { groupBySeries, isUpcoming } from '@shared/questSeries.js';
+import { IconCheck, IconChevron, IconLock, IconGear } from '@shared/icons.jsx';
 import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from '@shared/rank.js';
+import { computeBadges } from '@shared/badges.js';
+import { BadgeRing } from '@mobile/Badges.jsx';
 
 // Points/rank/certificateIssued are read straight off the user's own doc
 // (self-readable, see firestore.rules) — no dedicated Cloud Function needed
@@ -27,9 +21,13 @@ import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from '@sha
 // server-side (kept in sync by functions/main.py's _award_points) so it can
 // be queried across users (see list_diamond_users) — see rank.js for why
 // it's still recomputed here too rather than trusted blindly.
+// Collapsed by default (matching the wireframe's chevron) — showing just
+// the rank name so Profile doesn't open with a full page of milestones;
+// expanding reveals the exact same detail this card always rendered.
 function ProgressCard() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -50,422 +48,163 @@ function ProgressCard() {
 
   return (
     <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <h2 style={{ marginBottom: 0 }}>Leadership Progress</h2>
-      <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.4rem', textTransform: 'uppercase' }}>
-        {rank}
-      </p>
-      <p className="data-stat" style={{ marginTop: 4 }}>
-        {points} point{points === 1 ? '' : 's'}
-        {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
-      </p>
-
-      <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
-        <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
-      </div>
-
-      <div className="rank-milestones">
-        {rankOrder.map((name, i) => {
-          const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
-          const tone = name.toLowerCase();
-          return (
-            <div className="rank-milestone" key={name} data-state={state}>
-              <span
-                className="rank-milestone-dot"
-                style={{ '--rank-color': `var(--rank-${tone})`, '--rank-ink': `var(--rank-${tone}-ink)` }}
-              >
-                {state === 'done' && <IconCheck width={14} height={14} />}
-                {state === 'locked' && <IconLock width={14} height={12} />}
-              </span>
-              <span className="rank-milestone-label">{name}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {certificateIssued && (
-        <div className="rank-certificate-banner">
-          <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
-          <Link to="/certificate">
-            <StampButton type="button" variant="primary">View certificate</StampButton>
-          </Link>
+      <button
+        type="button"
+        className="quest-card-head"
+        style={{ padding: 0 }}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <div className="quest-card-titles">
+          <h2 style={{ marginBottom: 0 }}>Leadership Rank</h2>
+          <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.4rem', textTransform: 'uppercase' }}>
+            {rank}
+          </p>
         </div>
+        <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
+      </button>
+
+      {open && (
+        <>
+          <p className="data-stat" style={{ marginTop: 4 }}>
+            {points} point{points === 1 ? '' : 's'}
+            {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
+          </p>
+
+          <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
+            <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
+          </div>
+
+          <div className="rank-milestones">
+            {rankOrder.map((name, i) => {
+              const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
+              const tone = name.toLowerCase();
+              return (
+                <div className="rank-milestone" key={name} data-state={state}>
+                  <span
+                    className="rank-milestone-dot"
+                    style={{ '--rank-color': `var(--rank-${tone})`, '--rank-ink': `var(--rank-${tone}-ink)` }}
+                  >
+                    {state === 'done' && <IconCheck width={14} height={14} />}
+                    {state === 'locked' && <IconLock width={14} height={12} />}
+                  </span>
+                  <span className="rank-milestone-label">{name}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {certificateIssued && (
+            <div className="rank-certificate-banner">
+              <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
+              <Link to="/certificate">
+                <StampButton type="button" variant="primary">View certificate</StampButton>
+              </Link>
+            </div>
+          )}
+        </>
       )}
     </section>
   );
 }
 
-// Lets a "user" change the interests they picked during onboarding —
-// onboarding only ever sets them once, this is the only way back in.
-function InterestsEditor() {
+// A quick glimpse of quests the caller is RSVP'd to — the full list (with
+// cancel/manage actions) still lives on Quests itself; tapping through here
+// just pre-filters that page via ?mine=1 (see Quests.jsx's `mineOnly`)
+// rather than duplicating any of that UI on Profile.
+function RsvpdQuestsPreview() {
   const { user } = useAuth();
-  const [interests, setInterests] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [series, setSeries] = useState(null);
 
   useEffect(() => {
     if (!user) return;
-    getDoc(doc(db, 'users', user.uid)).then((snap) => {
-      setInterests(snap.exists() ? snap.data().interests || [] : []);
+    let cancelled = false;
+    getDocs(query(collection(db, 'quests'), where('rsvpd', 'array-contains', user.uid))).then((snap) => {
+      if (cancelled) return;
+      const quests = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
+      setSeries(groupBySeries(quests));
     });
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  function toggle(interest) {
-    setSaved(false);
-    setInterests((prev) =>
-      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest]
-    );
-  }
-
-  async function save() {
-    setError('');
-    if (interests.length === 0) {
-      setError('Pick at least one interest.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await callUpdateInterests({ interests });
-      setSaved(true);
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (interests === null) return <LoadingSpinner label="Loading interests..." />;
+  if (series === null) return null;
 
   return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <h2 style={{ marginBottom: 0 }}>Interests</h2>
-      <p style={{ margin: 0 }}>These decide which quests show up first for you.</p>
-      <div className="flex flex-wrap gap-sm">
-        {INTEREST_OPTIONS.map((interest) => (
-          <TagStamp
-            key={interest}
-            tone={interest}
-            selectable
-            selected={interests.includes(interest)}
-            onClick={() => toggle(interest)}
-          >
-            {interest}
-          </TagStamp>
-        ))}
+    <section className="ink-card">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 style={{ margin: 0 }}>RSVP&rsquo;d Quests</h2>
+          <p className="data-stat" style={{ marginTop: 4 }}>
+            {series.length === 0 ? 'No upcoming RSVPs yet' : `${series.length} upcoming`}
+          </p>
+        </div>
+        <Link to="/quests?mine=1" aria-label="View all RSVP'd quests">
+          <IconChevron style={{ transform: 'rotate(-90deg)' }} />
+        </Link>
       </div>
-      {error && <p className="box-danger">{error}</p>}
-      <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
-        {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save interests'}
-      </StampButton>
+      {series.length > 0 && (
+        <ul className="data-sublist" style={{ marginTop: 10 }}>
+          {series.slice(0, 3).map((s) => (
+            <li key={s.seriesId}>{s.primary.title}</li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
 
-// Lets a "user" change the accessibility needs and/or location they gave
-// during onboarding — onboarding only ever sets these once, and needs (or
-// where someone lives) can change afterward. Location doubles as the input
-// to the accommodation-based side-quest-limit relaxation check (see
-// rsvp_to_quest), so re-picking it here keeps that check current too, not
-// just the display. Re-picking a place is optional — location fields are
-// only sent to the server when the user actually changes them.
-function AccommodationNeedsEditor() {
+// A quick glimpse of earned badges — the full grid (with in-progress/
+// undiscovered sections) lives on the existing Badges page (see
+// mobile/Badges.jsx, which now exports BadgeRing for this reuse); tapping
+// through here goes straight there rather than re-implementing that page.
+function BadgesPreview() {
   const { user } = useAuth();
-  const [needs, setNeeds] = useState(null);
-  const [location, setLocation] = useState('');
-  const [placeId, setPlaceId] = useState(null);
-  const [lat, setLat] = useState(null);
-  const [lng, setLng] = useState(null);
-  const [locationChanged, setLocationChanged] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [earned, setEarned] = useState(null);
 
   useEffect(() => {
     if (!user) return;
-    getDoc(doc(db, 'users', user.uid)).then((snap) => {
-      const data = snap.exists() ? snap.data() : {};
-      setNeeds(data.accommodationNeeds || []);
-      setLocation(data.location || '');
-      setPlaceId(data.placeId || null);
-      setLat(typeof data.lat === 'number' ? data.lat : null);
-      setLng(typeof data.lng === 'number' ? data.lng : null);
+    let cancelled = false;
+    Promise.all([
+      getDocs(collection(db, 'quests')),
+      getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid))),
+      getDoc(doc(db, 'users', user.uid)),
+    ]).then(([questsSnap, attendanceSnap, userSnap]) => {
+      if (cancelled) return;
+      const questsById = new Map(questsSnap.docs.map((d) => [d.id, d.data()]));
+      const attendance = attendanceSnap.docs.map((d) => d.data());
+      const userData = userSnap.exists() ? userSnap.data() : {};
+      const computed = computeBadges({ attendance, questsById, rank: userData.rank, createdAt: userData.createdAt });
+      setEarned(computed.filter((b) => b.earned));
     });
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  function toggle(value) {
-    setSaved(false);
-    setNeeds((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-    );
-  }
-
-  async function save() {
-    setError('');
-    setSubmitting(true);
-    try {
-      const payload = { accommodationNeeds: needs };
-      if (locationChanged) {
-        payload.location = location;
-        payload.placeId = placeId;
-        payload.lat = lat;
-        payload.lng = lng;
-      }
-      await callUpdateAccommodationNeeds(payload);
-      setLocationChanged(false);
-      setSaved(true);
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (needs === null) return <LoadingSpinner label="Loading accessibility info..." />;
+  if (earned === null) return null;
 
   return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <h2 style={{ marginBottom: 0 }}>Accessibility &amp; Location</h2>
-      <p style={{ margin: 0 }}>
-        Missed this during onboarding, or does it need to change? Update it any time — it&rsquo;s
-        what opens up side quests for you when accessible events nearby run out.
-      </p>
-      <div className="flex flex-wrap gap-sm">
-        {ACCOMMODATION_OPTIONS.map((option) => (
-          <TagStamp
-            key={option.value}
-            selectable
-            selected={needs.includes(option.value)}
-            onClick={() => toggle(option.value)}
-          >
-            {option.label}
-          </TagStamp>
-        ))}
+    <section className="ink-card">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 style={{ margin: 0 }}>All Badges</h2>
+          <p className="data-stat" style={{ marginTop: 4 }}>
+            {earned.length === 0 ? 'No badges earned yet' : `${earned.length} earned`}
+          </p>
+        </div>
+        <Link to="/badges" aria-label="View all badges">
+          <IconChevron style={{ transform: 'rotate(-90deg)' }} />
+        </Link>
       </div>
-      <label>
-        Your neighborhood or city
-        <PlaceAutocompleteInput
-          ariaLabel="Your neighborhood or city"
-          placeholder="Search for a place..."
-          onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat: selectedLat, lng: selectedLng }) => {
-            setLocation(selectedLocation);
-            setPlaceId(selectedPlaceId);
-            setLat(selectedLat);
-            setLng(selectedLng);
-            setLocationChanged(true);
-            setSaved(false);
-          }}
-        />
-        {location && <p className="field-optional">{location}</p>}
-      </label>
-      {error && <p className="box-danger">{error}</p>}
-      <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
-        {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save'}
-      </StampButton>
-    </section>
-  );
-}
-
-// Lets an organization set the location areas and activity/event types it
-// operates in — separate from a single quest's own tags, these describe
-// the org itself (for future browse/filter-by-org features). Lives on
-// Profile (an org's "who we are" info) rather than the Quests dashboard,
-// which is purely quest browsing/management.
-function OrgTags({ org, onSaved }) {
-  const [editing, setEditing] = useState(false);
-  const [ltagInput, setLtagInput] = useState((org.ltag || []).join(', '));
-  const [etagInput, setEtagInput] = useState((org.etag || []).join(', '));
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  async function save(e) {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
-    try {
-      const ltag = ltagInput.split(',').map((t) => t.trim()).filter(Boolean);
-      const etag = etagInput.split(',').map((t) => t.trim()).filter(Boolean);
-      await callUpdateOrganizationTags({ ltag, etag });
-      onSaved({ ltag, etag });
-      setEditing(false);
-    } catch (err) {
-      setError(err.message || 'Something went wrong.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (!editing) {
-    const ltag = org.ltag || [];
-    const etag = org.etag || [];
-    return (
-      <section className="ink-card">
-        <div className="section-heading">
-          <h2 style={{ margin: 0 }}>Locations &amp; Activities</h2>
-          <StampButton type="button" onClick={() => setEditing(true)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
-            Edit
-          </StampButton>
+      {earned.length > 0 && (
+        <div className="profile-preview-badges" style={{ marginTop: 10 }}>
+          {earned.slice(0, 6).map((b) => (
+            <BadgeRing key={b.id} badge={b} size={56} />
+          ))}
         </div>
-        {ltag.length === 0 && etag.length === 0 ? (
-          <p className="data-stat" style={{ margin: '10px 0 0' }}>Not set yet.</p>
-        ) : (
-          <div className="quest-tags" style={{ marginTop: 10 }}>
-            {ltag.map((t) => <TagStamp key={`l-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
-            {etag.map((t) => <TagStamp key={`e-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
-          </div>
-        )}
-      </section>
-    );
-  }
-
-  return (
-    <section className="ink-card">
-      <h2 style={{ marginTop: 0 }}>Locations &amp; Activities</h2>
-      <form onSubmit={save} className="flex flex-col gap-md">
-        <label>
-          Location areas (comma separated)
-          <input value={ltagInput} onChange={(e) => setLtagInput(e.target.value)} placeholder="Downtown, Riverside" />
-        </label>
-        <label>
-          Activity types (comma separated)
-          <input value={etagInput} onChange={(e) => setEtagInput(e.target.value)} placeholder="Cleanup, Workshop" />
-        </label>
-        {error && <p className="box-danger">{error}</p>}
-        <div className="flex gap-sm">
-          <StampButton type="submit" variant="primary" disabled={submitting}>
-            {submitting ? 'Saving...' : 'Save'}
-          </StampButton>
-          <StampButton type="button" onClick={() => setEditing(false)} disabled={submitting}>
-            Cancel
-          </StampButton>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-const SOCIAL_LINK_FIELDS = [
-  { key: 'instagram', label: 'Instagram' },
-  { key: 'facebook', label: 'Facebook' },
-  { key: 'twitter', label: 'X / Twitter' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'tiktok', label: 'TikTok' },
-  { key: 'youtube', label: 'YouTube' },
-];
-
-// Everything an organization's public OrganizationProfile page shows
-// beyond name/reason/location/phone/ltag/etag (all already editable
-// elsewhere) — mission statement, city/state, website, a separate public
-// contact email, a logo URL, and social links. Same view/edit-toggle shape
-// as OrgTags above, just a longer form.
-function OrgProfileEditor({ org, onSaved }) {
-  const [editing, setEditing] = useState(false);
-  const [fields, setFields] = useState({
-    logoUrl: org.logoUrl || '',
-    category: org.category || '',
-    missionStatement: org.missionStatement || '',
-    city: org.city || '',
-    state: org.state || '',
-    website: org.website || '',
-    contactEmail: org.contactEmail || '',
-  });
-  const [social, setSocial] = useState({ ...org.socialLinks });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  async function save(e) {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
-    try {
-      const payload = Object.fromEntries(
-        Object.entries(fields).map(([k, v]) => [k, v.trim() || null]),
-      );
-      await callUpdateOrganizationProfile({ ...payload, socialLinks: social });
-      onSaved({ ...payload, socialLinks: social });
-      setEditing(false);
-    } catch (err) {
-      setError(err.message || 'Something went wrong.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (!editing) {
-    return (
-      <section className="ink-card">
-        <div className="section-heading">
-          <h2 style={{ margin: 0 }}>Public Profile</h2>
-          <StampButton type="button" onClick={() => setEditing(true)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
-            Edit
-          </StampButton>
-        </div>
-        {!org.missionStatement && !org.website && !org.city ? (
-          <p className="data-stat" style={{ margin: '10px 0 0' }}>Not set yet.</p>
-        ) : (
-          <div style={{ marginTop: 10 }}>
-            {org.missionStatement && <p style={{ margin: 0 }}>{org.missionStatement}</p>}
-            {(org.city || org.state) && (
-              <p className="data-stat" style={{ marginTop: 8 }}>{[org.city, org.state].filter(Boolean).join(', ')}</p>
-            )}
-            {org.website && <p className="data-stat">{org.website}</p>}
-          </div>
-        )}
-      </section>
-    );
-  }
-
-  return (
-    <section className="ink-card">
-      <h2 style={{ marginTop: 0 }}>Public Profile</h2>
-      <form onSubmit={save} className="flex flex-col gap-md">
-        <label>
-          Logo URL
-          <input value={fields.logoUrl} onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." />
-        </label>
-        <label>
-          Category
-          <input value={fields.category} onChange={(e) => setFields((f) => ({ ...f, category: e.target.value }))} placeholder="Youth center, sports league, etc." />
-        </label>
-        <label>
-          Mission statement
-          <textarea value={fields.missionStatement} onChange={(e) => setFields((f) => ({ ...f, missionStatement: e.target.value }))} />
-        </label>
-        <label>
-          City
-          <input value={fields.city} onChange={(e) => setFields((f) => ({ ...f, city: e.target.value }))} />
-        </label>
-        <label>
-          State
-          <input value={fields.state} onChange={(e) => setFields((f) => ({ ...f, state: e.target.value }))} />
-        </label>
-        <label>
-          Website
-          <input value={fields.website} onChange={(e) => setFields((f) => ({ ...f, website: e.target.value }))} placeholder="https://..." />
-        </label>
-        <label>
-          Public contact email (optional)
-          <input value={fields.contactEmail} onChange={(e) => setFields((f) => ({ ...f, contactEmail: e.target.value }))} />
-        </label>
-        {SOCIAL_LINK_FIELDS.map(({ key, label }) => (
-          <label key={key}>
-            {label}
-            <input
-              value={social[key] || ''}
-              onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
-              placeholder="https://..."
-            />
-          </label>
-        ))}
-        {error && <p className="box-danger">{error}</p>}
-        <div className="flex gap-sm">
-          <StampButton type="submit" variant="primary" disabled={submitting}>
-            {submitting ? 'Saving...' : 'Save'}
-          </StampButton>
-          <StampButton type="button" onClick={() => setEditing(false)} disabled={submitting}>
-            Cancel
-          </StampButton>
-        </div>
-      </form>
+      )}
     </section>
   );
 }
@@ -483,19 +222,19 @@ function UserAvatar() {
   );
 }
 
-// The "your account" hub: identity, rank progress + interests (role "user"
+// The "your account" hub: identity, rank progress/RSVPs/badges (role "user"
 // only), and wherever the caller stands in the organization-registration
-// flow — plus signing out. Settings, by contrast, is purely display
-// preferences and account deletion; this split keeps "things about me"
-// separate from "things about how the app looks/whether I keep my
-// account." Organizations now sign up directly from the landing page
-// rather than converting from a regular user account, so there's no
-// "become an organization" prompt here anymore — only the four states a
-// caller already in that pipeline (or already an org/admin) can be in.
+// flow. Settings, by contrast, is interests/accessibility, display
+// preferences, account deletion, and now signing out too (see
+// Settings.jsx) — this split keeps "things about me" (who I am, what I've
+// done) separate from "things I'd tweak," reached from here via the gear
+// icon. Organizations now sign up directly from the landing page rather
+// than converting from a regular user account, so there's no "become an
+// organization" prompt here anymore — only the four states a caller
+// already in that pipeline (or already an org/admin) can be in.
 export function Profile() {
-  const { user, role, loading, logout } = useAuth();
+  const { user, role, loading } = useAuth();
   const [name, setName] = useState(null);
-  const [org, setOrg] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -504,35 +243,44 @@ export function Profile() {
     });
   }, [user]);
 
-  // Only an approved 'organization' account has a populated organizations/
-  // doc (About/Locations & Activities) — every other role skips this read.
-  useEffect(() => {
-    if (role !== 'organization' || !user) return;
-    getDoc(doc(db, 'organizations', user.uid)).then((snap) => {
-      if (snap.exists()) setOrg(snap.data());
-    });
-  }, [role, user]);
-
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
 
   return (
     <PageMotion>
-      <div className="ink-card profile-identity">
+      <div className="profile-identity">
         <UserAvatar />
         <div className="profile-identity-info">
           <h1>{name || 'Your profile'}</h1>
           <p className="profile-meta">Signed in as {user.email}</p>
         </div>
-        <StampButton type="button" onClick={logout} className="profile-logout">
-          Log out
-        </StampButton>
+        <Link to="/settings" className="profile-settings-link" aria-label="Settings" title="Settings">
+          <IconGear />
+        </Link>
       </div>
+
+      {role === 'user' && (
+        <div className="flex gap-sm" style={{ marginBottom: 16 }}>
+          {/* No backend support yet for a user renaming/editing their own
+              identity fields (unlike interests/accessibility, which do have
+              one) — placeholder for now, same treatment as Quests' "Sort
+              by" pill, matching the wireframe's button next to Scan QR
+              Code. */}
+          <StampButton type="button" disabled title="Coming soon" style={{ flex: 1 }}>
+            Edit Profile
+          </StampButton>
+          <Link to="/check-in" style={{ flex: 1 }}>
+            <StampButton type="button" style={{ width: '100%' }}>
+              Scan QR Code
+            </StampButton>
+          </Link>
+        </div>
+      )}
 
       <div className="profile-grid">
         {role === 'user' && <ProgressCard />}
-        {role === 'user' && <InterestsEditor />}
-        {role === 'user' && <AccommodationNeedsEditor />}
+        {role === 'user' && <RsvpdQuestsPreview />}
+        {role === 'user' && <BadgesPreview />}
 
         {role !== 'user' && (
           <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -563,7 +311,7 @@ export function Profile() {
                   <StatusStamp tone="education">APPROVED</StatusStamp>
                   <p style={{ margin: '8px 0 0' }}>You already manage an organization.</p>
                 </div>
-                <Link to="/org" aria-label="Go to your organization dashboard">
+                <Link to="/org" aria-label="Go to your organization home">
                   <IconChevron style={{ transform: 'rotate(-90deg)' }} />
                 </Link>
               </div>
@@ -578,28 +326,6 @@ export function Profile() {
               </div>
             )}
           </section>
-        )}
-
-        {role === 'organization' && org && (
-          <>
-            <section className="ink-card">
-              <div className="flex items-center gap-sm">
-                <h2 style={{ margin: 0 }}>About</h2>
-                <TrustTag status={getTrustStatus(org.reviewCount || 0, org.avgRating || 0)} />
-              </div>
-              {getTrustStatus(org.reviewCount || 0, org.avgRating || 0) === 'under_review' && (
-                <p className="box-danger" style={{ marginTop: 10 }}>
-                  Your ratings have fallen low enough that your organization is under review. Improve your Trust
-                  Score by delivering the experience your quests describe — an admin may also reach out.
-                </p>
-              )}
-              <p style={{ margin: '10px 0 0' }}>{org.reason}</p>
-              <p className="data-stat" style={{ marginTop: 10 }}>{org.location}</p>
-              <p className="data-stat">{org.phone}</p>
-            </section>
-            <OrgTags org={org} onSaved={(t) => setOrg((prev) => ({ ...prev, ...t }))} />
-            <OrgProfileEditor org={org} onSaved={(t) => setOrg((prev) => ({ ...prev, ...t }))} />
-          </>
         )}
       </div>
     </PageMotion>

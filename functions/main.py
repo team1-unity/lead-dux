@@ -503,6 +503,13 @@ def _quest_doc_fields(
         "tier": tier,
         "rsvpd": [],
         "createdAt": firestore.SERVER_TIMESTAMP,
+        # Minted fresh per occurrence (one token per quest doc, not shared
+        # across a series) so an org's QR code is ready to display the
+        # moment a quest exists — see generate_event_qr_code, which still
+        # mints on demand as a fallback for anything created before this
+        # field existed.
+        "qrToken": secrets.token_urlsafe(24),
+        "qrTokenVersion": 0,
     }
 
 

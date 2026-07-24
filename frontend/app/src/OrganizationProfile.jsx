@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
+import { useAuth } from '@shared/AuthContext.jsx';
+import { callUpdateOrganizationTags, callUpdateOrganizationProfile } from '@shared/fetch.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { BackLink } from '@shared/BackLink.jsx';
+import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
@@ -17,6 +21,9 @@ import {
   IconMail,
   IconPhone,
   IconPin,
+  IconChevron,
+  IconEdit,
+  IconGear,
   IconInstagram,
   IconFacebook,
   IconX,
@@ -33,6 +40,124 @@ const SOCIAL_ICONS = {
   tiktok: IconTikTok,
   youtube: IconYouTube,
 };
+
+const SOCIAL_LINK_FIELDS = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'twitter', label: 'X / Twitter' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'tiktok', label: 'TikTok' },
+  { key: 'youtube', label: 'YouTube' },
+];
+
+// One combined edit form for everything in the About section that has a
+// writer — mission statement, category, logo, city/state, website, contact
+// email, social links (callUpdateOrganizationProfile), and location/
+// activity tags (callUpdateOrganizationTags, a separate call since it's a
+// separate backend function, but presented as one save here to match the
+// wireframe's single pencil icon on one About box). `org.reason`/`org.phone`
+// have no writer at all (set once at registration) so they're shown
+// read-only above the form rather than as inputs.
+function AboutEditForm({ org, onSaved, onCancel }) {
+  const [fields, setFields] = useState({
+    logoUrl: org.logoUrl || '',
+    category: org.category || '',
+    missionStatement: org.missionStatement || '',
+    city: org.city || '',
+    state: org.state || '',
+    website: org.website || '',
+    contactEmail: org.contactEmail || '',
+  });
+  const [social, setSocial] = useState({ ...org.socialLinks });
+  const [ltagInput, setLtagInput] = useState((org.ltag || []).join(', '));
+  const [etagInput, setEtagInput] = useState((org.etag || []).join(', '));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const profilePayload = Object.fromEntries(
+        Object.entries(fields).map(([k, v]) => [k, v.trim() || null]),
+      );
+      const ltag = ltagInput.split(',').map((t) => t.trim()).filter(Boolean);
+      const etag = etagInput.split(',').map((t) => t.trim()).filter(Boolean);
+      await Promise.all([
+        callUpdateOrganizationProfile({ ...profilePayload, socialLinks: social }),
+        callUpdateOrganizationTags({ ltag, etag }),
+      ]);
+      onSaved({ ...profilePayload, socialLinks: social, ltag, etag });
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save} className="flex flex-col gap-md">
+      {org.reason && <p className="data-stat" style={{ margin: 0 }}>{org.reason}</p>}
+      {org.phone && <p className="data-stat" style={{ margin: 0 }}>{org.phone}</p>}
+      <label>
+        Logo URL
+        <input value={fields.logoUrl} onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." />
+      </label>
+      <label>
+        Category
+        <input value={fields.category} onChange={(e) => setFields((f) => ({ ...f, category: e.target.value }))} placeholder="Youth center, sports league, etc." />
+      </label>
+      <label>
+        Mission statement
+        <textarea value={fields.missionStatement} onChange={(e) => setFields((f) => ({ ...f, missionStatement: e.target.value }))} />
+      </label>
+      <label>
+        City
+        <input value={fields.city} onChange={(e) => setFields((f) => ({ ...f, city: e.target.value }))} />
+      </label>
+      <label>
+        State
+        <input value={fields.state} onChange={(e) => setFields((f) => ({ ...f, state: e.target.value }))} />
+      </label>
+      <label>
+        Website
+        <input value={fields.website} onChange={(e) => setFields((f) => ({ ...f, website: e.target.value }))} placeholder="https://..." />
+      </label>
+      <label>
+        Public contact email (optional)
+        <input value={fields.contactEmail} onChange={(e) => setFields((f) => ({ ...f, contactEmail: e.target.value }))} />
+      </label>
+      <label>
+        Location areas (comma separated)
+        <input value={ltagInput} onChange={(e) => setLtagInput(e.target.value)} placeholder="Downtown, Riverside" />
+      </label>
+      <label>
+        Activity types (comma separated)
+        <input value={etagInput} onChange={(e) => setEtagInput(e.target.value)} placeholder="Cleanup, Workshop" />
+      </label>
+      {SOCIAL_LINK_FIELDS.map(({ key, label }) => (
+        <label key={key}>
+          {label}
+          <input
+            value={social[key] || ''}
+            onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
+            placeholder="https://..."
+          />
+        </label>
+      ))}
+      {error && <p className="box-danger">{error}</p>}
+      <div className="flex gap-sm">
+        <StampButton type="submit" variant="primary" disabled={submitting}>
+          {submitting ? 'Saving...' : 'Save'}
+        </StampButton>
+        <StampButton type="button" onClick={onCancel} disabled={submitting}>
+          Cancel
+        </StampButton>
+      </div>
+    </form>
+  );
+}
 
 function OrgQuestCard({ series }) {
   const { primary, occurrences } = series;
@@ -62,11 +187,23 @@ function OrgQuestCard({ series }) {
 // firestore.rules) since every field on them is meant to be public once
 // approved; quests are read the same direct-client-query way the main
 // Quests page already reads them.
+//
+// `isOwner` (the signed-in organization viewing its own profile) gets extras
+// a visitor never sees: a pencil on About toggling AboutEditForm (moved here
+// from Profile.jsx — editing now happens on this same page instead of a
+// separate one, and both backend calls it needs — callUpdateOrganizationProfile
+// and callUpdateOrganizationTags — are submitted together as one save) and a
+// compact Active Quests preview linking to the real management page
+// (/org/quests) instead of the full browsable grid, which stays for
+// visitors deciding whether to attend.
 export function OrganizationProfile() {
   const { orgId } = useParams();
+  const { role, user } = useAuth();
+  const isOwner = role === 'organization' && user?.uid === orgId;
   const [org, setOrg] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [seriesList, setSeriesList] = useState(null);
+  const [editingAbout, setEditingAbout] = useState(false);
 
   useEffect(() => {
     getDoc(doc(db, 'organizations', orgId)).then((snap) => {
@@ -96,6 +233,7 @@ export function OrganizationProfile() {
 
   return (
     <PageMotion>
+      {isOwner ? <BackLink to="/org" label="Home" /> : <BackLink to="/quests" label="Quests" />}
       <div className="ink-card org-profile-header">
         {org.logoUrl ? (
           <img src={org.logoUrl} alt="" className="org-profile-logo" />
@@ -122,49 +260,101 @@ export function OrganizationProfile() {
 
       <div className="profile-grid">
         <section className="ink-card">
-          <h2 style={{ marginTop: 0 }}>About</h2>
-          {org.missionStatement && <p style={{ margin: 0 }}>{org.missionStatement}</p>}
-          {org.reason && <p style={{ margin: org.missionStatement ? '10px 0 0' : 0 }}>{org.reason}</p>}
-          {(org.city || org.state) && (
-            <p className="data-stat" style={{ marginTop: 10 }}>
-              <IconPin /> {[org.city, org.state].filter(Boolean).join(', ')}
-            </p>
-          )}
-          {org.website && (
-            <p className="data-stat">
-              <IconGlobe />{' '}
-              <a href={org.website} target="_blank" rel="noreferrer">{org.website}</a>
-            </p>
-          )}
-          {org.contactEmail && (
-            <p className="data-stat">
-              <IconMail /> <a href={`mailto:${org.contactEmail}`}>{org.contactEmail}</a>
-            </p>
-          )}
-          {org.phone && (
-            <p className="data-stat">
-              <IconPhone /> {org.phone}
-            </p>
-          )}
-          {socialEntries.length > 0 && (
-            <div className="org-social-links">
-              {socialEntries.map(([key, url]) => {
-                const Icon = SOCIAL_ICONS[key];
-                if (!Icon) return null;
-                return (
-                  <a key={key} href={url} target="_blank" rel="noreferrer" aria-label={key}>
-                    <Icon />
-                  </a>
-                );
-              })}
-            </div>
+          <div className="flex justify-between items-center">
+            <h2 style={{ margin: 0 }}>About</h2>
+            {isOwner && !editingAbout && (
+              <button
+                type="button"
+                className="quest-icon-btn"
+                onClick={() => setEditingAbout(true)}
+                aria-label="Edit About"
+                title="Edit"
+              >
+                <IconEdit />
+              </button>
+            )}
+          </div>
+          {editingAbout ? (
+            <AboutEditForm
+              org={org}
+              onSaved={(patch) => {
+                setOrg((prev) => ({ ...prev, ...patch }));
+                setEditingAbout(false);
+              }}
+              onCancel={() => setEditingAbout(false)}
+            />
+          ) : (
+            <>
+              {org.missionStatement && <p style={{ margin: '10px 0 0' }}>{org.missionStatement}</p>}
+              {org.reason && <p style={{ margin: '10px 0 0' }}>{org.reason}</p>}
+              {(org.city || org.state) && (
+                <p className="data-stat" style={{ marginTop: 10 }}>
+                  <IconPin /> {[org.city, org.state].filter(Boolean).join(', ')}
+                </p>
+              )}
+              {org.website && (
+                <p className="data-stat">
+                  <IconGlobe />{' '}
+                  <a href={org.website} target="_blank" rel="noreferrer">{org.website}</a>
+                </p>
+              )}
+              {org.contactEmail && (
+                <p className="data-stat">
+                  <IconMail /> <a href={`mailto:${org.contactEmail}`}>{org.contactEmail}</a>
+                </p>
+              )}
+              {org.phone && (
+                <p className="data-stat">
+                  <IconPhone /> {org.phone}
+                </p>
+              )}
+              {socialEntries.length > 0 && (
+                <div className="org-social-links">
+                  {socialEntries.map(([key, url]) => {
+                    const Icon = SOCIAL_ICONS[key];
+                    if (!Icon) return null;
+                    return (
+                      <a key={key} href={url} target="_blank" rel="noreferrer" aria-label={key}>
+                        <Icon />
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+              {((org.ltag || []).length > 0 || (org.etag || []).length > 0) && (
+                <div className="quest-tags" style={{ marginTop: 10 }}>
+                  {(org.ltag || []).map((t) => <TagStamp key={`l-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
+                  {(org.etag || []).map((t) => <TagStamp key={`e-${t}`} tone={hashTone(t)}>{t}</TagStamp>)}
+                </div>
+              )}
+            </>
           )}
         </section>
 
         <section className="ink-card">
-          <h2 style={{ marginTop: 0 }}>Active Quests</h2>
+          <div className="flex justify-between items-center">
+            <h2 style={{ margin: 0 }}>Active Quests</h2>
+            {isOwner && (
+              <Link to="/org/quests" aria-label="Manage your quests">
+                <IconChevron style={{ transform: 'rotate(-90deg)' }} />
+              </Link>
+            )}
+          </div>
           {seriesList === null ? (
             <LoadingSpinner label="Loading quests..." />
+          ) : isOwner ? (
+            <>
+              <p className="data-stat" style={{ marginTop: 10 }}>
+                {seriesList.length === 0 ? 'No active quests right now' : `${seriesList.length} active`}
+              </p>
+              {seriesList.length > 0 && (
+                <ul className="data-sublist" style={{ marginTop: 10 }}>
+                  {seriesList.slice(0, 3).map((series) => (
+                    <li key={series.seriesId}>{series.primary.title}</li>
+                  ))}
+                </ul>
+              )}
+            </>
           ) : seriesList.length === 0 ? (
             <p className="data-stat">No active quests right now.</p>
           ) : (
@@ -178,7 +368,23 @@ export function OrganizationProfile() {
       </div>
 
       <section className="ink-card" style={{ marginTop: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Community Photos</h2>
+        <div className="flex justify-between items-center">
+          <h2 style={{ margin: 0 }}>Community Photos</h2>
+          {isOwner && (
+            <div className="flex gap-sm">
+              {/* No upload/manage backend exists yet for an org's own photo
+                  gallery (org.photos has no writer) — placeholder icons for
+                  now, matching the wireframe's layout, same treatment as
+                  other not-built-yet actions this round. */}
+              <button type="button" className="quest-icon-btn" disabled title="Coming soon">
+                <IconEdit />
+              </button>
+              <button type="button" className="quest-icon-btn" disabled title="Coming soon">
+                <IconGear />
+              </button>
+            </div>
+          )}
+        </div>
         <PhotoGallery photos={org.photos || []} />
       </section>
     </PageMotion>

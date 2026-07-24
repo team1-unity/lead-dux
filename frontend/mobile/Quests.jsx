@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -15,7 +15,13 @@ import {
   callSubmitQuestPhoto,
   callListOrganizationTrustTags,
 } from '@shared/fetch.jsx';
-import { groupBySeries, attachSeriesRatings, attachOrgTrustStatus, formatRecurrence, isUpcoming } from '@shared/questSeries.js';
+import {
+  groupBySeries,
+  attachSeriesRatings,
+  attachOrgTrustStatus,
+  formatRecurrence,
+  isUpcoming,
+} from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
@@ -25,20 +31,34 @@ import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { TrustTag } from '@shared/TrustTag.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
-import { ShareQuestBox } from '@shared/QuestSeriesRow.jsx';
+import { ShareButton } from '@shared/QuestSeriesRow.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
-import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch, IconLock } from '@shared/icons.jsx';
+import {
+  IconCalendar,
+  IconPin,
+  IconUsers,
+  IconCheck,
+  IconAlert,
+  IconSearch,
+  IconLock,
+} from '@shared/icons.jsx';
 
 // Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
 // (isDefault) quests carry a tier; organization quests never do.
-const TIER_LABELS = { iron: 'Iron', bronze: 'Bronze', silver: 'Silver', gold: 'Gold', diamond: 'Diamond' };
+const TIER_LABELS = {
+  iron: 'Iron',
+  bronze: 'Bronze',
+  silver: 'Silver',
+  gold: 'Gold',
+  diamond: 'Diamond',
+};
 const TIER_POINTS = { iron: 10, bronze: 12, silver: 15, gold: 18, diamond: 20 };
 
 function TierBadge({ tier }) {
   if (!tier || !TIER_LABELS[tier]) return null;
   return (
     <span
-      className="quest-tier-badge"
+      className='quest-tier-badge'
       style={{ '--rank-color': `var(--rank-${tier})`, '--rank-ink': `var(--rank-${tier}-ink)` }}
     >
       {TIER_LABELS[tier]} &middot; {TIER_POINTS[tier]} pts
@@ -107,11 +127,11 @@ function QuestReview({ questId }) {
     }
   }
 
-  if (loading) return <LoadingSpinner label="Loading review..." />;
+  if (loading) return <LoadingSpinner label='Loading review...' />;
 
   if (review) {
     return (
-      <div className="ink-card" style={{ marginTop: 12 }}>
+      <div className='ink-card' style={{ marginTop: 12 }}>
         <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
           Your review: {formatStars(review.rating)}
         </p>
@@ -121,7 +141,7 @@ function QuestReview({ questId }) {
   }
 
   return (
-    <form onSubmit={submit} className="ink-card flex flex-col gap-md" style={{ marginTop: 12 }}>
+    <form onSubmit={submit} className='ink-card flex flex-col gap-md' style={{ marginTop: 12 }}>
       <label>
         Rating
         <select value={rating} onChange={(e) => setRating(Number(e.target.value))}>
@@ -134,10 +154,15 @@ function QuestReview({ questId }) {
       </label>
       <label>
         Your review
-        <textarea required value={body} onChange={(e) => setBody(e.target.value)} placeholder="How did it go?" />
+        <textarea
+          required
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder='How did it go?'
+        />
       </label>
-      {error && <p className="box-danger">{error}</p>}
-      <StampButton type="submit" variant="primary" disabled={submitting}>
+      {error && <p className='box-danger'>{error}</p>}
+      <StampButton type='submit' variant='primary' disabled={submitting}>
         {submitting ? 'Submitting...' : 'Submit review'}
       </StampButton>
     </form>
@@ -244,7 +269,12 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
       const ext = EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
       const storagePath = `photoSubmissions/${questId}_${userId}/${Date.now()}.${ext}`;
       await uploadBytes(storageRef(storage, storagePath), file, { contentType: file.type });
-      await callSubmitQuestPhoto({ questId, storagePath, contentType: file.type, reflection: isDefault ? reflection.trim() : undefined });
+      await callSubmitQuestPhoto({
+        questId,
+        storagePath,
+        contentType: file.type,
+        reflection: isDefault ? reflection.trim() : undefined,
+      });
       setFile(null);
       setReflection('');
       setShowCompletionForm(false);
@@ -255,16 +285,16 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
     }
   }
 
-  if (submission === undefined) return <LoadingSpinner label="Loading photo status..." />;
+  if (submission === undefined) return <LoadingSpinner label='Loading photo status...' />;
 
   if (submission && (submission.status === 'pending' || submission.status === 'approved')) {
     return (
-      <div className="ink-card flex flex-col gap-sm" style={{ marginTop: 12 }}>
+      <div className='ink-card flex flex-col gap-sm' style={{ marginTop: 12 }}>
         <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
         {submittedPhotoUrl && (
           <img
             src={submittedPhotoUrl}
-            alt="Your submitted proof"
+            alt='Your submitted proof'
             style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
           />
         )}
@@ -285,9 +315,11 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
   // form directly below) since intent to complete it is already clear.
   if (isDefault && !submission && !showCompletionForm) {
     return (
-      <div className="ink-card flex flex-col gap-sm" style={{ marginTop: 12 }}>
-        <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Complete this side quest</p>
-        <StampButton type="button" variant="primary" onClick={() => setShowCompletionForm(true)}>
+      <div className='ink-card flex flex-col gap-sm' style={{ marginTop: 12 }}>
+        <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
+          Complete this side quest
+        </p>
+        <StampButton type='button' variant='primary' onClick={() => setShowCompletionForm(true)}>
           Mark as complete
         </StampButton>
       </div>
@@ -295,7 +327,7 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
   }
 
   return (
-    <form onSubmit={submit} className="ink-card flex flex-col gap-md" style={{ marginTop: 12 }}>
+    <form onSubmit={submit} className='ink-card flex flex-col gap-md' style={{ marginTop: 12 }}>
       <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
         {isDefault ? 'Reflection & photo' : 'Proof photo'}
       </p>
@@ -304,12 +336,12 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
           {submittedPhotoUrl && (
             <img
               src={submittedPhotoUrl}
-              alt="Your rejected submission"
+              alt='Your rejected submission'
               style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
             />
           )}
           {submission.reflection && <p style={{ margin: 0 }}>{submission.reflection}</p>}
-          <StatusStamp tone="rejected">Rejected</StatusStamp>
+          <StatusStamp tone='rejected'>Rejected</StatusStamp>
           {submission.rejectionReason && <p style={{ margin: 0 }}>{submission.rejectionReason}</p>}
         </>
       )}
@@ -320,23 +352,31 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
             required
             value={reflection}
             onChange={(e) => setReflection(e.target.value)}
-            placeholder="What did you do, and how did it go?"
+            placeholder='What did you do, and how did it go?'
           />
         </label>
       )}
       <label>
         {submission?.status === 'rejected' ? 'Submit a new photo' : 'Upload a photo'}
         <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          type='file'
+          accept='image/jpeg,image/png,image/webp,image/heic,image/heif'
           onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
       </label>
       {localPreviewUrl && (
-        <img src={localPreviewUrl} alt="Selected photo preview" style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }} />
+        <img
+          src={localPreviewUrl}
+          alt='Selected photo preview'
+          style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
+        />
       )}
-      {error && <p className="box-danger">{error}</p>}
-      <StampButton type="submit" variant="primary" disabled={!file || uploading || (isDefault && !reflection.trim())}>
+      {error && <p className='box-danger'>{error}</p>}
+      <StampButton
+        type='submit'
+        variant='primary'
+        disabled={!file || uploading || (isDefault && !reflection.trim())}
+      >
         {uploading ? 'Uploading...' : isDefault ? 'Submit completion' : 'Submit photo'}
       </StampButton>
     </form>
@@ -373,11 +413,11 @@ function QuestReviewsList({ questId }) {
     };
   }, [questId]);
 
-  if (loading) return <LoadingSpinner label="Loading reviews..." />;
-  if (error) return <p className="box-danger">{error}</p>;
+  if (loading) return <LoadingSpinner label='Loading reviews...' />;
+  if (error) return <p className='box-danger'>{error}</p>;
 
   return (
-    <ul className="data-sublist" style={{ marginTop: 12 }}>
+    <ul className='data-sublist' style={{ marginTop: 12 }}>
       {reviews.length === 0 && <li>No reviews yet.</li>}
       {reviews.map((r) => (
         <li key={`${r.uid}-${r.eventDate}`}>
@@ -410,7 +450,6 @@ export function QuestDetailBody({
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
   const [showReview, setShowReview] = useState(false);
   const [showReviewsList, setShowReviewsList] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
   const reduce = useReducedMotion();
 
   // Reset to the first occurrence and collapse any open sub-panels whenever
@@ -420,7 +459,6 @@ export function QuestDetailBody({
     setSelectedId(occurrences[0].id);
     setShowReview(false);
     setShowReviewsList(false);
-    setShareOpen(false);
   }, [series.seriesId]);
 
   const selected = occurrences.find((o) => o.id === selectedId) || occurrences[0];
@@ -429,12 +467,14 @@ export function QuestDetailBody({
   const isFull = selected.capacity != null && rsvpCount >= selected.capacity && !isRsvpd;
 
   return (
-    <div className="quest-card-body">
+    <div className='quest-card-body'>
       {showTitle && (
         <div>
-          <p className="quest-title" style={{ fontSize: '1.25rem' }}>{primary.title}</p>
+          <p className='quest-title' style={{ fontSize: '1.25rem' }}>
+            {primary.title}
+          </p>
           {primary.orgName && (
-            <p className="quest-org-line flex items-center gap-sm" style={{ flexWrap: 'wrap' }}>
+            <p className='quest-org-line flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
               {primary.orgId ? (
                 <Link to={`/organizations/${primary.orgId}`}>{primary.orgName}</Link>
               ) : (
@@ -446,12 +486,12 @@ export function QuestDetailBody({
         </div>
       )}
       {series.orgTrustStatus === 'under_review' && (
-        <p className="box-danger">
-          This organization is under review for consistently low ratings — its Trust Score has not yet been
-          confirmed.
+        <p className='box-danger'>
+          This organization is under review for consistently low ratings — its Trust Score has not
+          yet been confirmed.
         </p>
       )}
-      {formatRecurrence(primary) && <p className="quest-org-line">{formatRecurrence(primary)}</p>}
+      {formatRecurrence(primary) && <p className='quest-org-line'>{formatRecurrence(primary)}</p>}
       {occurrences.length > 1 ? (
         <label>
           Date
@@ -464,7 +504,10 @@ export function QuestDetailBody({
             }}
           >
             {occurrences.map((o) => {
-              const full = o.capacity != null && (o.rsvpd || []).length >= o.capacity && !(o.rsvpd || []).includes(userId);
+              const full =
+                o.capacity != null &&
+                (o.rsvpd || []).length >= o.capacity &&
+                !(o.rsvpd || []).includes(userId);
               return (
                 <option key={o.id} value={o.id}>
                   {formatEventDate(o.eventDate)}
@@ -477,23 +520,24 @@ export function QuestDetailBody({
         </label>
       ) : (
         formatEventDate(selected.eventDate) && (
-          <p className="quest-meta-row">
+          <p className='quest-meta-row'>
             <IconCalendar /> {formatEventDate(selected.eventDate)}
           </p>
         )
       )}
       {selected.location && (
-        <p className="quest-meta-row">
+        <p className='quest-meta-row'>
           <IconPin /> {selected.location}
         </p>
       )}
-      <p className="quest-meta-row">
-        <IconUsers /> {selected.capacity
+      <p className='quest-meta-row'>
+        <IconUsers />{' '}
+        {selected.capacity
           ? `${rsvpCount} / ${selected.capacity} spots filled`
           : `${rsvpCount} ${primary.isDefault ? 'accepted' : "RSVP'd"}`}
       </p>
-      <p className="quest-description">{primary.description}</p>
-      <div className="quest-tags">
+      <p className='quest-description'>{primary.description}</p>
+      <div className='quest-tags'>
         {primary.isDefault && <TierBadge tier={primary.tier} />}
         {(primary.tags || []).map((tag) => (
           <TagStamp key={tag} tone={tag}>
@@ -506,16 +550,20 @@ export function QuestDetailBody({
           quests — see accommodationTags' required-field validation in
           create_quest. */}
       {!primary.isDefault && (
-        <div className="ink-card" style={{ marginTop: 8 }}>
-          <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Accessibility</p>
+        <div className='ink-card' style={{ marginTop: 8 }}>
+          <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
+            Accessibility
+          </p>
           {(primary.accommodationTags || []).length > 0 ? (
             <>
-              <ul className="data-sublist" style={{ marginTop: 6 }}>
+              <ul className='data-sublist' style={{ marginTop: 6 }}>
                 {primary.accommodationTags.map((tag) => (
                   <li key={tag}>{accommodationLabel(tag)}</li>
                 ))}
               </ul>
-              {primary.accommodationDetails && <p style={{ margin: '6px 0 0' }}>{primary.accommodationDetails}</p>}
+              {primary.accommodationDetails && (
+                <p style={{ margin: '6px 0 0' }}>{primary.accommodationDetails}</p>
+              )}
             </>
           ) : (
             <p style={{ margin: '6px 0 0' }}>Accessibility information not yet provided.</p>
@@ -523,14 +571,14 @@ export function QuestDetailBody({
         </div>
       )}
       {gate && (
-        <p className="side-quest-gate" id={`${selected.id}-gate`} role="status">
+        <p className='side-quest-gate' id={`${selected.id}-gate`} role='status'>
           <IconLock /> {gate.message}
         </p>
       )}
-      <div className="quest-actions">
+      <div className='quest-actions'>
         {canRsvp && (
           <StampButton
-            type="button"
+            type='button'
             variant={isRsvpd ? 'danger' : 'primary'}
             onClick={() => onToggleRsvp(selected)}
             disabled={busyId === selected.id || isFull || !!gate}
@@ -539,28 +587,34 @@ export function QuestDetailBody({
             {busyId === selected.id
               ? 'Saving...'
               : gate
-                ? (gate.type === 'locked' ? 'Locked' : 'Limit reached')
+                ? gate.type === 'locked'
+                  ? 'Locked'
+                  : 'Limit reached'
                 : isFull
                   ? 'Full'
                   : isRsvpd
-                    ? (primary.isDefault ? 'Leave quest' : 'Cancel RSVP')
-                    : (primary.isDefault ? 'Accept Quest' : 'RSVP')}
+                    ? primary.isDefault
+                      ? 'Leave quest'
+                      : 'Cancel RSVP'
+                    : primary.isDefault
+                      ? 'Accept Quest'
+                      : 'RSVP'}
           </StampButton>
         )}
         {gate && onGoToOrgQuests && (
-          <StampButton type="button" variant="primary" onClick={onGoToOrgQuests}>
+          <StampButton type='button' variant='primary' onClick={onGoToOrgQuests}>
             View organization quests
           </StampButton>
         )}
         {!canRsvp && onGuestRsvp && (
-          <StampButton type="button" variant="primary" onClick={onGuestRsvp}>
+          <StampButton type='button' variant='primary' onClick={onGuestRsvp}>
             {primary.isDefault ? 'Accept Quest' : 'RSVP'}
           </StampButton>
         )}
         <AnimatePresence>
           {canRsvp && isRsvpd && busyId !== selected.id && (
             <motion.span
-              className="quest-rsvp-confirm"
+              className='quest-rsvp-confirm'
               initial={reduce ? false : { opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={reduce ? undefined : { opacity: 0 }}
@@ -574,28 +628,27 @@ export function QuestDetailBody({
             concepts — side quests have no organization to review, and no
             individual event worth its own shareable link or calendar entry. */}
         {!primary.isDefault && canRsvp && isRsvpd && (
-          <StampButton type="button" onClick={() => setShowReview((v) => !v)}>
+          <StampButton type='button' onClick={() => setShowReview((v) => !v)}>
             {showReview ? 'Hide review' : 'Leave a review'}
           </StampButton>
         )}
         {!primary.isDefault && (
-          <StampButton type="button" onClick={() => setShowReviewsList((v) => !v)}>
+          <StampButton type='button' onClick={() => setShowReviewsList((v) => !v)}>
             {showReviewsList ? 'Hide reviews' : 'View reviews'}
           </StampButton>
         )}
-        {!primary.isDefault && (
-          <StampButton type="button" onClick={() => setShareOpen((v) => !v)}>
-            {shareOpen ? 'Hide share link' : 'Share quest'}
-          </StampButton>
-        )}
+        {!primary.isDefault && <ShareButton seriesId={primary.seriesId} />}
         {!primary.isDefault && <AddToCalendar quest={selected} />}
       </div>
       {!primary.isDefault && isRsvpd && showReview && <QuestReview questId={selected.id} />}
       {canRsvp && isRsvpd && (
-        <QuestPhotoSubmission questId={selected.id} userId={userId} isDefault={!!primary.isDefault} />
+        <QuestPhotoSubmission
+          questId={selected.id}
+          userId={userId}
+          isDefault={!!primary.isDefault}
+        />
       )}
       {!primary.isDefault && showReviewsList && <QuestReviewsList questId={selected.id} />}
-      {!primary.isDefault && shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
     </div>
   );
 }
@@ -603,54 +656,55 @@ export function QuestDetailBody({
 // One row per series (not per date) — a recurring quest with 8 scheduled
 // occurrences shows as a single row with a date picker inside its detail,
 // rather than flooding the list with 8 near-duplicate entries. RSVP only
-// happens once expanded (QuestDetailBody) — there's no quick-accept action
-// on the collapsed card.
-function QuestRow({ series, isLast, isOpen, isActive, gate, onSelect, children }) {
-  const { primary, occurrences } = series;
+// happens once opened (QuestDetailBody) — there's no quick-accept action on
+// the collapsed card. Desktop selects the row into the adjacent
+// quest-detail-pane (see Quests below); mobile instead navigates to the
+// standalone /quests/:seriesId page (QuestDetails.jsx, same QuestDetailBody)
+// — a tap hint replaces the chevron there since nothing expands in place
+// anymore, so there's no other cue the card is tappable. Flat card (no
+// timeline/thread column — that stays reserved for org/Quests.jsx's own
+// quest list, which still uses it) with the org avatar inline; the avatar is
+// its own independent tap target straight to /organizations/:orgId, while a
+// stretched-link overlay button handles the rest of the card so the two
+// don't conflict (see .quest-card-overlay/.quest-row-content in style.css).
+// Side quests have no orgId, so their avatar is just decorative.
+function QuestRow({ series, isDesktop, isActive, gate, onSelect }) {
+  const { primary } = series;
 
   return (
-    <motion.li className="quest-row" variants={itemVariants}>
-      <div className="quest-node-col">
-        <div className="quest-thumb">
-          <OrgAvatar name={primary.orgName} seed={primary.orgId || series.seriesId} />
-        </div>
-        {!isLast && <div className="quest-thread" />}
-      </div>
-
-      <div className="ink-card quest-content-col" data-active={isActive ? 'true' : undefined} data-gated={gate?.type}>
-        <button type="button" className="quest-card-head" onClick={onSelect} aria-expanded={isOpen || isActive}>
-          <div className="quest-card-titles">
-            <p className="quest-title">{primary.title}</p>
-            {primary.orgName && (
-              <p className="quest-org-line flex items-center gap-sm" style={{ flexWrap: 'wrap' }}>
-                <span>{primary.orgName}</span>
-                <TrustTag status={series.orgTrustStatus} />
-              </p>
-            )}
-            {primary.isDefault && primary.tier && (
-              <p className="quest-org-line"><TierBadge tier={primary.tier} /></p>
-            )}
-            {gate && (
-              <p className="quest-gate-badge">
-                <IconLock /> {gate.type === 'locked' ? 'Locked' : 'Side quest limit reached'}
-              </p>
-            )}
-            {primary.location && (
-              <p className="quest-org-line">
-                <span className="quest-dot" aria-hidden="true" />
-                {primary.location}
-              </p>
-            )}
-            {series.reviewCount > 0 && (
-              <p className="quest-org-line">
-                {formatStars(series.avgRating)} ({series.reviewCount})
-              </p>
-            )}
-            {occurrences.length > 1 && <p className="quest-org-line">{occurrences.length} upcoming dates</p>}
+    <motion.li className='quest-row' variants={itemVariants}>
+      <div
+        className='ink-card quest-content-col'
+        data-active={isActive ? 'true' : undefined}
+        data-gated={gate?.type}
+      >
+        <button
+          type='button'
+          className='quest-card-overlay'
+          onClick={onSelect}
+          aria-expanded={isDesktop ? isActive : undefined}
+          aria-label={`View ${primary.title} details`}
+        />
+        <div className='quest-row-content'>
+          {primary.orgId ? (
+            <Link
+              to={`/organizations/${primary.orgId}`}
+              className='quest-thumb'
+              aria-label={`View ${primary.orgName || 'organization'}'s profile`}
+            >
+              <OrgAvatar name={primary.orgName} seed={primary.orgId} />
+            </Link>
+          ) : (
+            <span className='quest-thumb' aria-hidden='true'>
+              <OrgAvatar name={primary.orgName} seed={series.seriesId} />
+            </span>
+          )}
+          <div className='quest-card-titles'>
+            <p className='quest-title'>{primary.title}</p>
+            {primary.description && <p className='quest-card-description'>{primary.description}</p>}
           </div>
-          <IconChevron className="quest-chevron" data-open={isOpen ? 'true' : 'false'} />
-        </button>
-        {isOpen && children}
+          {!isDesktop && <span className='quest-tap-hint'>→</span>}
+        </div>
       </div>
     </motion.li>
   );
@@ -701,6 +755,13 @@ function sideQuestGate(primary, status) {
 
 export function Quests({ interests, name, recommendedQuestOrder }) {
   const { user, role } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Destination for Profile's "RSVP'd Quests" preview (see Profile.jsx) —
+  // shows only series the caller is RSVP'd to at least one occurrence of,
+  // bypassing the org/side-quests segmented toggle entirely rather than
+  // adding a third segment to it.
+  const mineOnly = searchParams.get('mine') === '1';
   const [seriesList, setSeriesList] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -727,7 +788,10 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         const trustStatusByOrgId = new Map(trustTags.map((t) => [t.orgId, t.trustStatus]));
-        const grouped = attachOrgTrustStatus(attachSeriesRatings(groupBySeries(all), seriesDocsById), trustStatusByOrgId);
+        const grouped = attachOrgTrustStatus(
+          attachSeriesRatings(groupBySeries(all), seriesDocsById),
+          trustStatusByOrgId,
+        );
         grouped.sort((a, b) => {
           // Organization quests only — AI ranking is generated server-side
           // from interests/experience/volunteer history, see
@@ -762,7 +826,9 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   const [sideQuestStatus, setSideQuestStatus] = useState(null);
   function loadSideQuestStatus() {
     if (role !== 'user') return;
-    callGetSideQuestStatus().then(setSideQuestStatus).catch(() => {});
+    callGetSideQuestStatus()
+      .then(setSideQuestStatus)
+      .catch(() => {});
   }
   useEffect(loadSideQuestStatus, [role]);
 
@@ -793,8 +859,15 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   // other by construction, never both.
   const segmentedList = useMemo(() => {
     if (!seriesList) return [];
-    return seriesList.filter((s) => (segment === 'side-quests' ? s.primary.isDefault : !s.primary.isDefault));
-  }, [seriesList, segment]);
+    if (mineOnly) {
+      return seriesList.filter((s) =>
+        s.occurrences.some((o) => (o.rsvpd || []).includes(user?.uid)),
+      );
+    }
+    return seriesList.filter((s) =>
+      segment === 'side-quests' ? s.primary.isDefault : !s.primary.isDefault,
+    );
+  }, [seriesList, segment, mineOnly, user]);
 
   const availableTags = useMemo(() => {
     const seen = new Set();
@@ -815,27 +888,27 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
     return list;
   }, [segmentedList, activeTag, search]);
 
-  const activeSeriesId = isDesktop ? openSeriesId ?? visibleSeries[0]?.seriesId ?? null : openSeriesId;
+  const activeSeriesId = isDesktop ? (openSeriesId ?? visibleSeries[0]?.seriesId ?? null) : null;
   const activeSeries = visibleSeries.find((s) => s.seriesId === activeSeriesId) || null;
 
   if (loadError) {
     return (
-      <div className="ink-card quest-empty quest-error">
+      <div className='ink-card quest-empty quest-error'>
         <IconAlert />
         <h2>Couldn't load quests</h2>
         <p>{loadError}</p>
-        <StampButton type="button" variant="primary" onClick={load} style={{ marginTop: 8 }}>
+        <StampButton type='button' variant='primary' onClick={load} style={{ marginTop: 8 }}>
           Try again
         </StampButton>
       </div>
     );
   }
 
-  if (!seriesList) return <LoadingSpinner label="Loading quests..." />;
+  if (!seriesList) return <LoadingSpinner label='Loading quests...' />;
 
   if (seriesList.length === 0) {
     return (
-      <div className="quest-empty">
+      <div className='quest-empty'>
         <DuckMark size={96} />
         <h2>No quests yet</h2>
         <p>Check back soon — organizations are just getting started.</p>
@@ -847,105 +920,116 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
 
   return (
     <div className={isDesktop ? 'quest-feed-layout' : undefined}>
-      <div className="quest-feed-main">
-        <div className="quest-feed-greeting">
-          <h1>{firstName ? `Hi, ${firstName}` : 'Quests near you'}</h1>
-          <p>
-            {seriesList.length} quest{seriesList.length === 1 ? '' : 's'} open — here's what's happening nearby.
-          </p>
+      <div className='quest-feed-main'>
+        <div className='quest-feed-greeting'>
+          <h1>{mineOnly ? "Your RSVP'd quests" : `Explore Quests`}</h1>
+          {/* {!mineOnly && (
+            <p>
+              {seriesList.length} quest{seriesList.length === 1 ? '' : 's'} open — here's what's
+              happening nearby.
+            </p>
+          )} */}
         </div>
 
         {role === 'admin' && (
-          <div className="stat-hero-row">
-            <div className="stat-hero-tile" style={{ background: 'var(--brand-green)' }}>
-              <span className="stat-hero-number">{seriesList.length}</span>
-              <span className="stat-hero-label">Quests Open</span>
+          <div className='stat-hero-row'>
+            <div className='stat-hero-tile' style={{ background: 'var(--brand-green)' }}>
+              <span className='stat-hero-number'>{seriesList.length}</span>
+              <span className='stat-hero-label'>Quests Open</span>
             </div>
-            <div className="stat-hero-tile" style={{ background: 'var(--brand-blue)' }}>
-              <span className="stat-hero-number">{orgCount}</span>
-              <span className="stat-hero-label">Organizations</span>
+            <div className='stat-hero-tile' style={{ background: 'var(--brand-blue)' }}>
+              <span className='stat-hero-number'>{orgCount}</span>
+              <span className='stat-hero-label'>Organizations</span>
             </div>
           </div>
         )}
 
-        <div className="segmented-toggle" role="tablist" aria-label="Quest source">
-          <button
-            type="button"
-            role="tab"
-            aria-pressed={segment === 'org'}
-            onClick={() => {
-              setSegment('org');
-              setActiveTag(null);
-            }}
-          >
-            org
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-pressed={segment === 'side-quests'}
-            onClick={() => {
-              setSegment('side-quests');
-              setActiveTag(null);
-            }}
-          >
-            side-quests
-          </button>
-        </div>
-        <div className="search-field" style={{ maxWidth: 640, marginBottom: 14 }}>
-          <IconSearch />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search"
-            aria-label="Search quests"
-          />
+        <div className='quest-search-row'>
+          <div className='search-field'>
+            <IconSearch />
+            <input
+              type='search'
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder='Search'
+              aria-label='Search quests'
+            />
+          </div>
+          {/* The org/side-quests switch (previously a two-option segmented
+              tab) is now a single toggle pill whose label names the OTHER
+              view, matching the wireframe's one "Side Quest" button. */}
+          {!mineOnly && (
+            <StampButton
+              type='button'
+              onClick={() => {
+                setSegment((s) => (s === 'org' ? 'side-quests' : 'org'));
+                setActiveTag(null);
+              }}
+            >
+              {segment === 'org' ? 'Side Quest' : 'Quests'}
+            </StampButton>
+          )}
         </div>
 
-        {availableTags.length > 0 && (
-          <div className="tag-filter-row">
-            <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
-              All
-            </TagStamp>
-            {availableTags.map((tag) => (
-              <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
-                {tag}
-              </TagStamp>
-            ))}
+        {/* "Sort by" has no real sort behavior wired up yet (the list is
+            relevance/AI-ranked — see the sort in load() above) — this is a
+            placeholder slot for the wireframe's pill, disabled rather than
+            pretending to do something it doesn't. It shares a row with the
+            tag chips, matching the wireframe's single filter-pill line. */}
+        {!mineOnly && (
+          <div className='tag-filter-row'>
+            <StampButton type='button' disabled title='Coming soon'>
+              Sort by
+            </StampButton>
+            {availableTags.length > 0 && (
+              <>
+                <TagStamp
+                  selectable
+                  selected={activeTag === null}
+                  onClick={() => setActiveTag(null)}
+                >
+                  All
+                </TagStamp>
+                {availableTags.map((tag) => (
+                  <TagStamp
+                    key={tag}
+                    tone={tag}
+                    selectable
+                    selected={activeTag === tag}
+                    onClick={() => setActiveTag(tag)}
+                  >
+                    {tag}
+                  </TagStamp>
+                ))}
+              </>
+            )}
           </div>
         )}
 
         {visibleSeries.length === 0 ? (
           <p>No quests match that filter.</p>
         ) : (
-          <motion.ul className="quest-list" variants={listVariants} initial={reduce ? false : 'hidden'} animate="show">
-            {visibleSeries.map((series, i) => {
+          <motion.ul
+            className='quest-list'
+            variants={listVariants}
+            initial={reduce ? false : 'hidden'}
+            animate='show'
+          >
+            {visibleSeries.map((series) => {
               const gate = sideQuestGate(series.primary, sideQuestStatus);
               return (
                 <QuestRow
                   key={series.seriesId}
                   series={series}
-                  isLast={i === visibleSeries.length - 1}
-                  isOpen={!isDesktop && openSeriesId === series.seriesId}
+                  isDesktop={isDesktop}
                   isActive={isDesktop && activeSeriesId === series.seriesId}
                   gate={gate}
                   onSelect={() =>
-                    setOpenSeriesId(!isDesktop && openSeriesId === series.seriesId ? null : series.seriesId)
+                    isDesktop
+                      ? setOpenSeriesId(series.seriesId)
+                      : navigate(`/quests/${series.seriesId}`)
                   }
-                >
-                  {!isDesktop && openSeriesId === series.seriesId && (
-                    <QuestDetailBody
-                      series={series}
-                      userId={user?.uid}
-                      canRsvp={role === 'user'}
-                      busyId={busyId}
-                      onToggleRsvp={toggleRsvp}
-                      gate={gate}
-                      onGoToOrgQuests={() => setSegment('org')}
-                    />
-                  )}
-                </QuestRow>
+                />
               );
             })}
           </motion.ul>
@@ -953,7 +1037,7 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
       </div>
 
       {isDesktop && (
-        <div className="ink-card quest-detail-pane">
+        <div className='ink-card quest-detail-pane'>
           {activeSeries ? (
             <QuestDetailBody
               series={activeSeries}
@@ -966,7 +1050,7 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
               showTitle
             />
           ) : (
-            <div className="quest-detail-empty">
+            <div className='quest-detail-empty'>
               <DuckMark size={56} />
               <p>Select a quest to see its details.</p>
             </div>

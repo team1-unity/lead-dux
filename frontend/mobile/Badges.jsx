@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { BackLink } from '@shared/BackLink.jsx';
+import { TopBar } from '@shared/TopBar.jsx';
 import { callMarkBadgesSeen } from '@shared/fetch.jsx';
 import { computeBadges, getLocallySeenBadgeIds, markBadgesSeenLocally } from '@shared/badges.js';
 import { badgeSpritePosition } from '@shared/badgeSprite.js';
 import { hashTone } from '@shared/tagTones.js';
-import { getInitials } from '@shared/initials.js';
 import { IconLock } from '@shared/icons.jsx';
 
 // A single badge's ring — earned (tag-tinted fill + its sprite icon),
@@ -20,7 +20,7 @@ import { IconLock } from '@shared/icons.jsx';
 // screen reader user still needs to know what each circle means.
 // `isNew` draws a small ribbon for a badge earned since the last visit —
 // see Badges.jsx's seen-tracking effect.
-function BadgeRing({ badge, size, locked = false, isNew = false }) {
+export function BadgeRing({ badge, size, locked = false, isNew = false }) {
   const tone = badge.tone || hashTone(badge.id);
   const state = locked ? 'locked' : badge.earned ? 'earned' : 'in-progress';
   const style = {
@@ -44,31 +44,10 @@ function BadgeRing({ badge, size, locked = false, isNew = false }) {
   );
 }
 
-// A compact white header bar (title + circular avatar) rather than the
-// plain page-greeting other mobile screens use — matches the reference
-// look for this screen specifically. The negative margin pulls it flush to
-// the viewport edges, undoing #root's own padding just for this bar.
-function BadgesMobileHeader({ displayName }) {
-  return (
-    <div className="mobile-page-header">
-      <h1>Badges</h1>
-      <Link
-        to="/profile"
-        className="nav-avatar"
-        aria-label="Profile"
-        title="Profile"
-        style={{ width: 36, height: 36, fontSize: '0.78rem' }}
-      >
-        {getInitials(displayName)}
-      </Link>
-    </div>
-  );
-}
-
-function BadgesMobile({ earned, inProgress, undiscovered, displayName, newIds }) {
+function BadgesMobile({ earned, inProgress, undiscovered, newIds }) {
   return (
     <>
-      <BadgesMobileHeader displayName={displayName} />
+      <TopBar title="Badges" />
 
       {earned.length > 0 ? (
         <div className="badges-earned-row">
@@ -154,7 +133,6 @@ export function Badges() {
   const { user } = useAuth();
   const [badges, setBadges] = useState(null);
   const [newIds, setNewIds] = useState(() => new Set());
-  const [displayName, setDisplayName] = useState(null);
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
@@ -198,15 +176,6 @@ export function Badges() {
     };
   }, [user]);
 
-  // Only needed for the mobile header's avatar initials — desktop gets its
-  // own avatar from BottomNav.
-  useEffect(() => {
-    if (!user) return;
-    getDoc(doc(db, 'users', user.uid)).then((snap) => {
-      if (snap.exists()) setDisplayName(snap.data().name || '');
-    });
-  }, [user]);
-
   if (!badges) return <LoadingSpinner label="Loading badges..." />;
 
   const earned = badges.filter((b) => b.earned);
@@ -215,10 +184,11 @@ export function Badges() {
 
   return (
     <PageMotion>
+      <BackLink to="/profile" label="Profile" />
       {isDesktop ? (
         <BadgesDesktop earned={earned} inProgress={inProgress} undiscovered={undiscovered} newIds={newIds} />
       ) : (
-        <BadgesMobile earned={earned} inProgress={inProgress} undiscovered={undiscovered} displayName={displayName} newIds={newIds} />
+        <BadgesMobile earned={earned} inProgress={inProgress} undiscovered={undiscovered} newIds={newIds} />
       )}
     </PageMotion>
   );

@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl, buildIcsContent, icsDataUri, questToCalendarEvent } from './calendar.js';
 import { StampButton } from './StampButton.jsx';
+import { IconCalendar } from './icons.jsx';
 
 // A dropdown of "add this occurrence to your calendar" links. Google and
 // Outlook open a prefilled compose screen in a new tab; the ICS link opens
 // or downloads a .ics file, which is how Apple Calendar (and Outlook
-// desktop) import an event.
-export function AddToCalendar({ quest }) {
+// desktop) import an event. `iconOnly` swaps the "Add to calendar" text
+// button for a small calendar icon button — used inline next to a quest's
+// date row (see org/Quests.jsx) instead of a separate action further down.
+export function AddToCalendar({ quest, iconOnly = false }) {
   const [open, setOpen] = useState(false);
 
   if (!quest.eventDate) return null;
@@ -16,9 +19,21 @@ export function AddToCalendar({ quest }) {
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
-      <StampButton type="button" onClick={() => setOpen((v) => !v)}>
-        Add to calendar
-      </StampButton>
+      {iconOnly ? (
+        <button
+          type="button"
+          className="quest-icon-btn"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Add to calendar"
+          title="Add to calendar"
+        >
+          <IconCalendar />
+        </button>
+      ) : (
+        <StampButton type="button" onClick={() => setOpen((v) => !v)}>
+          Add to calendar
+        </StampButton>
+      )}
       {open && (
         <div
           className="ink-card"
