@@ -305,7 +305,22 @@ export function BottomNav() {
                 )}
                 <span className='nav-avatar'>{getInitials(displayName)}</span>
               </Link>
+            ) : role === 'user' ? (
+              // Same reasoning as the organization branch above — Settings
+              // is a gear icon on the Profile page itself (see Profile.jsx),
+              // so there's nothing a dropdown here would add over just
+              // going straight to Profile.
+              <Link
+                to='/profile'
+                className='bottom-nav-avatar-link'
+                aria-current={location.pathname === '/profile' ? 'page' : undefined}
+              >
+                <span className='nav-avatar'>{getInitials(displayName)}</span>
+              </Link>
             ) : (
+              // pending_org keeps the older dropdown shape — this role
+              // isn't part of this redesign pass (see the module note up
+              // top on settingsInFab/flatNav).
               <>
                 <button
                   type='button'

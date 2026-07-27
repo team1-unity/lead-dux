@@ -1092,7 +1092,10 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
 
     db = firestore.client()
     if is_admin:
-        org_id, org_name, is_default = None, "Neighborhood", True
+        # See create_default_quest's module note — orgName None, not the
+        # literal "Neighborhood", so the detail card's org-name line stays
+        # hidden instead of stating the obvious.
+        org_id, org_name, is_default = None, None, True
         tier = _validate_tier(req.data.get("tier"))
         place_id = None
     else:
@@ -1279,13 +1282,24 @@ def create_default_quest(req: https_fn.CallableRequest) -> dict:
             "title and description are required.",
         )
 
-    event_date = _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
+    # Optional — a one-off side quest is a self-directed personal challenge,
+    # not a scheduled event, so unlike every other create_* function there's
+    # no date to require here. Left blank, isUpcoming() (questSeries.js)
+    # already treats a quest with no eventDate as always current rather
+    # than expiring it. (A *recurring* side quest still needs a start date
+    # to generate its occurrences from — see create_recurring_quest, which
+    # keeps eventDate required.)
+    event_date = (
+        _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
+        if req.data.get("eventDate")
+        else None
+    )
     event_end_time = (
         _parse_event_datetime(req.data.get("eventEndTime"), "eventEndTime", tz)
         if req.data.get("eventEndTime")
         else None
     )
-    if event_end_time is not None and event_end_time <= event_date:
+    if event_date and event_end_time is not None and event_end_time <= event_date:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "eventEndTime must be after eventDate.",
@@ -1298,7 +1312,12 @@ def create_default_quest(req: https_fn.CallableRequest) -> dict:
         title=title, description=description, tags=tags, location=location, tz=tz,
         capacity=capacity, series_id=doc_ref.id, recurrence_frequency=None, recurrence_until=None,
         event_date=event_date, event_end_time=event_end_time,
-        org_id=None, org_name="Neighborhood", is_default=True, tier=tier,
+        # No parent org — orgName stays None (not the literal "Neighborhood"
+        # this used to be) so the member detail card's org-name line just
+        # doesn't render at all (see QuestDetailBody in mobile/Quests.jsx),
+        # rather than displaying a label that only restates "this is a side
+        # quest."
+        org_id=None, org_name=None, is_default=True, tier=tier,
     ))
     return {"success": True, "questId": doc_ref.id}
 
@@ -2963,7 +2982,15 @@ def _validate_social_links(value):
 # read (see the loosened organizations/{uid} read rule in firestore.rules);
 # writing any of it is still Cloud-Function-only, same as every other
 # collection.
-_SIMPLE_PROFILE_FIELDS = ("logoUrl", "category", "missionStatement", "city", "state", "website", "contactEmail")
+_SIMPLE_PROFILE_FIELDS = (
+    "logoUrl", "category", "missionStatement", "city", "state", "website", "contactEmail",
+    # `reason`/`phone` start out copied from the org's original ORGREQ at
+    # approval time (see approve_organization_request) — they used to be
+    # write-once-at-registration, but the org's own profile edit form treats
+    # `reason` as its public-facing "Description" and shows `phone` as an
+    # editable contact number, so both need to stay editable afterward too.
+    "reason", "phone",
+)
 
 @https_fn.on_call()
 def update_organization_profile(req: https_fn.CallableRequest) -> dict:

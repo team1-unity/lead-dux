@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { db, storage } from '@shared/firebaseapp.jsx';
@@ -19,7 +19,6 @@ import {
   groupBySeries,
   attachSeriesRatings,
   attachOrgTrustStatus,
-  formatRecurrence,
   isUpcoming,
 } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
@@ -27,6 +26,7 @@ import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { TrustTag } from '@shared/TrustTag.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -41,6 +41,8 @@ import {
   IconAlert,
   IconSearch,
   IconLock,
+  IconChevron,
+  IconX,
 } from '@shared/icons.jsx';
 
 // Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
@@ -54,16 +56,12 @@ const TIER_LABELS = {
 };
 const TIER_POINTS = { iron: 10, bronze: 12, silver: 15, gold: 18, diamond: 20 };
 
+// A small rounded pill, not the tier name itself — that's already implied
+// by the quest (and spelled out in the lock message if it's gated, see
+// sideQuestGate below), so this is just the point payoff.
 function TierBadge({ tier }) {
-  if (!tier || !TIER_LABELS[tier]) return null;
-  return (
-    <span
-      className='quest-tier-badge'
-      style={{ '--rank-color': `var(--rank-${tier})`, '--rank-ink': `var(--rank-${tier}-ink)` }}
-    >
-      {TIER_LABELS[tier]} &middot; {TIER_POINTS[tier]} pts
-    </span>
-  );
+  if (!tier || !TIER_POINTS[tier]) return null;
+  return <span className='quest-points-pill'>+{TIER_POINTS[tier]} pts</span>;
 }
 
 function formatEventDate(isoOrTimestamp) {
@@ -72,17 +70,52 @@ function formatEventDate(isoOrTimestamp) {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+// Date only, no time — once a quest is completed, "Completed on Aug 2,
+// 2026" reads better than repeating the exact start time.
+function formatCompletedDate(isoOrTimestamp) {
+  if (!isoOrTimestamp) return null;
+  const date = isoOrTimestamp.toDate ? isoOrTimestamp.toDate() : new Date(isoOrTimestamp);
+  return date.toLocaleDateString(undefined, { dateStyle: 'medium' });
+}
+
 function formatStars(rating) {
   const whole = Math.round(rating);
   return '★'.repeat(whole) + '☆'.repeat(5 - whole);
 }
 
-// A member's own review for a quest they've RSVP'd to. Shows the existing
-// review read-only if one was already submitted; otherwise a submission
-// form. submit_review itself is the source of truth on whether this member
-// actually attended (checked_in) — rather than duplicating that check
-// client-side, an attempt from someone who hasn't checked in just surfaces
-// the server's rejection message inline, same as every other form here.
+// Five tap targets instead of a "5 stars ▾" dropdown — one tap versus a
+// two-step menu interaction, and no pre-selected value biasing the rating
+// toward 5. role="radiogroup"/"radio" since exactly one of five is chosen,
+// same semantics a native radio button set would have.
+function StarRatingInput({ value, onChange }) {
+  return (
+    <div role='radiogroup' aria-label='Rating' className='star-rating-input'>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type='button'
+          role='radio'
+          aria-checked={value === n}
+          aria-label={`${n} star${n === 1 ? '' : 's'}`}
+          className='star-rating-btn'
+          onClick={() => onChange(n)}
+        >
+          {n <= value ? '★' : '☆'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// A member's own review for a quest they've checked in to. Shows the
+// existing review read-only if one was already submitted; otherwise a
+// submission form. submit_review itself is the source of truth on whether
+// this member actually attended (checked_in) — rather than duplicating
+// that check client-side, an attempt from someone who hasn't checked in
+// just surfaces the server's rejection message inline, same as every other
+// form here. (The caller also only renders this once it already knows the
+// member checked in — see QuestDetailBody's own `checkedIn` state — this
+// server check just stays as the actual source of truth.)
 function QuestReview({ questId }) {
   const [loading, setLoading] = useState(true);
   const [review, setReview] = useState(null);
@@ -131,7 +164,7 @@ function QuestReview({ questId }) {
 
   if (review) {
     return (
-      <div className='ink-card' style={{ marginTop: 12 }}>
+      <div className='ink-card'>
         <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
           Your review: {formatStars(review.rating)}
         </p>
@@ -141,17 +174,11 @@ function QuestReview({ questId }) {
   }
 
   return (
-    <form onSubmit={submit} className='ink-card flex flex-col gap-md' style={{ marginTop: 12 }}>
-      <label>
-        Rating
-        <select value={rating} onChange={(e) => setRating(Number(e.target.value))}>
-          {[5, 4, 3, 2, 1].map((n) => (
-            <option key={n} value={n}>
-              {n} star{n === 1 ? '' : 's'}
-            </option>
-          ))}
-        </select>
-      </label>
+    <form onSubmit={submit} className='ink-card flex flex-col gap-md'>
+      <div>
+        <span className='field-optional'>Rating</span>
+        <StarRatingInput value={rating} onChange={setRating} />
+      </div>
       <label>
         Your review
         <textarea
@@ -182,38 +209,53 @@ const EXT_BY_CONTENT_TYPE = {
 // A member's proof-of-completion (side quests: reflection + photo; org
 // quests: photo only) for a quest they've accepted/checked in to. Shows the
 // current Pending/Approved/Rejected status if a submission already exists,
-// otherwise an upload form. Same "let the server's FAILED_PRECONDITION
-// surface inline" approach as QuestReview above — this doesn't duplicate
-// the "have you actually accepted/checked in" check client-side.
+// otherwise an upload form — behind a button + modal (matching the QR
+// code/Attendees pattern in org/Quests.jsx) rather than always sitting
+// inline. Same "let the server's FAILED_PRECONDITION surface inline"
+// approach as QuestReview above — this doesn't duplicate the "have you
+// actually accepted/checked in" check client-side.
 //
-// Side quests (isDefault) additionally gate the form behind an explicit
-// "Mark as complete" step and require a written reflection alongside the
-// photo — organization quests skip both (the form shows immediately, same
-// as before this existed, and there's no reflection field at all).
-function QuestPhotoSubmission({ questId, userId, isDefault }) {
+// Side quests (isDefault) additionally require a written reflection
+// alongside the photo — organization quests skip that (there's no
+// reflection field at all). Side quests used to gate the form behind a
+// separate inline "Mark as complete" card, on top of the modal's own
+// trigger button; that's gone now — the trigger button itself ("Mark as
+// complete" before anything's submitted) already is that confirmation, so
+// clicking it opens the modal straight to the reflection/photo form.
+//
+// `onStatusChange` (optional) reports the submission's status (or null)
+// up to the caller as it loads/changes — QuestDetailBody uses this for
+// side quests to hide "Leave quest" once the photo's been approved,
+// without a second Firestore listener on the same document.
+function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
   const [submission, setSubmission] = useState(undefined); // undefined = loading, null = none yet
   const [file, setFile] = useState(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
   const [submittedPhotoUrl, setSubmittedPhotoUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
-  const [showCompletionForm, setShowCompletionForm] = useState(false);
   const [reflection, setReflection] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     setSubmission(undefined);
     setFile(null);
     setError('');
-    setShowCompletionForm(false);
     setReflection('');
     return onSnapshot(
       doc(db, 'photoSubmissions', `${questId}_${userId}`),
-      (snap) => setSubmission(snap.exists() ? snap.data() : null),
+      (snap) => {
+        const data = snap.exists() ? snap.data() : null;
+        setSubmission(data);
+        onStatusChange?.(data?.status || null);
+      },
       (err) => {
         setError(err.message || 'Could not load your photo submission.');
         setSubmission(null);
+        onStatusChange?.(null);
       },
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questId, userId]);
 
   // A quick local preview of whichever file is currently selected, before
@@ -277,7 +319,6 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
       });
       setFile(null);
       setReflection('');
-      setShowCompletionForm(false);
     } catch (err) {
       setError(err.message || 'Something went wrong.');
     } finally {
@@ -285,11 +326,15 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
     }
   }
 
-  if (submission === undefined) return <LoadingSpinner label='Loading photo status...' />;
+  // The button below already reflects "not loaded yet" by just not
+  // rendering — there's nothing to click through to until the status is
+  // known, for either kind of quest now.
+  if (submission === undefined) return null;
 
+  let content;
   if (submission && (submission.status === 'pending' || submission.status === 'approved')) {
-    return (
-      <div className='ink-card flex flex-col gap-sm' style={{ marginTop: 12 }}>
+    content = (
+      <div className='ink-card flex flex-col gap-sm'>
         <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
         {submittedPhotoUrl && (
           <img
@@ -307,79 +352,124 @@ function QuestPhotoSubmission({ questId, userId, isDefault }) {
         )}
       </div>
     );
-  }
-
-  // Side quest, never submitted before, hasn't clicked "Mark as complete"
-  // yet — the reflection/photo form only appears once they do. A quest
-  // that's already been rejected skips this gate (falls through to the
-  // form directly below) since intent to complete it is already clear.
-  if (isDefault && !submission && !showCompletionForm) {
-    return (
-      <div className='ink-card flex flex-col gap-sm' style={{ marginTop: 12 }}>
+  } else {
+    // Covers both "never submitted" and "rejected, resubmitting" — for a
+    // side quest, clicking the outer "Mark as complete" trigger (see the
+    // button below) already is the confirmation that used to be a separate
+    // inline gate card, so this form is what opens straight away.
+    content = (
+      <form onSubmit={submit} className='ink-card flex flex-col gap-md'>
         <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
-          Complete this side quest
+          {isDefault ? 'Reflection & photo' : 'Proof photo'}
         </p>
-        <StampButton type='button' variant='primary' onClick={() => setShowCompletionForm(true)}>
-          Mark as complete
+        {submission?.status === 'rejected' && (
+          <>
+            {submittedPhotoUrl && (
+              <img
+                src={submittedPhotoUrl}
+                alt='Your rejected submission'
+                style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
+              />
+            )}
+            {submission.reflection && <p style={{ margin: 0 }}>{submission.reflection}</p>}
+            <StatusStamp tone='rejected'>Rejected</StatusStamp>
+            {submission.rejectionReason && (
+              <p style={{ margin: 0 }}>{submission.rejectionReason}</p>
+            )}
+          </>
+        )}
+        {isDefault && (
+          <label>
+            Your reflection
+            <textarea
+              required
+              value={reflection}
+              onChange={(e) => setReflection(e.target.value)}
+              placeholder='What did you do, and how did it go?'
+            />
+          </label>
+        )}
+        <label>
+          {submission?.status === 'rejected' ? 'Submit a new photo' : 'Upload a photo'}
+          <input
+            type='file'
+            accept='image/jpeg,image/png,image/webp,image/heic,image/heif'
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+        </label>
+        {/* A quick local preview of whichever file is currently selected,
+            before it's even uploaded — lets someone confirm they picked the
+            right photo before submitting. */}
+        {localPreviewUrl && (
+          <img
+            src={localPreviewUrl}
+            alt='Selected photo preview'
+            style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
+          />
+        )}
+        {error && <p className='box-danger'>{error}</p>}
+        <StampButton
+          type='submit'
+          variant='primary'
+          disabled={!file || uploading || (isDefault && !reflection.trim())}
+        >
+          {uploading ? 'Uploading...' : isDefault ? 'Submit completion' : 'Submit photo'}
         </StampButton>
-      </div>
+      </form>
     );
   }
 
+  const statusLabel =
+    submission?.status === 'approved'
+      ? 'Approved'
+      : submission?.status === 'rejected'
+        ? 'Rejected — resubmit'
+        : 'Pending review';
+
   return (
-    <form onSubmit={submit} className='ink-card flex flex-col gap-md' style={{ marginTop: 12 }}>
-      <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
-        {isDefault ? 'Reflection & photo' : 'Proof photo'}
-      </p>
-      {submission?.status === 'rejected' && (
-        <>
-          {submittedPhotoUrl && (
-            <img
-              src={submittedPhotoUrl}
-              alt='Your rejected submission'
-              style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
-            />
+    // A wrapping div, not a bare fragment — the org-quest trigger sits
+    // inside .quest-actions (a row flex container), but the side-quest one
+    // is still a direct child of the column-flex .quest-card-body (default
+    // align-items: stretch), which would stretch a bare button to fill the
+    // row's full width. The div absorbs that; .quest-card-body's own gap
+    // already spaces it out from its siblings, so no margin is needed here.
+    <div>
+      {/* Once something's been submitted, a small thumbnail of the actual
+          photo is a more honest trigger than a generic full-width button —
+          it's showing you what you turned in, not just offering an action. */}
+      {submission ? (
+        <button type='button' className='quest-proof-thumb-btn' onClick={() => setModalOpen(true)}>
+          {submittedPhotoUrl ? (
+            <img src={submittedPhotoUrl} alt='' className='quest-proof-thumb-img' />
+          ) : (
+            <span className='quest-proof-thumb-img' aria-hidden='true' />
           )}
-          {submission.reflection && <p style={{ margin: 0 }}>{submission.reflection}</p>}
-          <StatusStamp tone='rejected'>Rejected</StatusStamp>
-          {submission.rejectionReason && <p style={{ margin: 0 }}>{submission.rejectionReason}</p>}
-        </>
+          <span>{statusLabel}</span>
+        </button>
+      ) : (
+        <StampButton type='button' onClick={() => setModalOpen(true)}>
+          {isDefault ? 'Mark as complete' : 'Submit Proof Photo'}
+        </StampButton>
       )}
-      {isDefault && (
-        <label>
-          Your reflection
-          <textarea
-            required
-            value={reflection}
-            onChange={(e) => setReflection(e.target.value)}
-            placeholder='What did you do, and how did it go?'
-          />
-        </label>
+      {modalOpen && (
+        <LightboxBackdrop onClose={() => setModalOpen(false)} label='Proof photo'>
+          {/* No outer ink-card here — `content` already supplies its own
+              (see above), and nesting two would double the border/padding.
+              This wrapper is just the modal's sizing/scroll constraint. */}
+          <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
+            {content}
+            <button
+              type='button'
+              className='photo-lightbox-close'
+              onClick={() => setModalOpen(false)}
+              aria-label='Close'
+            >
+              <IconX width={18} height={18} />
+            </button>
+          </div>
+        </LightboxBackdrop>
       )}
-      <label>
-        {submission?.status === 'rejected' ? 'Submit a new photo' : 'Upload a photo'}
-        <input
-          type='file'
-          accept='image/jpeg,image/png,image/webp,image/heic,image/heif'
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
-      </label>
-      {localPreviewUrl && (
-        <img
-          src={localPreviewUrl}
-          alt='Selected photo preview'
-          style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
-        />
-      )}
-      {error && <p className='box-danger'>{error}</p>}
-      <StampButton
-        type='submit'
-        variant='primary'
-        disabled={!file || uploading || (isDefault && !reflection.trim())}
-      >
-        {uploading ? 'Uploading...' : isDefault ? 'Submit completion' : 'Submit photo'}
-      </StampButton>
-    </form>
+    </div>
   );
 }
 
@@ -448,8 +538,14 @@ export function QuestDetailBody({
 }) {
   const { primary, occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
-  const [showReview, setShowReview] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [showReviewsList, setShowReviewsList] = useState(false);
+  const [checkedIn, setCheckedIn] = useState(false);
+  // Side quests only — reported up from QuestPhotoSubmission's own
+  // photoSubmissions listener (see its onStatusChange prop) so "Leave
+  // quest" can hide once the photo's approved, without a second listener
+  // on the same document here.
+  const [sidePhotoStatus, setSidePhotoStatus] = useState(null);
   const reduce = useReducedMotion();
 
   // Reset to the first occurrence and collapse any open sub-panels whenever
@@ -457,126 +553,201 @@ export function QuestDetailBody({
   // reuses this same mounted component rather than remounting it).
   useEffect(() => {
     setSelectedId(occurrences[0].id);
-    setShowReview(false);
+    setReviewModalOpen(false);
     setShowReviewsList(false);
+    setSidePhotoStatus(null);
   }, [series.seriesId]);
 
   const selected = occurrences.find((o) => o.id === selectedId) || occurrences[0];
   const rsvpCount = (selected.rsvpd || []).length;
   const isRsvpd = (selected.rsvpd || []).includes(userId);
   const isFull = selected.capacity != null && rsvpCount >= selected.capacity && !isRsvpd;
+  // Org quest, checked in — the completed/attended state: date/spots/
+  // accessibility/RSVP all give way to a plain "Completed on ..." line and
+  // the review/proof-photo actions. Side quests never set this (checkedIn
+  // is always false for them — see the effect below).
+  const isCompleted = !primary.isDefault && checkedIn;
+
+  // Review/Proof Photo (org quests only — see each render site below) only
+  // ever mean anything once this member has actually checked in, not just
+  // RSVP'd — the same `attendance/{questId}_{uid}` doc submit_review and
+  // submit_quest_photo already gate on server-side (a doc existing there IS
+  // "checked in", see check_in_to_event). Side quests skip this entirely:
+  // their own photo submission is gated on RSVP status server-side instead,
+  // not attendance, so there's nothing to check here for them.
+  useEffect(() => {
+    if (primary.isDefault || !userId || !selected?.id) {
+      setCheckedIn(false);
+      return undefined;
+    }
+    let cancelled = false;
+    getDoc(doc(db, 'attendance', `${selected.id}_${userId}`))
+      .then((snap) => {
+        if (!cancelled) setCheckedIn(snap.exists());
+      })
+      .catch(() => {
+        if (!cancelled) setCheckedIn(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [primary.isDefault, selected?.id, userId]);
 
   return (
     <div className='quest-card-body'>
-      {showTitle && (
-        <div>
-          <p className='quest-title' style={{ fontSize: '1.25rem' }}>
-            {primary.title}
-          </p>
-          {primary.orgName && (
-            <p className='quest-org-line flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
-              {primary.orgId ? (
-                <Link to={`/organizations/${primary.orgId}`}>{primary.orgName}</Link>
-              ) : (
-                <span>{primary.orgName}</span>
-              )}
-              <TrustTag status={series.orgTrustStatus} />
+      {/* Share is an organization-quest concept only (side quests have no
+          individual shareable link — see SharedQuest.jsx) — the icon row
+          itself only exists when there's something to put in it, unlike
+          org/Quests.jsx's own copy of this row, which always has at least
+          Edit/Delete. */}
+      <div style={{ position: 'relative', minHeight: !primary.isDefault ? 36 : undefined }}>
+        {!primary.isDefault && (
+          <div className='quest-detail-icon-actions'>
+            <ShareButton seriesId={primary.seriesId} iconOnly />
+          </div>
+        )}
+        {showTitle && (
+          <div style={!primary.isDefault ? { paddingRight: 50 } : undefined}>
+            <p className='quest-title' style={{ fontSize: '1.25rem' }}>
+              {primary.title}
             </p>
-          )}
-        </div>
-      )}
+            {/* One row for whatever identity info this quest has — org
+                name (+ trust tag) for an organization quest, the points
+                pill for a side quest — rather than two separate rows, so
+                the pill sits right next to the org name when both exist. */}
+            {(primary.orgName || primary.isDefault) && (
+              <p className='quest-org-line flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
+                {primary.orgName && (
+                  <>
+                    {primary.orgId ? (
+                      <Link to={`/organizations/${primary.orgId}`}>{primary.orgName}</Link>
+                    ) : (
+                      <span>{primary.orgName}</span>
+                    )}
+                    <TrustTag status={series.orgTrustStatus} />
+                  </>
+                )}
+                {primary.isDefault && <TierBadge tier={primary.tier} />}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
       {series.orgTrustStatus === 'under_review' && (
         <p className='box-danger'>
           This organization is under review for consistently low ratings — its Trust Score has not
           yet been confirmed.
         </p>
       )}
-      {formatRecurrence(primary) && <p className='quest-org-line'>{formatRecurrence(primary)}</p>}
-      {occurrences.length > 1 ? (
-        <label>
-          Date
-          <select
-            value={selectedId}
-            onChange={(e) => {
-              setSelectedId(e.target.value);
-              setShowReview(false);
-              setShowReviewsList(false);
-            }}
-          >
-            {occurrences.map((o) => {
-              const full =
-                o.capacity != null &&
-                (o.rsvpd || []).length >= o.capacity &&
-                !(o.rsvpd || []).includes(userId);
-              return (
+      <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
+        {occurrences.length > 1 ? (
+          // No visible "Date" text — the calendar icon stands in for it,
+          // matching the single-date branch below. A visually-hidden
+          // <label> keeps the select's accessible name intact. The select
+          // itself just sizes to its content/maxWidth now, rather than
+          // stretching — it was only filling the row before because it sat
+          // inside a flex-column <label> with the default stretch behavior.
+          <>
+            <IconCalendar style={{ flex: 'none' }} />
+            <label className='visually-hidden' htmlFor='quest-date-select'>
+              Date
+            </label>
+            <select
+              id='quest-date-select'
+              style={{ flex: 'none', maxWidth: 200 }}
+              value={selectedId}
+              onChange={(e) => {
+                setSelectedId(e.target.value);
+                setReviewModalOpen(false);
+                setShowReviewsList(false);
+              }}
+            >
+              {occurrences.map((o) => (
                 <option key={o.id} value={o.id}>
                   {formatEventDate(o.eventDate)}
-                  {o.capacity ? ` — ${(o.rsvpd || []).length}/${o.capacity} spots` : ''}
-                  {full ? ' (Full)' : ''}
                 </option>
-              );
-            })}
-          </select>
-        </label>
-      ) : (
-        formatEventDate(selected.eventDate) && (
-          <p className='quest-meta-row'>
-            <IconCalendar /> {formatEventDate(selected.eventDate)}
-          </p>
-        )
-      )}
+              ))}
+            </select>
+          </>
+        ) : isCompleted ? (
+          // Non-recurring and completed — there's only ever one date, so
+          // this replaces the calendar row entirely rather than sitting
+          // alongside it.
+          formatCompletedDate(selected.eventDate) && (
+            <p className='quest-meta-row' style={{ margin: 0 }}>
+              Completed on {formatCompletedDate(selected.eventDate)}
+            </p>
+          )
+        ) : (
+          formatEventDate(selected.eventDate) && (
+            <p className='quest-meta-row' style={{ margin: 0 }}>
+              <IconCalendar /> {formatEventDate(selected.eventDate)}
+            </p>
+          )
+        )}
+        {!primary.isDefault &&
+          (isCompleted ? (
+            // Recurring: the picker itself stays put (still lets you switch
+            // to another occurrence in the series) — only this slot swaps,
+            // and only for whichever occurrence is currently selected.
+            // Non-recurring already said "Completed on ..." in the date
+            // slot above, so nothing repeats it here.
+            occurrences.length > 1 && (
+              <span className='field-optional'>
+                Completed on {formatCompletedDate(selected.eventDate)}
+              </span>
+            )
+          ) : (
+            <AddToCalendar quest={selected} style={{ padding: '4px 10px', fontSize: '0.8rem' }} />
+          ))}
+      </div>
       {selected.location && (
-        <p className='quest-meta-row'>
+        <Link to={`/map?seriesId=${primary.seriesId}`} className='quest-meta-row quest-meta-link'>
           <IconPin /> {selected.location}
+        </Link>
+      )}
+      {/* Side quests are a personal challenge, not an event with capacity —
+          there's no one else's attendance to count, so this stays an
+          organization-quest-only row. Once checked in (org quests only —
+          see the checkedIn effect above), capacity stops being relevant
+          information too: the event already happened, or you're already
+          there. */}
+      {!primary.isDefault && !isCompleted && (
+        <p className='quest-meta-row'>
+          <IconUsers />{' '}
+          {selected.capacity ? `${rsvpCount} / ${selected.capacity} spots filled` : `${rsvpCount} RSVP'd`}
         </p>
       )}
-      <p className='quest-meta-row'>
-        <IconUsers />{' '}
-        {selected.capacity
-          ? `${rsvpCount} / ${selected.capacity} spots filled`
-          : `${rsvpCount} ${primary.isDefault ? 'accepted' : "RSVP'd"}`}
-      </p>
-      <p className='quest-description'>{primary.description}</p>
-      <div className='quest-tags'>
-        {primary.isDefault && <TierBadge tier={primary.tier} />}
-        {(primary.tags || []).map((tag) => (
-          <TagStamp key={tag} tone={tag}>
-            {tag}
-          </TagStamp>
-        ))}
-      </div>
       {/* Side quests are self-directed with no physical venue, so
           accessibility accommodations only ever apply to organization
           quests — see accommodationTags' required-field validation in
-          create_quest. */}
-      {!primary.isDefault && (
-        <div className='ink-card' style={{ marginTop: 8 }}>
-          <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
-            Accessibility
-          </p>
-          {(primary.accommodationTags || []).length > 0 ? (
-            <>
-              <ul className='data-sublist' style={{ marginTop: 6 }}>
-                {primary.accommodationTags.map((tag) => (
-                  <li key={tag}>{accommodationLabel(tag)}</li>
-                ))}
-              </ul>
-              {primary.accommodationDetails && (
-                <p style={{ margin: '6px 0 0' }}>{primary.accommodationDetails}</p>
-              )}
-            </>
-          ) : (
-            <p style={{ margin: '6px 0 0' }}>Accessibility information not yet provided.</p>
-          )}
-        </div>
+          create_quest. Dropped entirely once completed — same reasoning as
+          spots above. */}
+      {!primary.isDefault && !isCompleted && (
+        <p className='quest-meta-row'>
+          {(primary.accommodationTags || []).length > 0
+            ? `Accessibility: ${primary.accommodationTags.map(accommodationLabel).join(', ')}`
+            : 'Accessibility information not yet provided.'}
+        </p>
       )}
+      {!primary.isDefault && !isCompleted && primary.accommodationDetails && (
+        <p className='quest-meta-row field-optional' style={{ marginTop: -4 }}>
+          {primary.accommodationDetails}
+        </p>
+      )}
+      <p className='quest-description'>{primary.description}</p>
       {gate && (
         <p className='side-quest-gate' id={`${selected.id}-gate`} role='status'>
           <IconLock /> {gate.message}
         </p>
       )}
       <div className='quest-actions'>
-        {canRsvp && (
+        {/* Canceling an RSVP for a quest you already checked in to doesn't
+            make sense — the action drops away entirely once isCompleted is
+            true (org quests). Side quests lose "Leave quest" the same way
+            once their photo's been approved — there's nothing left to
+            leave at that point either. */}
+        {canRsvp && !isCompleted && !(primary.isDefault && sidePhotoStatus === 'approved') && (
           <StampButton
             type='button'
             variant={isRsvpd ? 'danger' : 'primary'}
@@ -612,7 +783,10 @@ export function QuestDetailBody({
           </StampButton>
         )}
         <AnimatePresence>
-          {canRsvp && isRsvpd && busyId !== selected.id && (
+          {/* Not shown once completed — there's no "you're in" left to
+              confirm, and the "Completed on ..."/review/photo actions
+              already say what's true now. */}
+          {canRsvp && isRsvpd && busyId !== selected.id && !isCompleted && (
             <motion.span
               className='quest-rsvp-confirm'
               initial={reduce ? false : { opacity: 0, scale: 0.9 }}
@@ -624,31 +798,71 @@ export function QuestDetailBody({
             </motion.span>
           )}
         </AnimatePresence>
-        {/* Reviews, sharing, and calendar exports are all organization-quest
-            concepts — side quests have no organization to review, and no
-            individual event worth its own shareable link or calendar entry. */}
-        {!primary.isDefault && canRsvp && isRsvpd && (
-          <StampButton type='button' onClick={() => setShowReview((v) => !v)}>
-            {showReview ? 'Hide review' : 'Leave a review'}
-          </StampButton>
+        {/* Reviews are an organization-quest concept — side quests have no
+            organization to review. Gated on actually having checked in
+            (not just RSVP'd) — matching what submit_review itself
+            requires, so this never opens a form the server would reject.
+            Proof Photo sits right beside it (not below, in its own block)
+            so both completion actions read as one row. */}
+        {!primary.isDefault && canRsvp && isRsvpd && checkedIn && (
+          <>
+            <StampButton type='button' onClick={() => setReviewModalOpen(true)}>
+              Leave a review
+            </StampButton>
+            <QuestPhotoSubmission questId={selected.id} userId={userId} isDefault={false} />
+          </>
         )}
-        {!primary.isDefault && (
-          <StampButton type='button' onClick={() => setShowReviewsList((v) => !v)}>
-            {showReviewsList ? 'Hide reviews' : 'View reviews'}
-          </StampButton>
-        )}
-        {!primary.isDefault && <ShareButton seriesId={primary.seriesId} />}
-        {!primary.isDefault && <AddToCalendar quest={selected} />}
       </div>
-      {!primary.isDefault && isRsvpd && showReview && <QuestReview questId={selected.id} />}
-      {canRsvp && isRsvpd && (
+      {/* Same modal treatment as Proof Photo — QuestReview already shows
+          either the submission form or (once one exists) the read-only
+          "Your review: ★★★★☆" card, so no separate open/closed label logic
+          is needed here beyond opening/closing the modal itself. */}
+      {!primary.isDefault && isRsvpd && checkedIn && reviewModalOpen && (
+        <LightboxBackdrop onClose={() => setReviewModalOpen(false)} label='Review'>
+          <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
+            <QuestReview questId={selected.id} />
+            <button
+              type='button'
+              className='photo-lightbox-close'
+              onClick={() => setReviewModalOpen(false)}
+              aria-label='Close'
+            >
+              <IconX width={18} height={18} />
+            </button>
+          </div>
+        </LightboxBackdrop>
+      )}
+      {/* Side quests only here — their own photo submission is gated on
+          RSVP status server-side, not attendance, so isRsvpd alone already
+          matches what the backend requires. (Org quests render inside
+          .quest-actions above instead, next to Leave a review.) */}
+      {canRsvp && isRsvpd && primary.isDefault && (
         <QuestPhotoSubmission
           questId={selected.id}
           userId={userId}
-          isDefault={!!primary.isDefault}
+          isDefault
+          onStatusChange={setSidePhotoStatus}
         />
       )}
-      {!primary.isDefault && showReviewsList && <QuestReviewsList questId={selected.id} />}
+      {/* Same inline-accordion treatment as org/Quests.jsx's own "View
+          Reviews" section (chevron toggle + .quest-expand-section border) —
+          unlike View Attendees there, this one was never converted to a
+          modal, so this matches it as-is. */}
+      {!primary.isDefault && (
+        <div className='quest-expand-section'>
+          <button
+            type='button'
+            className='quest-card-head'
+            style={{ padding: '10px 0' }}
+            onClick={() => setShowReviewsList((v) => !v)}
+            aria-expanded={showReviewsList}
+          >
+            <span className='quest-card-titles'>View Reviews</span>
+            <IconChevron className='quest-chevron' data-open={showReviewsList ? 'true' : 'false'} />
+          </button>
+          {showReviewsList && <QuestReviewsList questId={selected.id} />}
+        </div>
+      )}
     </div>
   );
 }

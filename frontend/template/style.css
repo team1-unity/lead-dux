@@ -612,7 +612,7 @@ fieldset label {
    .quest-form-row-value input[type='text'] (see below). */
 .place-combobox-listbox {
   position: absolute;
-  z-index: 5;
+  z-index: 50;
   top: 100%;
   left: 0;
   right: 0;
@@ -1226,6 +1226,12 @@ nav {
   font: inherit;
   cursor: pointer;
   border-radius: var(--radius-full);
+  /* This renders as a plain <a> now for user/organization (straight to
+     Profile, no dropdown) — the global `a { color: var(--link) }` rule
+     doesn't reset text-decoration, so without this the initials show a
+     default underline a <button> version of this never had. */
+  text-decoration: none;
+  color: inherit;
 }
 .bottom-nav-org-name {
   font-family: var(--font-body);
@@ -1501,6 +1507,21 @@ button.quest-card-head:hover:not(:disabled) {
   color: var(--line-soft);
   margin-top: 3px;
 }
+
+/* Side quest point payoff (TierBadge, mobile/Quests.jsx) — a small rounded
+   pill under the title, not a bare line of text, but plainer than the old
+   colored tier badge (no tier name, no rank color — just the points). */
+.quest-points-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--border);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--line-soft);
+}
 .quest-tap-hint {
   flex: none;
   font-family: var(--font-body);
@@ -1598,6 +1619,18 @@ button.quest-card-head:hover:not(:disabled) {
 .create-quest-doc *:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+/* The org About section's inline edit form (OrganizationProfile.jsx) —
+   same borderless, document-style rows/description-textarea as the
+   create-quest form above, just without that form's fixed max-height/
+   internal scroll/max-width — this one already lives inside a normal-width
+   ink-card section, not a standalone page. */
+.about-edit-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 10px;
 }
 
 .quest-form-scroll {
@@ -2385,6 +2418,7 @@ a.org-home-stat-tile:hover {
    uses) rather than an inline card, so the code is the obvious focal point
    instead of one more block in a scrolling page. */
 .qr-modal-content {
+  position: relative;
   max-width: 360px;
   width: 100%;
   text-align: center;
@@ -2399,11 +2433,25 @@ a.org-home-stat-tile:hover {
    rows rather than one centered image, with its own scroll for a long
    attendee list instead of growing past the viewport. */
 .detail-modal-content {
+  position: relative;
   max-width: 420px;
   width: 100%;
   max-height: 80vh;
   overflow-y: auto;
   text-align: left;
+  scrollbar-width: none;
+}
+
+/* .photo-lightbox-close normally floats half outside its content (a bare
+   photo, in PhotoGallery.jsx/PendingPhotoSubmissions.jsx — negative offsets
+   look intentional against a borderless image). These two containers wrap
+   a bordered card instead, so that same floating-outside look would either
+   hang off the card's edge or (worse, for .detail-modal-content) get
+   clipped by its own overflow-y:auto — inset it within the card instead. */
+.qr-modal-content > .photo-lightbox-close,
+.detail-modal-content > .photo-lightbox-close {
+  top: 10px;
+  right: 10px;
 }
 
 /* Delete's dropdown for a recurring series (see org/Quests.jsx) — same
@@ -2796,6 +2844,7 @@ button.data-row:active:not(:disabled) {
   right: -14px;
   width: 32px;
   height: 32px;
+  padding: 0;
   border-radius: var(--radius-full);
   background: var(--paper-card);
   border: 1.5px solid var(--border);
@@ -2914,6 +2963,53 @@ button.data-row:active:not(:disabled) {
 .field-optional {
   font-weight: 400;
   color: var(--line-soft);
+}
+
+/* Tap-to-rate stars (QuestReview, mobile/Quests.jsx) — a row of five
+   38px+ tap targets standing in for a "5 stars" <select>. */
+.star-rating-input {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.star-rating-btn {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 2px 4px;
+  min-width: 38px;
+  min-height: 38px;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--accent);
+}
+.star-rating-btn:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* A small thumbnail of the actual submitted proof photo, standing in for
+   the generic "View Proof Photo" button once something's been submitted
+   (mobile/Quests.jsx's QuestPhotoSubmission). */
+.quest-proof-thumb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 1.5px solid var(--border);
+  padding: 6px 14px 6px 6px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.quest-proof-thumb-img {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  background: var(--paper-well);
+  flex: none;
 }
 
 /* ---------- badges (options 1d/1e) ----------
@@ -3136,22 +3232,6 @@ button.data-row:active:not(:disabled) {
   border-radius: var(--radius);
   padding: 12px 16px;
   margin-top: 4px;
-}
-
-.quest-tier-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--rank-color);
-  color: var(--rank-ink);
-  white-space: nowrap;
 }
 
 /* ---------- Diamond certificate (Certificate.jsx) ---------- */

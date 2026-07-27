@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { IconX } from './icons.jsx';
+import { LightboxBackdrop } from './LightboxBackdrop.jsx';
 
 // Reusable photo grid + lightbox, currently only fed an org's `photos`
 // array (see OrganizationProfile) but deliberately generic — just an
@@ -31,13 +32,7 @@ export function PhotoGallery({ photos = [] }) {
       </div>
 
       {openIndex !== null && (
-        <div
-          className="photo-lightbox-backdrop"
-          onClick={() => setOpenIndex(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Photo"
-        >
+        <LightboxBackdrop onClose={() => setOpenIndex(null)} label="Photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={photos[openIndex]} alt="" className="photo-lightbox-image" />
             <button
@@ -49,7 +44,7 @@ export function PhotoGallery({ photos = [] }) {
               <IconX width={18} height={18} />
             </button>
           </div>
-        </div>
+        </LightboxBackdrop>
       )}
     </>
   );

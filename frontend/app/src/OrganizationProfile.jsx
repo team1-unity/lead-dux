@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -8,6 +9,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { AddPropertyMenu } from '@shared/AddPropertyMenu.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
@@ -50,19 +52,30 @@ const SOCIAL_LINK_FIELDS = [
   { key: 'youtube', label: 'YouTube' },
 ];
 
+// Logo URL + every social link are optional and, for most orgs, blank —
+// rather than a wall of empty rows, they only show once added via "+ Add a
+// property" (same pattern as CreateQuestForm's Capacity/Tags), with a
+// remove control on any row that's already there. A field that already has
+// a value (from before this change, or a previous save) starts out shown,
+// not hidden behind the menu.
+const OPTIONAL_FIELD_ITEMS = [{ key: 'logoUrl', label: 'Logo URL' }, ...SOCIAL_LINK_FIELDS];
+
 // One combined edit form for everything in the About section that has a
-// writer — mission statement, category, logo, city/state, website, contact
-// email, social links (callUpdateOrganizationProfile), and location/
-// activity tags (callUpdateOrganizationTags, a separate call since it's a
-// separate backend function, but presented as one save here to match the
-// wireframe's single pencil icon on one About box). `org.reason`/`org.phone`
-// have no writer at all (set once at registration) so they're shown
-// read-only above the form rather than as inputs.
+// writer — description (org.reason — the org's own public-facing blurb,
+// distinct from the mission statement), phone, mission statement, category,
+// logo, city/state, website, contact email, social links
+// (callUpdateOrganizationProfile), and location/activity tags
+// (callUpdateOrganizationTags, a separate call since it's a separate
+// backend function, but presented as one save here to match the
+// wireframe's single pencil icon on one About box).
 function AboutEditForm({ org, onSaved, onCancel }) {
+  const reduce = useReducedMotion();
   const [fields, setFields] = useState({
     logoUrl: org.logoUrl || '',
     category: org.category || '',
     missionStatement: org.missionStatement || '',
+    reason: org.reason || '',
+    phone: org.phone || '',
     city: org.city || '',
     state: org.state || '',
     website: org.website || '',
@@ -71,8 +84,30 @@ function AboutEditForm({ org, onSaved, onCancel }) {
   const [social, setSocial] = useState({ ...org.socialLinks });
   const [ltagInput, setLtagInput] = useState((org.ltag || []).join(', '));
   const [etagInput, setEtagInput] = useState((org.etag || []).join(', '));
+  const [addedFields, setAddedFields] = useState(() => ({
+    logoUrl: Boolean(org.logoUrl),
+    instagram: Boolean(org.socialLinks?.instagram),
+    facebook: Boolean(org.socialLinks?.facebook),
+    twitter: Boolean(org.socialLinks?.twitter),
+    linkedin: Boolean(org.socialLinks?.linkedin),
+    tiktok: Boolean(org.socialLinks?.tiktok),
+    youtube: Boolean(org.socialLinks?.youtube),
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  function addOptionalField(key) {
+    setAddedFields((f) => ({ ...f, [key]: true }));
+  }
+
+  // Un-adding a field clears its value too, not just the addedFields flag —
+  // so if it's added again later it starts fresh rather than silently
+  // reappearing with whatever was typed before removal.
+  function removeOptionalField(key) {
+    setAddedFields((f) => ({ ...f, [key]: false }));
+    if (key === 'logoUrl') setFields((f) => ({ ...f, logoUrl: '' }));
+    else setSocial((s) => ({ ...s, [key]: '' }));
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -97,63 +132,212 @@ function AboutEditForm({ org, onSaved, onCancel }) {
   }
 
   return (
-    <form onSubmit={save} className="flex flex-col gap-md">
-      {org.reason && <p className="data-stat" style={{ margin: 0 }}>{org.reason}</p>}
-      {org.phone && <p className="data-stat" style={{ margin: 0 }}>{org.phone}</p>}
-      <label>
-        Logo URL
-        <input value={fields.logoUrl} onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." />
-      </label>
-      <label>
-        Category
-        <input value={fields.category} onChange={(e) => setFields((f) => ({ ...f, category: e.target.value }))} placeholder="Youth center, sports league, etc." />
-      </label>
-      <label>
-        Mission statement
-        <textarea value={fields.missionStatement} onChange={(e) => setFields((f) => ({ ...f, missionStatement: e.target.value }))} />
-      </label>
-      <label>
-        City
-        <input value={fields.city} onChange={(e) => setFields((f) => ({ ...f, city: e.target.value }))} />
-      </label>
-      <label>
-        State
-        <input value={fields.state} onChange={(e) => setFields((f) => ({ ...f, state: e.target.value }))} />
-      </label>
-      <label>
-        Website
-        <input value={fields.website} onChange={(e) => setFields((f) => ({ ...f, website: e.target.value }))} placeholder="https://..." />
-      </label>
-      <label>
-        Public contact email (optional)
-        <input value={fields.contactEmail} onChange={(e) => setFields((f) => ({ ...f, contactEmail: e.target.value }))} />
-      </label>
-      <label>
-        Location areas (comma separated)
-        <input value={ltagInput} onChange={(e) => setLtagInput(e.target.value)} placeholder="Downtown, Riverside" />
-      </label>
-      <label>
-        Activity types (comma separated)
-        <input value={etagInput} onChange={(e) => setEtagInput(e.target.value)} placeholder="Cleanup, Workshop" />
-      </label>
-      {SOCIAL_LINK_FIELDS.map(({ key, label }) => (
-        <label key={key}>
-          {label}
-          <input
-            value={social[key] || ''}
-            onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
-            placeholder="https://..."
-          />
-        </label>
-      ))}
-      {error && <p className="box-danger">{error}</p>}
-      <div className="flex gap-sm">
+    <form onSubmit={save} className="about-edit-doc">
+      {/* Same borderless auto-grow trick as the create-quest description
+          field (see CreateQuestForm.jsx/style.css) — a textarea and an
+          invisible ::after sharing one grid cell, kept in sync via
+          data-replicated-value, rather than JS scrollHeight measuring. */}
+      <label className="visually-hidden" htmlFor="org-reason">Description</label>
+      <div className="quest-form-description-wrap" data-replicated-value={fields.reason}>
+        <textarea
+          id="org-reason"
+          className="quest-form-description-input"
+          placeholder="Tell visitors about your organization."
+          value={fields.reason}
+          onChange={(e) => setFields((f) => ({ ...f, reason: e.target.value }))}
+        />
+      </div>
+
+      <label className="visually-hidden" htmlFor="org-mission">Mission statement</label>
+      <div className="quest-form-description-wrap" data-replicated-value={fields.missionStatement}>
+        <textarea
+          id="org-mission"
+          className="quest-form-description-input"
+          placeholder="What's your mission?"
+          value={fields.missionStatement}
+          onChange={(e) => setFields((f) => ({ ...f, missionStatement: e.target.value }))}
+        />
+      </div>
+
+      <div className="quest-form-properties">
+        <div className="quest-form-row">
+          <label className="quest-form-row-label" htmlFor="org-category">Category</label>
+          <div className="quest-form-row-value">
+            <input
+              id="org-category"
+              type="text"
+              placeholder="Youth center, sports league, etc."
+              value={fields.category}
+              onChange={(e) => setFields((f) => ({ ...f, category: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="quest-form-row">
+          <span className="quest-form-row-label" id="org-location-label">Location</span>
+          <div className="quest-form-row-value">
+            <div className="flex gap-sm">
+              <input
+                type="text"
+                aria-labelledby="org-location-label"
+                aria-label="City"
+                placeholder="City"
+                value={fields.city}
+                onChange={(e) => setFields((f) => ({ ...f, city: e.target.value }))}
+              />
+              <input
+                type="text"
+                aria-labelledby="org-location-label"
+                aria-label="State"
+                placeholder="State"
+                value={fields.state}
+                onChange={(e) => setFields((f) => ({ ...f, state: e.target.value }))}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="quest-form-row">
+          <label className="quest-form-row-label" htmlFor="org-website">Website</label>
+          <div className="quest-form-row-value">
+            <input
+              id="org-website"
+              type="text"
+              placeholder="https://..."
+              value={fields.website}
+              onChange={(e) => setFields((f) => ({ ...f, website: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="quest-form-row">
+          <label className="quest-form-row-label" htmlFor="org-email">Contact</label>
+          <div className="quest-form-row-value">
+            <input
+              id="org-email"
+              type="text"
+              placeholder="Empty"
+              value={fields.contactEmail}
+              onChange={(e) => setFields((f) => ({ ...f, contactEmail: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="quest-form-row">
+          <label className="quest-form-row-label" htmlFor="org-phone">Phone</label>
+          <div className="quest-form-row-value">
+            <input
+              id="org-phone"
+              type="text"
+              placeholder="Empty"
+              value={fields.phone}
+              onChange={(e) => setFields((f) => ({ ...f, phone: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="quest-form-row">
+          <label className="quest-form-row-label" htmlFor="org-ltag">Areas</label>
+          <div className="quest-form-row-value">
+            <input
+              id="org-ltag"
+              type="text"
+              placeholder="Downtown, Riverside"
+              value={ltagInput}
+              onChange={(e) => setLtagInput(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="quest-form-row">
+          <label className="quest-form-row-label" htmlFor="org-etag">Activities</label>
+          <div className="quest-form-row-value">
+            <input
+              id="org-etag"
+              type="text"
+              placeholder="Cleanup, Workshop"
+              value={etagInput}
+              onChange={(e) => setEtagInput(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {addedFields.logoUrl && (
+          <motion.div
+            className="quest-form-row"
+            initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduce ? 0 : 0.18 }}
+          >
+            <div className="quest-form-row-label">
+              <button
+                type="button"
+                className="quest-form-label-remove"
+                aria-label="Remove Logo URL property"
+                onClick={() => removeOptionalField('logoUrl')}
+              >
+                Logo URL
+              </button>
+            </div>
+            <div className="quest-form-row-value">
+              <label className="visually-hidden" htmlFor="org-logo">Logo URL</label>
+              <input
+                id="org-logo"
+                type="text"
+                placeholder="https://..."
+                value={fields.logoUrl}
+                onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))}
+              />
+            </div>
+          </motion.div>
+        )}
+
+        {SOCIAL_LINK_FIELDS.map(({ key, label }) => addedFields[key] && (
+          <motion.div
+            className="quest-form-row"
+            key={key}
+            initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduce ? 0 : 0.18 }}
+          >
+            <div className="quest-form-row-label">
+              <button
+                type="button"
+                className="quest-form-label-remove"
+                aria-label={`Remove ${label} property`}
+                onClick={() => removeOptionalField(key)}
+              >
+                {label}
+              </button>
+            </div>
+            <div className="quest-form-row-value">
+              <label className="visually-hidden" htmlFor={`org-social-${key}`}>{label}</label>
+              <input
+                id={`org-social-${key}`}
+                type="text"
+                placeholder="Empty"
+                value={social[key] || ''}
+                onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
+              />
+            </div>
+          </motion.div>
+        ))}
+
+        <AddPropertyMenu
+          items={OPTIONAL_FIELD_ITEMS.filter((it) => !addedFields[it.key])}
+          onSelect={addOptionalField}
+        />
+      </div>
+
+      {error && <p className="quest-form-error">{error}</p>}
+
+      <div className="quest-form-footer">
         <StampButton type="submit" variant="primary" disabled={submitting}>
           {submitting ? 'Saving...' : 'Save'}
         </StampButton>
-        <StampButton type="button" onClick={onCancel} disabled={submitting}>
+        <button type="button" className="quest-form-ghost-btn" onClick={onCancel} disabled={submitting}>
           Cancel
-        </StampButton>
+        </button>
       </div>
     </form>
   );

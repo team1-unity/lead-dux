@@ -5,6 +5,7 @@ import { db, storage } from './firebaseapp.jsx';
 import { callApprovePhotoSubmission, callRejectPhotoSubmission } from './fetch.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
+import { LightboxBackdrop } from './LightboxBackdrop.jsx';
 import { IconChevron, IconX } from './icons.jsx';
 
 // Flat submission rows grouped into one entry per quest — matches the
@@ -65,13 +66,7 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
       )}
 
       {lightboxOpen && url && (
-        <div
-          className="photo-lightbox-backdrop"
-          onClick={() => setLightboxOpen(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Submitted photo"
-        >
+        <LightboxBackdrop onClose={() => setLightboxOpen(false)} label="Submitted photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={url} alt="Submitted proof" className="photo-lightbox-image" />
             <button
@@ -83,7 +78,7 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
               <IconX width={18} height={18} />
             </button>
           </div>
-        </div>
+        </LightboxBackdrop>
       )}
     </div>
   );

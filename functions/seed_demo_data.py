@@ -639,7 +639,13 @@ def seed_reviews(completed_quests, org_uids):
 
 
 def seed_default_iron_quests():
-    far_future = NOW + timedelta(days=365 * 5)
+    # No eventDate/eventEndTime — matches create_default_quest, which now
+    # leaves both unset for a one-off side quest (a self-directed
+    # challenge, not a scheduled event). isUpcoming() (questSeries.js)
+    # already treats a missing eventDate as always-current, so there's no
+    # far-future eventEndTime hack needed anymore either. orgName is None,
+    # not the literal "Neighborhood", for the same reason — see
+    # create_default_quest's module note.
     for quest in DEFAULT_IRON_QUESTS:
         quest_id = f"seed-default-{quest['title'][:30].lower().replace(' ', '-').replace(chr(39), '')}"
         db.collection("quests").document(quest_id).set({
@@ -652,10 +658,10 @@ def seed_default_iron_quests():
             "seriesId": quest_id,
             "recurrenceFrequency": None,
             "recurrenceUntil": None,
-            "eventDate": NOW,
-            "eventEndTime": far_future,
+            "eventDate": None,
+            "eventEndTime": None,
             "orgId": None,
-            "orgName": "Neighborhood",
+            "orgName": None,
             "isDefault": True,
             "tier": "iron",
             "rsvpd": [],

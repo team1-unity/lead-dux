@@ -12,6 +12,7 @@ import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
@@ -282,13 +283,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
       </div>
       {a.qrError && <p className='box-danger'>{a.qrError}</p>}
       {a.qrOpen && a.qr && (
-        <div
-          className='photo-lightbox-backdrop'
-          onClick={a.viewQr}
-          role='dialog'
-          aria-modal='true'
-          aria-label='Event check-in QR code'
-        >
+        <LightboxBackdrop onClose={a.viewQr} label='Event check-in QR code'>
           <div className='ink-card qr-modal-content' onClick={(e) => e.stopPropagation()}>
             <img src={a.qr} alt='Event check-in QR code' className='qr-modal-image' />
             <p className='data-stat'>Attendees scan this from the app's Check In screen.</p>
@@ -313,18 +308,12 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
               <IconX width={18} height={18} />
             </button>
           </div>
-        </div>
+        </LightboxBackdrop>
       )}
       {/* Its own stacked popup rather than growing the QR modal above —
           confirming/cancelling here never changes that modal's size. */}
       {confirmingRefresh && (
-        <div
-          className='photo-lightbox-backdrop'
-          onClick={() => setConfirmingRefresh(false)}
-          role='dialog'
-          aria-modal='true'
-          aria-label='Confirm regenerate QR code'
-        >
+        <LightboxBackdrop onClose={() => setConfirmingRefresh(false)} label='Confirm regenerate QR code'>
           <div className='qr-modal-content' onClick={(e) => e.stopPropagation()}>
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
@@ -337,17 +326,11 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
               onCancel={() => setConfirmingRefresh(false)}
             />
           </div>
-        </div>
+        </LightboxBackdrop>
       )}
 
       {a.attendeesOpen && a.attendees && (
-        <div
-          className='photo-lightbox-backdrop'
-          onClick={a.toggleAttendees}
-          role='dialog'
-          aria-modal='true'
-          aria-label='Attendees'
-        >
+        <LightboxBackdrop onClose={a.toggleAttendees} label='Attendees'>
           <div className='ink-card detail-modal-content' onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginTop: 0 }}>Attendees</h3>
             <ul className='data-sublist'>
@@ -369,7 +352,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
               <IconX width={18} height={18} />
             </button>
           </div>
-        </div>
+        </LightboxBackdrop>
       )}
 
       <div className='quest-expand-section'>

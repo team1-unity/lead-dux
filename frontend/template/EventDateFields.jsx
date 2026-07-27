@@ -1,12 +1,20 @@
-// Shared "when does this happen" inputs for quest creation — used by both
-// the organization and admin "create quest" forms so they don't drift into
-// two slightly different copies. eventDate is required; eventEndTime is
-// optional (the Cloud Function falls back to a few hours past eventDate
-// when it's left blank). Values are plain <input type="datetime-local">
-// strings (e.g. "2026-07-20T14:00") with no UTC offset attached — the
-// Cloud Function interprets that wall-clock string as being in `timezone`
-// (via Python's zoneinfo, correctly accounting for that zone's DST rules)
-// before converting to the UTC instant Firestore actually stores.
+// Shared "when does this happen" inputs for quest creation — currently
+// only the admin "add default neighborhood quest" form (org's own form
+// uses CreateQuestForm.jsx's natural-language date input instead).
+// eventDate is required by default; eventEndTime is always optional (the
+// Cloud Function falls back to a few hours past eventDate when it's left
+// blank). Values are plain <input type="datetime-local"> strings (e.g.
+// "2026-07-20T14:00") with no UTC offset attached — the Cloud Function
+// interprets that wall-clock string as being in `timezone` (via Python's
+// zoneinfo, correctly accounting for that zone's DST rules) before
+// converting to the UTC instant Firestore actually stores.
+//
+// `required` defaults to true but the admin form passes `false` for a
+// one-off side quest — create_default_quest itself made eventDate optional
+// there (a side quest is a self-directed challenge, not a scheduled
+// event); a *recurring* one still needs a start date to generate its
+// occurrences from, so the admin form keeps this true whenever its
+// "Recurring event" checkbox is on.
 export function EventDateFields({
   eventDate,
   eventEndTime,
@@ -14,14 +22,15 @@ export function EventDateFields({
   onEventDateChange,
   onEventEndTimeChange,
   onTimezoneChange,
+  required = true,
 }) {
   return (
     <>
       <label>
-        Event date &amp; time
+        Event date &amp; time{!required && <span className="field-optional"> (optional)</span>}
         <input
           type="datetime-local"
-          required
+          required={required}
           value={eventDate}
           onChange={(e) => onEventDateChange(e.target.value)}
         />
