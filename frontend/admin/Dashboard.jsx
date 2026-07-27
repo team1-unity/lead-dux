@@ -457,7 +457,7 @@ function QuestsAdmin() {
             <input value={tags} onChange={(e) => setTags(e.target.value)} />
           </label>
           <label>
-            Location
+            Location <span className="field-optional">(optional)</span>
             <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="123 Main St or venue name" />
           </label>
           <label>
@@ -477,6 +477,7 @@ function QuestsAdmin() {
             onEventDateChange={setEventDate}
             onEventEndTimeChange={setEventEndTime}
             onTimezoneChange={setTimezone}
+            required={isRecurring}
           />
           <label className="flex items-center gap-sm">
             <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />

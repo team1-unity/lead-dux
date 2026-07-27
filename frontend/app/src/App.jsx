@@ -25,10 +25,14 @@ import { SharedQuest } from './SharedQuest.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
+import { Home as HomeScreen } from '@mobile/Home.jsx';
 import { Badges } from '@mobile/Badges.jsx';
 import { Journal } from '@mobile/Journal.jsx';
 import { Register as RegisterOrganization } from '@org/Register.jsx';
-import { Dashboard as OrgDashboard } from '@org/Dashboard.jsx';
+import { Home as OrgHome } from '@org/Home.jsx';
+import { Quests as OrgQuests } from '@org/Quests.jsx';
+import { PhotoSubmissions as OrgPhotoSubmissions } from '@org/PhotoSubmissions.jsx';
+import { FeedbackRequests as OrgFeedbackRequests } from '@org/FeedbackRequests.jsx';
 import { Journal as OrgJournal } from '@org/Journal.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
 import { Dashboard as AdminDashboard } from '@admin/Dashboard.jsx';
@@ -70,14 +74,51 @@ function PublicHome({ role }) {
     );
   }
 
+  // `user` lands on the new Home dashboard (see mobile/Home.jsx) instead of
+  // the quest feed directly — Quests moved to its own /quests route below.
+  // `pending_org` isn't part of this redesign pass and still sees the quest
+  // feed (with its banner) at "/", unchanged.
   return (
     <PageMotion>
       {role === 'pending_org' && <PendingBanner />}
       <FeedbackToast />
+      {role === 'user' ? (
+        <HomeScreen />
+      ) : (
+        <Quests
+          interests={profile?.interests || []}
+          name={profile?.name}
+          recommendedQuestOrder={profile?.recommendedQuestOrder}
+        />
+      )}
+    </PageMotion>
+  );
+}
+
+// The standalone Quests destination for `user` (see BottomNav's
+// PRIMARY_BY_ROLE.user) — same component, same props PublicHome used to
+// render inline before Home took over "/". Reloads its own profile fields
+// independently rather than threading them through a route param, same
+// shape as PublicHome's own fetch above.
+function QuestsPage() {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, 'users', user.uid)).then((snap) => {
+      setProfile(snap.exists() ? snap.data() : null);
+    });
+  }, [user]);
+
+  if (!profile) return <LoadingSpinner />;
+
+  return (
+    <PageMotion>
       <Quests
-        interests={profile?.interests || []}
-        name={profile?.name}
-        recommendedQuestOrder={profile?.recommendedQuestOrder}
+        interests={profile.interests || []}
+        name={profile.name}
+        recommendedQuestOrder={profile.recommendedQuestOrder}
       />
     </PageMotion>
   );
@@ -159,6 +200,7 @@ function App() {
           <Route path="/share/:seriesId" element={<SharedQuest />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<Home />} />
+            <Route path="/quests" element={<QuestsPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/check-in" element={<CheckIn />} />
@@ -180,10 +222,38 @@ function App() {
               path="/org"
               element={
                 <ProtectedRoute requiredRole="organization">
-                  <OrgDashboard />
+                  <OrgHome />
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/org/quests"
+              element={
+                <ProtectedRoute requiredRole="organization">
+                  <OrgQuests />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/org/photo-submissions"
+              element={
+                <ProtectedRoute requiredRole="organization">
+                  <OrgPhotoSubmissions />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/org/feedback-requests"
+              element={
+                <ProtectedRoute requiredRole="organization">
+                  <OrgFeedbackRequests />
+                </ProtectedRoute>
+              }
+            />
+            {/* No longer linked from nav (see BottomNav's
+                FEATURES_BY_ROLE.organization) — the host-reflection
+                feature itself still exists, just isn't a primary flow
+                anymore. Route stays so it's still reachable directly. */}
             <Route
               path="/org/journal"
               element={

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { QuestScanner } from '@shared/QuestScanner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { BackLink } from '@shared/BackLink.jsx';
 import { IconCheck } from '@shared/icons.jsx';
 
 // The user-facing half of the event-QR redesign: an organization displays
@@ -13,6 +14,7 @@ export function CheckIn() {
   if (result && !result.alreadyCheckedIn) {
     return (
       <PageMotion>
+        <BackLink to="/" label="Home" />
         <div className="ink-card check-in-confirmation">
           <span className="check-in-confirmation-icon">
             <IconCheck width={32} height={32} />
@@ -31,6 +33,7 @@ export function CheckIn() {
 
   return (
     <PageMotion>
+      <BackLink to="/" label="Home" />
       <h1>Scan QR Code</h1>
       <p>Point your camera at the event's check-in code, displayed by the organization at the event.</p>
       <QuestScanner onCheckedIn={setResult} />

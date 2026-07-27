@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
 import { useAuth } from './AuthContext.jsx';
@@ -95,6 +95,8 @@ function formatEventDate(value) {
 export function EventsMap() {
   const { user, loading } = useAuth();
   const isDesktop = useIsDesktop();
+  const [searchParams] = useSearchParams();
+  const hasFocusedFromParamRef = useRef(false);
   const [seriesList, setSeriesList] = useState(null);
   const [userPos, setUserPos] = useState(null);
   const [locationState, setLocationState] = useState('idle'); // idle | granted | denied | unavailable
@@ -288,6 +290,22 @@ export function EventsMap() {
       mapObjRef.current.setZoom(14);
     }
   }
+
+  // Deep-linked from a quest's location row (e.g. org/Quests.jsx's detail
+  // pane, /map?seriesId=...) — focuses that quest's pin once the map's
+  // ready and it's actually loaded, same as clicking its marker/list row
+  // would. Ref-gated to fire once: visibleSeries changes on every
+  // search/tag edit, and re-focusing on each of those would fight anyone
+  // panning around after the initial jump.
+  useEffect(() => {
+    if (hasFocusedFromParamRef.current || !mapReady) return;
+    const targetId = searchParams.get('seriesId');
+    if (!targetId) return;
+    if (!visibleSeries.some((g) => g.seriesId === targetId)) return;
+    hasFocusedFromParamRef.current = true;
+    focusSeries(targetId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady, visibleSeries, searchParams]);
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;

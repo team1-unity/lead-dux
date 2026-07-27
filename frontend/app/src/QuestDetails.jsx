@@ -6,6 +6,7 @@ import { useAuth } from '@shared/AuthContext.jsx';
 import { callRsvpToQuest, callCancelRsvp } from '@shared/fetch.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { BackLink } from '@shared/BackLink.jsx';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { QuestDetailBody } from '@mobile/Quests.jsx';
 
@@ -64,6 +65,7 @@ export function QuestDetails() {
 
   return (
     <PageMotion>
+      <BackLink to="/quests" label="Quests" />
       <div className="ink-card">
         <QuestDetailBody
           series={series}

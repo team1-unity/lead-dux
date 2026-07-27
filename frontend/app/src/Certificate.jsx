@@ -6,6 +6,7 @@ import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
+import { BackLink } from '@shared/BackLink.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 
 const WIDTH = 1200;
@@ -125,6 +126,7 @@ export function Certificate() {
 
   return (
     <PageMotion>
+      <BackLink to="/profile" label="Profile" />
       <div className="certificate-page">
         <h1>Your Diamond Certificate</h1>
         <div className="certificate-canvas-wrap">

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuestSeriesActions } from './useQuestSeriesActions.js';
 import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
+import { IconShare, IconCheck } from './icons.jsx';
 
 export function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
@@ -34,40 +35,44 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
 // The stable public link is just `${origin}/share/{seriesId}` — seriesId
 // never changes once a quest is created (see _quest_doc_fields), and
 // SharedQuest.jsx is the signed-out-friendly page it points at. No backend
-// call needed to "generate" it: every quest doc already carries its own
+// call needed to build it: every quest doc already carries its own
 // seriesId, so there's nothing to fetch that isn't already on hand here.
-export function ShareQuestBox({ seriesId }) {
+//
+// Copies straight to the clipboard on click rather than opening a panel
+// with a copy button inside it — the click itself is the user gesture the
+// Clipboard API needs, so there's nothing a separate "Copy" button would
+// add except an extra step. `iconOnly` swaps the label for a small icon
+// button (used inline in org/Quests.jsx's icon trio) that flips to a
+// checkmark for the same 2s instead of changing text.
+export function ShareButton({ seriesId, iconOnly = false, disabled = false }) {
   const [copied, setCopied] = useState(false);
-  const url = `${window.location.origin}/share/${seriesId}`;
 
   async function copy() {
+    const url = `${window.location.origin}/share/${seriesId}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        className="quest-icon-btn"
+        onClick={copy}
+        disabled={disabled}
+        aria-label={copied ? 'Link copied' : 'Copy share link'}
+        title={copied ? 'Copied!' : 'Share'}
+      >
+        {copied ? <IconCheck /> : <IconShare />}
+      </button>
+    );
+  }
+
   return (
-    <div className="ink-card share-quest-box" style={{ marginTop: 12 }}>
-      <p style={{ marginTop: 0 }} className="data-stat">
-        Anyone with this link can view (and sign up to RSVP to) this quest, even without an account.
-      </p>
-      <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          readOnly
-          value={url}
-          onFocus={(e) => e.target.select()}
-          aria-label="Shareable quest link"
-          style={{ flex: '1 1 260px' }}
-        />
-        <StampButton type="button" variant="primary" onClick={copy}>
-          {copied ? 'Copied!' : 'Copy link'}
-        </StampButton>
-      </div>
-      <p aria-live="polite" className="visually-hidden">
-        {copied ? 'Link copied to clipboard' : ''}
-      </p>
-    </div>
+    <StampButton type="button" onClick={copy} disabled={disabled}>
+      {copied ? 'Copied!' : 'Share quest'}
+    </StampButton>
   );
 }
 
@@ -88,11 +93,14 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
   const { primary, occurrences } = series;
   const a = useQuestSeriesActions(series, onChanged);
   const { selected, selectedId, isSeries } = a;
-  // Unlike feedback (per-date) or attendees, the share link is per-series
-  // (see ShareQuestBox) — it doesn't need to reset when switchDate changes
-  // which occurrence is selected.
-  const [shareOpen, setShareOpen] = useState(false);
+  const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const rsvpCount = (selected.rsvpd || []).length;
+
+  // The QR panel itself closes on a date switch (see switchDate) — this
+  // just keeps the confirm step from reappearing pre-opened next time.
+  useEffect(() => {
+    if (!a.qrOpen) setConfirmingRefresh(false);
+  }, [a.qrOpen]);
 
   return (
     <div className="data-row">
@@ -139,24 +147,18 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
           </StampButton>
         )}
-        {primary.orgId && (
-          <StampButton type="button" onClick={() => setShareOpen((v) => !v)} disabled={a.busy}>
-            {shareOpen ? 'Hide share link' : 'Share quest'}
-          </StampButton>
-        )}
+        {primary.orgId && <ShareButton seriesId={primary.seriesId} disabled={a.busy} />}
+        {/* Every quest created from now on already has a qrToken minted at
+            creation time (see _quest_doc_fields) — "Generate" only ever
+            shows for quests that predate that change. */}
         {!selected.qrToken ? (
           <StampButton type="button" variant="primary" onClick={a.generateQr} disabled={a.qrBusy}>
             {a.qrBusy ? 'Generating...' : 'Generate QR Code'}
           </StampButton>
         ) : (
-          <>
-            <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
-              {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
-            </StampButton>
-            <StampButton type="button" onClick={a.refreshQr} disabled={a.qrBusy}>
-              Refresh QR Code
-            </StampButton>
-          </>
+          <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
+            {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
+          </StampButton>
         )}
         {!isSeries && (
           <StampButton type="button" onClick={() => a.setRecurring((v) => !v)}>
@@ -246,9 +248,28 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
         <div className="ink-card event-qr-display">
           <img src={a.qr} alt="Event check-in QR code" />
           <p className="data-stat">Attendees scan this from the app's Check In screen.</p>
+          <div className="flex gap-sm" style={{ marginTop: 10, justifyContent: 'center' }}>
+            <StampButton as="a" href={a.qr} download={`quest-${selected.id}-qr.png`}>
+              Download
+            </StampButton>
+            <StampButton type="button" onClick={() => setConfirmingRefresh((v) => !v)} disabled={a.qrBusy}>
+              Regenerate
+            </StampButton>
+          </div>
+          {confirmingRefresh && (
+            <ConfirmBox
+              message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
+              confirmLabel={a.qrBusy ? 'Working...' : 'Yes, regenerate'}
+              submitting={a.qrBusy}
+              onConfirm={() => {
+                a.refreshQr();
+                setConfirmingRefresh(false);
+              }}
+              onCancel={() => setConfirmingRefresh(false)}
+            />
+          )}
         </div>
       )}
-      {shareOpen && <ShareQuestBox seriesId={primary.seriesId} />}
       {a.attendeesOpen && a.attendees && (
         <ul className="data-sublist">
           {a.attendees.length === 0 && <li>No RSVPs yet.</li>}
