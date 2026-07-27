@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useParams, useNavigate } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callRsvpToQuest, callCancelRsvp } from '@shared/fetch.jsx';
+import { callRsvpToQuest, callCancelRsvp, callGetSideQuestStatus } from '@shared/fetch.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
-import { QuestDetailBody } from '@mobile/Quests.jsx';
+import { QuestDetailBody, sideQuestGate } from '@mobile/Quests.jsx';
 
 // A standalone page for one quest series, reusing the exact same
 // QuestDetailBody the main Quests page shows inline — this is what
@@ -17,10 +17,19 @@ import { QuestDetailBody } from '@mobile/Quests.jsx';
 // deep link back into the browsing list.
 export function QuestDetails() {
   const { seriesId } = useParams();
+  const navigate = useNavigate();
   const { user, role, loading } = useAuth();
   const [series, setSeries] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  // Side-quest tier-lock/concurrent-limit status — mobile/Quests.jsx's own
+  // browsing list already fetches this to gray out the RSVP button and
+  // swap its label to "Locked"/"Limit reached"; this standalone page (what
+  // mobile navigates to instead of expanding a row inline) never fetched
+  // it at all, so a gated side quest showed a fully-enabled "Accept Quest"
+  // button here regardless of tier/limit — desktop's inline pane never had
+  // this gap since it always went through the browsing list's own fetch.
+  const [sideQuestStatus, setSideQuestStatus] = useState(null);
 
   function load() {
     Promise.all([
@@ -40,6 +49,11 @@ export function QuestDetails() {
 
   useEffect(load, [seriesId]);
 
+  useEffect(() => {
+    if (role !== 'user') return;
+    callGetSideQuestStatus().then(setSideQuestStatus).catch(() => {});
+  }, [role]);
+
   async function toggleRsvp(quest) {
     setBusyId(quest.id);
     try {
@@ -49,6 +63,7 @@ export function QuestDetails() {
         await callRsvpToQuest(quest.id);
       }
       load();
+      if (role === 'user') callGetSideQuestStatus().then(setSideQuestStatus).catch(() => {});
     } finally {
       setBusyId(null);
     }
@@ -73,6 +88,8 @@ export function QuestDetails() {
           canRsvp={role === 'user'}
           busyId={busyId}
           onToggleRsvp={toggleRsvp}
+          gate={sideQuestGate(series.primary, sideQuestStatus)}
+          onGoToOrgQuests={() => navigate('/quests')}
           showTitle
         />
       </div>

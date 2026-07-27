@@ -951,7 +951,7 @@ function relevanceScore(quest, interests) {
 // show before someone tries. Returns null for anything not gated,
 // including every organization quest and every side quest already one of
 // the caller's own active ones (not "additional").
-function sideQuestGate(primary, status) {
+export function sideQuestGate(primary, status) {
   if (!primary.isDefault || !status) return null;
   if (primary.tier && !status.unlockedTiers.includes(primary.tier)) {
     return {
