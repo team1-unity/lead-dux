@@ -377,11 +377,20 @@ function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(paths.map((p) => getDownloadURL(storageRef(storage, p)).catch(() => null))).then(
-      (resolved) => {
-        if (!cancelled) setUrls(resolved);
-      },
-    );
+    Promise.all(
+      paths.map((p) => {
+        // Already a real URL — some seeded demo orgs have external
+        // (picsum.photos) placeholder URLs in this field from before this
+        // feature had a real writer at all (see seed_demo_data.py's
+        // photo_url). Only genuine Storage paths (new uploads via
+        // handleUpload below) need resolving; storageRef() would throw on
+        // a URL that isn't actually one of this bucket's own objects.
+        if (/^https?:\/\//.test(p)) return Promise.resolve(p);
+        return getDownloadURL(storageRef(storage, p)).catch(() => null);
+      }),
+    ).then((resolved) => {
+      if (!cancelled) setUrls(resolved);
+    });
     return () => {
       cancelled = true;
     };
