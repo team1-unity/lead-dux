@@ -518,7 +518,7 @@ export function QuestDetailBody({
               {primary.accommodationDetails && <p style={{ margin: '6px 0 0' }}>{primary.accommodationDetails}</p>}
             </>
           ) : (
-            <p style={{ margin: '6px 0 0' }}>Accessibility information not yet provided.</p>
+            <p style={{ margin: '6px 0 0' }}>Accessibility information not specified.</p>
           )}
         </div>
       )}
