@@ -27,6 +27,7 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { ShareQuestBox } from '@shared/QuestSeriesRow.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
+import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 import { IconChevron, IconCalendar, IconPin, IconUsers, IconCheck, IconAlert, IconSearch, IconLock } from '@shared/icons.jsx';
 
 // Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
@@ -854,6 +855,15 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
             {seriesList.length} quest{seriesList.length === 1 ? '' : 's'} open — here's what's happening nearby.
           </p>
         </div>
+
+        {/* pending_org sees this same quest feed while waiting on approval
+            (see BottomNav.jsx's role maps) — rank/points apply to them the
+            same way they do to 'user', so they get the widget too. */}
+        {(role === 'user' || role === 'pending_org') && (
+          <div style={{ marginBottom: 16 }}>
+            <RankProgressCard />
+          </div>
+        )}
 
         {role === 'admin' && (
           <div className="stat-hero-row">
