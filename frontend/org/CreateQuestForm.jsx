@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callCreateQuest, callCreateRecurringQuest } from '@shared/fetch.jsx';
+import { callCreateQuest, callCreateRecurringQuest, callUpdateQuest } from '@shared/fetch.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { AddPropertyMenu } from '@shared/AddPropertyMenu.jsx';
 import { PlaceCombobox } from '@shared/PlaceCombobox.jsx';
+import { ConfirmBox } from '@shared/QuestSeriesRow.jsx';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import { detectTimezone } from '@shared/EventDateFields.jsx';
 import {
@@ -45,8 +46,61 @@ function patternToNaturalText({ year, month, day, hour, minute }) {
   return `${WEEKDAY_ABBR[weekday]} ${time}`;
 }
 
+// Same idea as patternToNaturalText above, but for an arbitrary already-set
+// date (editing an existing quest) rather than a recurring weekday pattern
+// — M/D instead of a weekday name, since there's no guarantee the org
+// wants "next <weekday>" semantics for a date that's already fixed. No
+// year: parseNaturalWhen's own slash-date rollover (assume this year
+// unless the date's already passed, then next year) already does the
+// right thing for a quest that's still upcoming, which editing one always
+// is in practice.
+function dateToSlashNaturalText({ month, day, hour, minute }) {
+  const period = hour < 12 ? 'am' : 'pm';
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  const time =
+    minute === 0 ? `${h12}${period}` : `${h12}:${String(minute).padStart(2, '0')}${period}`;
+  return `${month + 1}/${day} ${time}`;
+}
+
 function draftKeyFor(orgUid) {
   return `createQuestDraft:${orgUid}`;
+}
+
+// Editing skips carry-over/draft entirely — the form is seeded straight
+// from the quest being edited, not the org's last quest or a leftover
+// sessionStorage draft (which is create-flow-only; see the draft-save
+// effect below, also skipped in edit mode).
+function computeEditInitialState(quest) {
+  const tz = quest.timezone || detectTimezone();
+  let whenText = '';
+  if (quest.eventDate) {
+    const eventDateObj = quest.eventDate.toDate ? quest.eventDate.toDate() : new Date(quest.eventDate);
+    whenText = dateToSlashNaturalText(wallClockPartsInZone(eventDateObj, tz));
+  }
+  return {
+    title: quest.title || '',
+    description: quest.description || '',
+    whenText,
+    whenCarried: false,
+    location: quest.location || '',
+    placeId: quest.placeId || null,
+    lat: quest.lat ?? null,
+    lng: quest.lng ?? null,
+    locationCarried: false,
+    accommodationTags: quest.accommodationTags || [],
+    accommodationDetails: quest.accommodationDetails || '',
+    accessCarried: false,
+    timezone: tz,
+    capacity: quest.capacity != null ? String(quest.capacity) : '',
+    tags: (quest.tags || []).join(', '),
+    addedProperties: {
+      capacity: quest.capacity != null,
+      tags: (quest.tags || []).length > 0,
+    },
+    frequency: 'weekly',
+    untilText: '',
+    restoredFromDraft: false,
+  };
 }
 
 // Everything the form starts from: a restored in-progress draft (if this
@@ -130,11 +184,25 @@ function AccessChip({ selected, onClick, children }) {
 // carried over from the org's last quest, or added on demand via "+ Add a
 // property". Same data model/API as the old form (callCreateQuest /
 // callCreateRecurringQuest) — this is a UX/UI rewrite only.
-export function CreateQuestForm({ quests, onCreated, onCancel }) {
+//
+// `editingQuest`, when passed, switches the whole form into edit mode for
+// that one existing occurrence instead of creating a new one — no carry-
+// over/draft (seeded straight from the quest instead), no recurring-series
+// property (editing is per-occurrence only, same granularity delete
+// already draws between "this date" and "the whole series" — a series'
+// overall pattern isn't editable here), and calls callUpdateQuest instead
+// of callCreateQuest/callCreateRecurringQuest. Touching the When field is
+// the one edit with a real consequence — see whenChanged below — so it's
+// gated behind its own confirmation instead of submitting immediately.
+export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest }) {
   const { user } = useAuth();
   const reduce = useReducedMotion();
   const initialRef = useRef(null);
-  if (!initialRef.current) initialRef.current = computeInitialState(quests, user.uid);
+  if (!initialRef.current) {
+    initialRef.current = editingQuest
+      ? computeEditInitialState(editingQuest)
+      : computeInitialState(quests, user.uid);
+  }
 
   const [form, setForm] = useState(initialRef.current);
   const [startedBlank, setStartedBlank] = useState(false);
@@ -147,6 +215,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [view, setView] = useState('form'); // 'form' | 'success'
+  const [confirmingReschedule, setConfirmingReschedule] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const announcedRef = useRef(false);
   const lastQuest = useMemo(() => pickLastQuest(quests), [quests]);
@@ -160,7 +229,11 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
   // honestly just sessionStorage, not a synced/cross-device draft — it's
   // enough to make "nothing to lose" true across an accidental reload or a
   // navigate-away-and-back, which is the actual promise being made here.
+  // Create-flow only — editing an existing quest never touches this key,
+  // so a half-finished edit can't bleed into (or get overwritten by) the
+  // next new-quest draft.
   useEffect(() => {
+    if (editingQuest) return undefined;
     const id = setTimeout(() => {
       sessionStorage.setItem(draftKeyFor(user.uid), JSON.stringify(form));
       if (!announcedRef.current) {
@@ -169,11 +242,20 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
       }
     }, 500);
     return () => clearTimeout(id);
-  }, [form, user.uid]);
+  }, [form, user.uid, editingQuest]);
 
   function clearDraft() {
     sessionStorage.removeItem(draftKeyFor(user.uid));
   }
+
+  // Whether the organizer has touched the When field at all since the form
+  // opened — string equality against the pre-filled value, not an instant-
+  // level comparison. A false positive (retyping to the exact same time)
+  // just means an unnecessary confirmation step, not a data problem; a
+  // false negative (silently missing a real change) is the one that'd
+  // actually matter, and string equality can't produce one — if whenText
+  // hasn't changed at all, nothing about the date could have either.
+  const whenChanged = Boolean(editingQuest) && form.whenText !== initialRef.current.whenText;
 
   const resolvedWhen = useMemo(() => parseNaturalWhen(form.whenText), [form.whenText]);
   const resolvedEnd = resolvedWhen ? resolveEndWhen(resolvedWhen, DURATION_MINUTES) : null;
@@ -277,6 +359,14 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
     e.preventDefault();
     if (!validate()) return;
 
+    // The one edit with a real consequence (clears this quest's RSVPs,
+    // notifies whoever was on it — see update_quest's own module note)
+    // gets its own confirmation step rather than submitting immediately.
+    if (editingQuest && whenChanged && !confirmingReschedule) {
+      setConfirmingReschedule(true);
+      return;
+    }
+
     const start = whenToDatetimeLocalString(resolvedWhen);
     const end = whenToDatetimeLocalString(resolvedEnd);
     const base = {
@@ -299,6 +389,25 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
       accommodationTags: form.accommodationTags,
       accommodationDetails: form.accommodationDetails.trim() || null,
     };
+
+    if (editingQuest) {
+      // Not optimistic, unlike create below — an edit can fail for reasons
+      // specific to the quest's current state (e.g. capacity below the
+      // existing RSVP count), so this waits for the real result rather
+      // than assuming success and rolling back.
+      setSubmitting(true);
+      setSubmitError('');
+      try {
+        await callUpdateQuest({ ...base, questId: editingQuest.id });
+        onCreated();
+      } catch (err) {
+        setSubmitError(err.message || 'Something went wrong.');
+        setConfirmingReschedule(false);
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
 
     // Optimistic: publish reads as instant (crossfade straight to the
     // success screen) while the actual call happens in the background. A
@@ -334,7 +443,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
     }
   }
 
-  if (view === 'success') {
+  if (view === 'success' && !editingQuest) {
     return (
       <AnimatePresence mode='wait'>
         <motion.div
@@ -384,7 +493,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
         {announcement}
       </div>
 
-      {lastQuest && !startedBlank && (
+      {lastQuest && !startedBlank && !editingQuest && (
         <div className='quest-form-carryover-banner'>
           {/* <span className='quest-form-sage-dot' aria-hidden='true' /> */}
           {/* <span>Filled in from your last quest</span> */}
@@ -479,6 +588,21 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
                 )}
               </AnimatePresence>
               {errors.when && <p className='quest-form-error'>{errors.when}</p>}
+              {whenChanged && !confirmingReschedule && (
+                <p className='quest-form-error'>
+                  Changing this clears everyone's RSVP and notifies them — you'll be asked to
+                  confirm before saving.
+                </p>
+              )}
+              {confirmingReschedule && (
+                <ConfirmBox
+                  message="This clears every current RSVP for this date and notifies each of those attendees that it changed — they'll need to RSVP again if they still want to attend. This can't be undone."
+                  confirmLabel={submitting ? 'Saving...' : 'Yes, reschedule'}
+                  submitting={submitting}
+                  onConfirm={handleSubmit}
+                  onCancel={() => setConfirmingReschedule(false)}
+                />
+              )}
             </div>
           </div>
 
@@ -712,7 +836,11 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
           )}
 
           <AddPropertyMenu
-            items={ADD_PROPERTY_ITEMS.filter((it) => !form.addedProperties[it.key] || it.disabled)}
+            items={ADD_PROPERTY_ITEMS.filter(
+              (it) =>
+                (!form.addedProperties[it.key] || it.disabled) &&
+                !(editingQuest && it.key === 'recurring'),
+            )}
             onSelect={addProperty}
           />
         </div>
@@ -744,8 +872,8 @@ export function CreateQuestForm({ quests, onCreated, onCancel }) {
       {submitError && <p className='box-danger'>{submitError}</p>}
 
       <div className='quest-form-footer'>
-        <StampButton type='submit' variant='primary' disabled={submitting}>
-          Publish quest
+        <StampButton type='submit' variant='primary' disabled={submitting || confirmingReschedule}>
+          {editingQuest ? (submitting ? 'Saving...' : 'Save changes') : 'Publish quest'}
         </StampButton>
         {/* <span className='field-optional'>Saves as you write · nothing to lose</span> */}
         <button

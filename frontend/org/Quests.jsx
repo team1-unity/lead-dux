@@ -94,12 +94,18 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   // currently posted/printed/on screen) — gated behind a confirm rather
   // than firing on a single click, same treatment as the delete actions.
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
+  // Replaces this whole detail body with CreateQuestForm in edit mode
+  // (same component the "Add a quest" flow uses, via its editingQuest
+  // prop) rather than a separate form — one document-style quest editor,
+  // not two slightly different ones to keep in sync.
+  const [editing, setEditing] = useState(false);
 
   // Reset to the first occurrence and collapse any open sub-panels
   // whenever a different series is shown in this slot (desktop: clicking
   // a new row reuses this same mounted component rather than remounting).
   useEffect(() => {
     a.switchDate(occurrences[0].id);
+    setEditing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series.seriesId]);
 
@@ -111,6 +117,20 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   }, [a.qrOpen]);
 
   const rsvpCount = (selected.rsvpd || []).length;
+
+  if (editing) {
+    return (
+      <CreateQuestForm
+        quests={[]}
+        editingQuest={selected}
+        onCreated={() => {
+          setEditing(false);
+          onChanged();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
 
   return (
     <div className='quest-card-body'>
@@ -125,8 +145,9 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           <button
             type='button'
             className='quest-icon-btn'
-            disabled
-            title="Editing an existing quest isn't available yet"
+            onClick={() => setEditing(true)}
+            aria-label='Edit quest'
+            title='Edit'
           >
             <IconEdit />
           </button>

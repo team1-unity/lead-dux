@@ -5,10 +5,13 @@ import { LightboxBackdrop } from './LightboxBackdrop.jsx';
 // Reusable photo grid + lightbox, currently only fed an org's `photos`
 // array (see OrganizationProfile) but deliberately generic — just an
 // array of image URLs in, a grid + click-to-enlarge lightbox out. No
-// upload/moderation UI here at all; that's a separate future feature. The
-// point is that once approved attendee photos exist somewhere, populating
-// this is just passing a longer array, not a rewrite.
-export function PhotoGallery({ photos = [] }) {
+// upload UI here at all; that lives in OrganizationProfile.jsx itself
+// (upload is org-specific — this component stays generic). `onDelete`, if
+// passed, is the one exception: a small × overlay on each thumbnail,
+// enough for the one caller (the gallery's own owner) that needs removal
+// without this otherwise-read-only component knowing anything about who's
+// allowed to call it.
+export function PhotoGallery({ photos = [], onDelete }) {
   const [openIndex, setOpenIndex] = useState(null);
 
   if (photos.length === 0) {
@@ -19,15 +22,27 @@ export function PhotoGallery({ photos = [] }) {
     <>
       <div className="photo-gallery-grid">
         {photos.map((url, i) => (
-          <button
-            key={`${url}-${i}`}
-            type="button"
-            className="photo-gallery-thumb"
-            onClick={() => setOpenIndex(i)}
-            aria-label={`View photo ${i + 1} of ${photos.length}`}
-          >
-            <img src={url} alt="" loading="lazy" />
-          </button>
+          <div key={`${url}-${i}`} className="photo-gallery-thumb-wrap">
+            <button
+              type="button"
+              className="photo-gallery-thumb"
+              onClick={() => setOpenIndex(i)}
+              aria-label={`View photo ${i + 1} of ${photos.length}`}
+            >
+              <img src={url} alt="" loading="lazy" />
+            </button>
+            {onDelete && (
+              <button
+                type="button"
+                className="photo-gallery-thumb-delete"
+                onClick={() => onDelete(i)}
+                aria-label={`Remove photo ${i + 1}`}
+                title="Remove"
+              >
+                <IconX width={14} height={14} />
+              </button>
+            )}
+          </div>
         ))}
       </div>
 

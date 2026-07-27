@@ -139,6 +139,26 @@ export async function callCreateQuest({
   return result.data;
 }
 
+// organization/admin: edits ONE existing quest occurrence (not a whole
+// recurring series' pattern — see update_quest's own module note). Every
+// field is optional — omit anything unchanged and only what's actually
+// passed here gets validated/written server-side; a field left `undefined`
+// is dropped entirely during serialization, which is how the Cloud
+// Function tells "not touching this" apart from "clearing it back to
+// blank" (an explicit `''`/`null`). Changing eventDate clears this quest's
+// RSVPs and notifies whoever was on it — see NotificationBanner.jsx.
+export async function callUpdateQuest({
+  questId, title, description, tags, location, placeId, lat, lng, capacity,
+  accommodationTags, accommodationDetails, eventDate, eventEndTime, timezone, tier,
+}) {
+  const fn = httpsCallable(functions, 'update_quest');
+  const result = await fn({
+    questId, title, description, tags, location, placeId, lat, lng, capacity,
+    accommodationTags, accommodationDetails, eventDate, eventEndTime, timezone, tier,
+  });
+  return result.data;
+}
+
 // organization: creates a whole recurring series in one call — every
 // occurrence up to (and including) `until`, spaced by `frequency`
 // ('daily' | 'weekly' | 'monthly'). Returns { seriesId, questIds }. `tier`
@@ -393,6 +413,15 @@ export async function callMarkFeedbackRead(questId) {
   return result.data;
 }
 
+// user: dismisses a one-off popup notice (a quest they'd RSVP'd to was
+// rescheduled or cancelled) — deletes it outright, not a read flag; see
+// dismiss_notification's own module note for why.
+export async function callDismissNotification(notificationId) {
+  const fn = httpsCallable(functions, 'dismiss_notification');
+  const result = await fn({ notificationId });
+  return result.data;
+}
+
 // user: saves (or updates) the caller's own private reflection for a quest
 // they checked into — independent of whether they've ever requested or
 // received feedback for it.
@@ -429,6 +458,25 @@ export async function callUpdateOrganizationProfile(fields) {
   return result.data;
 }
 
+// organization: adds one already-uploaded photo (storagePath, not a
+// resolved URL — see add_organization_photo's own module note) to the
+// org's own "Community Photos" gallery. Call after uploadBytes succeeds,
+// same two-step upload-then-register flow QuestPhotoSubmission already
+// uses for proof photos.
+export async function callAddOrganizationPhoto(storagePath) {
+  const fn = httpsCallable(functions, 'add_organization_photo');
+  const result = await fn({ storagePath });
+  return result.data;
+}
+
+// organization: removes one photo from its own gallery — deletes the
+// actual Storage object too, not just the Firestore array entry.
+export async function callRemoveOrganizationPhoto(storagePath) {
+  const fn = httpsCallable(functions, 'remove_organization_photo');
+  const result = await fn({ storagePath });
+  return result.data;
+}
+
 // user: changes their interests after onboarding (onboarding only sets
 // them once).
 export async function callUpdateInterests({ interests }) {
@@ -443,6 +491,16 @@ export async function callUpdateInterests({ interests }) {
 // at all).
 export async function callUpdateAccommodationNeeds(fields) {
   const fn = httpsCallable(functions, 'update_accommodation_needs');
+  const result = await fn(fields);
+  return result.data;
+}
+
+// user: changes their own display name and/or profile picture (Profile's
+// "Edit Profile"). Email/password aren't here — those are Firebase Auth's
+// own concern, changed directly against the client SDK (updateEmail/
+// updatePassword) rather than through a Cloud Function; see Profile.jsx.
+export async function callUpdateUserProfile(fields) {
+  const fn = httpsCallable(functions, 'update_user_profile');
   const result = await fn(fields);
   return result.data;
 }

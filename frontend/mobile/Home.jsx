@@ -7,6 +7,7 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
+import { NotificationBanner } from '@shared/NotificationBanner.jsx';
 
 // The new landing screen for the `user` role (see BottomNav's PRIMARY_BY_ROLE
 // and App.jsx's PublicHome) — a quick greeting plus the two actions the
@@ -36,6 +37,8 @@ export function Home() {
 
   return (
     <div className="home-page">
+      <NotificationBanner />
+
       <div className="home-greeting">
         <DuckMark size={140} />
         <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
