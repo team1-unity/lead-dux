@@ -6,14 +6,18 @@ import { db } from '@shared/firebaseapp.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
-import { pointsToNextRank, progressPercent, rankForPoints } from '@shared/rank.js';
+import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 
 // The new landing screen for the `user` role (see BottomNav's PRIMARY_BY_ROLE
-// and App.jsx's PublicHome) — a quick greeting/rank teaser plus the two
-// actions the wireframe called out (search a quest, check in), rather than
-// dropping someone straight into the quest feed. The full rank breakdown
-// still lives on Profile (see ProgressCard there); this is deliberately just
-// the "X to next rank" line, not the whole milestone row.
+// and App.jsx's PublicHome) — a quick greeting plus the two actions the
+// wireframe called out (search a quest, check in), rather than dropping
+// someone straight into the quest feed. Rank progress is RankProgressCard
+// (shared with mobile/Quests.jsx on main) — this used to be its own
+// one-line "X to next rank" teaser here, but the full card (rank name,
+// points, and the same progress bar) reads better than a teaser when it's
+// already the first thing on the page, and it's one less rank-derivation
+// implementation to keep in sync. Profile's own ProgressCard is unaffected
+// (full milestone ladder + certificate banner, out of scope here).
 export function Home() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
@@ -22,16 +26,13 @@ export function Home() {
     if (!user) return;
     getDoc(doc(db, 'users', user.uid)).then((snap) => {
       const data = snap.exists() ? snap.data() : {};
-      setProfile({ name: data.name || '', points: data.points || 0 });
+      setProfile({ name: data.name || '' });
     });
   }, [user]);
 
   if (profile === null) return <LoadingSpinner label="Loading..." />;
 
   const firstName = profile.name ? profile.name.split(' ')[0] : null;
-  const rank = rankForPoints(profile.points);
-  const toNext = pointsToNextRank(profile.points);
-  const percent = progressPercent(profile.points);
 
   return (
     <div className="home-page">
@@ -40,17 +41,8 @@ export function Home() {
         <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
       </div>
 
-      {/* The greeting above is deliberately card-free (mascot + name sit
-          right on the page background) — but the progress bar needs enough
-          contrast to actually read as a bar, so it keeps its own small card
-          rather than floating on the same plain background. */}
-      <div className="ink-card home-progress-card">
-        <p className="data-stat" style={{ margin: 0 }}>
-          {toNext !== null ? `${toNext} points to next rank!` : `Top rank reached — ${rank}!`}
-        </p>
-        <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
-          <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
-        </div>
+      <div style={{ marginBottom: 16 }}>
+        <RankProgressCard />
       </div>
 
       <div className="home-actions flex flex-col gap-md">

@@ -3160,17 +3160,6 @@ button.data-row:active:not(:disabled) {
   margin: 12px 0 0;
 }
 
-.home-progress-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 16px;
-}
-.home-progress-card .rank-progress-track {
-  margin-top: 8px;
-  margin-bottom: 0;
-}
-
 .rank-milestones {
   display: flex;
   justify-content: space-between;
