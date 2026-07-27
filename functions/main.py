@@ -964,15 +964,17 @@ def create_quest(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "organization")
 
     title = req.data.get("title")
-    description = req.data.get("description")
+    # Optional — the document-style create-quest form treats title as the
+    # only required field; description is free to be left blank.
+    description = req.data.get("description") or ""
     tags = req.data.get("tags") or []
     location = req.data.get("location") or ""
     place_id = req.data.get("placeId")
     tz = _validate_timezone(req.data.get("timezone"))
-    if not title or not description:
+    if not title:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "title and description are required.",
+            "title is required.",
         )
     # Places Autocomplete is the only way the frontend's location field
     # produces a value now — a placeId here means the location actually
@@ -1036,14 +1038,15 @@ def create_recurring_quest(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "organization", "admin")
 
     title = req.data.get("title")
-    description = req.data.get("description")
+    # Optional — see create_quest's module note on this.
+    description = req.data.get("description") or ""
     tags = req.data.get("tags") or []
     location = req.data.get("location") or ""
     tz = _validate_timezone(req.data.get("timezone"))
-    if not title or not description:
+    if not title:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "title and description are required.",
+            "title is required.",
         )
 
     is_admin = req.auth.token.get("role") == "admin"

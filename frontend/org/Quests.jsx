@@ -1,36 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callCreateQuest, callCreateRecurringQuest } from '@shared/fetch.jsx';
 import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
-import {
-  ConfirmBox,
-  ShareButton,
-  formatEventDate,
-  formatStars,
-} from '@shared/QuestSeriesRow.jsx';
+import { ConfirmBox, ShareButton, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
-import { TagStamp } from '@shared/TagStamp.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
-import { EventDateFields, detectTimezone } from '@shared/EventDateFields.jsx';
-import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
-import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
+import { CreateQuestForm } from './CreateQuestForm.jsx';
 import {
   IconPlus,
   IconEdit,
   IconTrash,
   IconChevron,
+  IconCalendar,
   IconPin,
   IconUsers,
+  IconX,
 } from '@shared/icons.jsx';
 
 // One entrance per row, staggered from the parent's transition — same
@@ -42,7 +35,7 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
 };
 
-// The compact collapsed row — title + description only (same flat,
+// The compact collapsed row — title, star rating, and date (same flat,
 // avatar-free card style as the redesigned member-facing mobile/Quests.jsx,
 // minus the org avatar since every quest here already belongs to this same
 // org — no profile to link out to from its own list). Unlike that member
@@ -51,6 +44,7 @@ const itemVariants = {
 // chevron (rather than a tap hint) is still the right affordance here.
 function QuestSeriesListItem({ series, isOpen, isActive, onSelect, children }) {
   const { primary } = series;
+  const eventDate = formatEventDate(primary.eventDate);
   return (
     <motion.li className='quest-row' variants={itemVariants}>
       <div className='ink-card quest-content-col' data-active={isActive ? 'true' : undefined}>
@@ -62,7 +56,12 @@ function QuestSeriesListItem({ series, isOpen, isActive, onSelect, children }) {
         >
           <div className='quest-card-titles'>
             <p className='quest-title'>{primary.title}</p>
-            {primary.description && <p className='quest-card-description'>{primary.description}</p>}
+            {series.reviewCount > 0 && (
+              <p className='quest-card-description'>
+                {formatStars(series.avgRating)} ({series.reviewCount})
+              </p>
+            )}
+            {eventDate && <p className='quest-card-description'>{eventDate}</p>}
           </div>
           <IconChevron className='quest-chevron' data-open={isOpen ? 'true' : 'false'} />
         </button>
@@ -211,31 +210,33 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         ) : (
           formatEventDate(selected.eventDate) && (
             <p className='quest-meta-row' style={{ margin: 0 }}>
-              {formatEventDate(selected.eventDate)}
+              <IconCalendar /> {formatEventDate(selected.eventDate)}
             </p>
           )
         )}
-        {/* The calendar icon is itself the "add to calendar" trigger — see
-            AddToCalendar's iconOnly mode — rather than a separate static
-            icon plus a duplicate button elsewhere on the card. */}
-        <AddToCalendar quest={selected} iconOnly />
+        <AddToCalendar quest={selected} style={{ padding: '4px 10px', fontSize: '0.8rem' }} />
       </div>
       {selected.location && (
         <Link to={`/map?seriesId=${primary.seriesId}`} className='quest-meta-row quest-meta-link'>
           <IconPin /> {selected.location}
         </Link>
       )}
-      <button
-        type='button'
-        className='quest-meta-row quest-meta-link'
-        onClick={a.toggleAttendees}
-        disabled={a.busy}
-      >
-        <IconUsers />{' '}
-        {selected.capacity
-          ? `${rsvpCount} / ${selected.capacity} spots filled`
-          : `${rsvpCount} RSVP'd`}
-      </button>
+      <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
+        <p className='quest-meta-row' style={{ margin: 0 }}>
+          <IconUsers />{' '}
+          {selected.capacity
+            ? `${rsvpCount} / ${selected.capacity} spots filled`
+            : `${rsvpCount} RSVP'd`}
+        </p>
+        <StampButton
+          type='button'
+          onClick={a.toggleAttendees}
+          disabled={a.busy}
+          style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+        >
+          View Attendees
+        </StampButton>
+      </div>
       <p className='quest-description'>{primary.description}</p>
 
       {a.deleteAction === 'one' && (
@@ -281,18 +282,50 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
       </div>
       {a.qrError && <p className='box-danger'>{a.qrError}</p>}
       {a.qrOpen && a.qr && (
-        <div className='ink-card event-qr-display'>
-          <img src={a.qr} alt='Event check-in QR code' />
-          <p className='data-stat'>Attendees scan this from the app's Check In screen.</p>
-          <div className='flex gap-sm' style={{ marginTop: 10, justifyContent: 'center' }}>
-            <StampButton as='a' href={a.qr} download={`quest-${selected.id}-qr.png`}>
-              Download
-            </StampButton>
-            <StampButton type='button' onClick={() => setConfirmingRefresh((v) => !v)} disabled={a.qrBusy}>
-              Regenerate
-            </StampButton>
+        <div
+          className='photo-lightbox-backdrop'
+          onClick={a.viewQr}
+          role='dialog'
+          aria-modal='true'
+          aria-label='Event check-in QR code'
+        >
+          <div className='ink-card qr-modal-content' onClick={(e) => e.stopPropagation()}>
+            <img src={a.qr} alt='Event check-in QR code' className='qr-modal-image' />
+            <p className='data-stat'>Attendees scan this from the app's Check In screen.</p>
+            <div className='flex gap-sm' style={{ marginTop: 10, justifyContent: 'center' }}>
+              <StampButton as='a' href={a.qr} download={`quest-${selected.id}-qr.png`}>
+                Download
+              </StampButton>
+              <StampButton
+                type='button'
+                onClick={() => setConfirmingRefresh(true)}
+                disabled={a.qrBusy}
+              >
+                Regenerate
+              </StampButton>
+            </div>
+            <button
+              type='button'
+              className='photo-lightbox-close'
+              onClick={a.viewQr}
+              aria-label='Close'
+            >
+              <IconX width={18} height={18} />
+            </button>
           </div>
-          {confirmingRefresh && (
+        </div>
+      )}
+      {/* Its own stacked popup rather than growing the QR modal above —
+          confirming/cancelling here never changes that modal's size. */}
+      {confirmingRefresh && (
+        <div
+          className='photo-lightbox-backdrop'
+          onClick={() => setConfirmingRefresh(false)}
+          role='dialog'
+          aria-modal='true'
+          aria-label='Confirm regenerate QR code'
+        >
+          <div className='qr-modal-content' onClick={(e) => e.stopPropagation()}>
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
               confirmLabel={a.qrBusy ? 'Working...' : 'Yes, regenerate'}
@@ -303,35 +336,41 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
               }}
               onCancel={() => setConfirmingRefresh(false)}
             />
-          )}
+          </div>
         </div>
       )}
 
-      <div className='quest-expand-section'>
-        <button
-          type='button'
-          className='quest-card-head'
-          style={{ padding: '10px 0' }}
+      {a.attendeesOpen && a.attendees && (
+        <div
+          className='photo-lightbox-backdrop'
           onClick={a.toggleAttendees}
-          disabled={a.busy}
-          aria-expanded={a.attendeesOpen}
+          role='dialog'
+          aria-modal='true'
+          aria-label='Attendees'
         >
-          <span className='quest-card-titles'>View Attendees</span>
-          <IconChevron className='quest-chevron' data-open={a.attendeesOpen ? 'true' : 'false'} />
-        </button>
-        {a.attendeesOpen && a.attendees && (
-          <ul className='data-sublist'>
-            {a.attendees.length === 0 && <li>No RSVPs yet.</li>}
-            {a.attendees.map((att) => (
-              <li key={att.uid}>
-                {att.name || 'Unnamed'} — {att.email}
-                {' — '}
-                {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          <div className='ink-card detail-modal-content' onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Attendees</h3>
+            <ul className='data-sublist'>
+              {a.attendees.length === 0 && <li>No RSVPs yet.</li>}
+              {a.attendees.map((att) => (
+                <li key={att.uid}>
+                  {att.name || 'Unnamed'} — {att.email}
+                  {' — '}
+                  {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
+                </li>
+              ))}
+            </ul>
+            <button
+              type='button'
+              className='photo-lightbox-close'
+              onClick={a.toggleAttendees}
+              aria-label='Close'
+            >
+              <IconX width={18} height={18} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className='quest-expand-section'>
         <button
@@ -361,36 +400,12 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   );
 }
 
-function OrgQuests() {
+function OrgQuests({ creating, setCreating }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [quests, setQuests] = useState(null);
   const [seriesAggregates, setSeriesAggregates] = useState(new Map());
   const [openSeriesId, setOpenSeriesId] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [tags, setTags] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [eventEndTime, setEventEndTime] = useState('');
-  const [timezone, setTimezone] = useState(detectTimezone());
-  const [location, setLocation] = useState('');
-  const [placeId, setPlaceId] = useState(null);
-  const [coords, setCoords] = useState(null); // { lat, lng } — see PlaceAutocompleteInput
-  // Bumped after every successful submit to force a fresh
-  // PlaceAutocompleteInput instance — the widget owns its own shadow-DOM
-  // input, so there's no clean imperative "clear the displayed text" call;
-  // remounting is the straightforward way to reset it alongside the rest
-  // of the form.
-  const [placeKey, setPlaceKey] = useState(0);
-  const [accommodationTags, setAccommodationTags] = useState([]);
-  const [accommodationDetails, setAccommodationDetails] = useState('');
-  const [capacity, setCapacity] = useState('');
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [frequency, setFrequency] = useState('weekly');
-  const [until, setUntil] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
 
   async function load() {
     const [questsSnap, seriesSnap] = await Promise.all([
@@ -410,71 +425,6 @@ function OrgQuests() {
     [quests, seriesAggregates],
   );
 
-  function toggleAccommodationTag(value) {
-    setAccommodationTags((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
-    );
-  }
-
-  async function createQuest(e) {
-    e.preventDefault();
-    setError('');
-    if (!placeId) {
-      setError('Select a location from the suggestions.');
-      return;
-    }
-    if (accommodationTags.length === 0) {
-      setError('Select at least one accessibility accommodation for this quest.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const base = {
-        title,
-        description,
-        tags: tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
-        eventDate,
-        eventEndTime: eventEndTime || null,
-        timezone,
-        location,
-        placeId,
-        lat: coords?.lat,
-        lng: coords?.lng,
-        capacity: capacity ? Number(capacity) : null,
-        accommodationTags,
-        accommodationDetails: accommodationDetails.trim() || null,
-      };
-      if (isRecurring) {
-        await callCreateRecurringQuest({ ...base, frequency, until });
-      } else {
-        await callCreateQuest(base);
-      }
-      setTitle('');
-      setDescription('');
-      setTags('');
-      setEventDate('');
-      setEventEndTime('');
-      setLocation('');
-      setPlaceId(null);
-      setCoords(null);
-      setPlaceKey((k) => k + 1);
-      setAccommodationTags([]);
-      setAccommodationDetails('');
-      setCapacity('');
-      setIsRecurring(false);
-      setUntil('');
-      setCreating(false);
-      await load();
-    } catch (err) {
-      setError(err.message || 'Something went wrong.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (!quests) return <LoadingSpinner label='Loading your quests...' />;
 
   const activeSeriesId = isDesktop
@@ -482,133 +432,18 @@ function OrgQuests() {
     : openSeriesId;
   const activeSeries = seriesList.find((s) => s.seriesId === activeSeriesId) || null;
 
+  async function afterCreated() {
+    setCreating(false);
+    await load();
+  }
+
   const createForm = (
-    <form onSubmit={createQuest} className='flex flex-col gap-md'>
-      <label>
-        Title
-        <input required value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <label>
-        Description
-        <textarea required value={description} onChange={(e) => setDescription(e.target.value)} />
-      </label>
-      <label>
-        Tags (comma separated)
-        <input value={tags} onChange={(e) => setTags(e.target.value)} />
-      </label>
-      <label>
-        Location
-        <PlaceAutocompleteInput
-          key={placeKey}
-          ariaLabel='Quest location'
-          placeholder='Search for an address or venue...'
-          onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat, lng }) => {
-            setLocation(selectedLocation);
-            setPlaceId(selectedPlaceId);
-            setCoords({ lat, lng });
-          }}
-        />
-        {placeId && <p className='field-optional'>{location}</p>}
-      </label>
-      <fieldset>
-        <legend>Accessibility accommodations</legend>
-        <p className='field-optional' style={{ marginTop: 0 }}>
-          Select at least one so attendees know what's available before deciding to attend.
-        </p>
-        <div className='flex flex-wrap gap-sm' style={{ marginTop: 8 }}>
-          {ACCOMMODATION_OPTIONS.map((option) => (
-            <TagStamp
-              key={option.value}
-              selectable
-              selected={accommodationTags.includes(option.value)}
-              onClick={() => toggleAccommodationTag(option.value)}
-            >
-              {option.label}
-            </TagStamp>
-          ))}
-        </div>
-      </fieldset>
-      <label>
-        Additional accessibility details (optional)
-        <textarea
-          value={accommodationDetails}
-          onChange={(e) => setAccommodationDetails(e.target.value)}
-          placeholder='e.g. Ring the side door bell for wheelchair entry.'
-        />
-      </label>
-      <label>
-        Capacity (optional)
-        <input
-          type='number'
-          min='1'
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
-          placeholder='Unlimited'
-        />
-      </label>
-      <EventDateFields
-        eventDate={eventDate}
-        eventEndTime={eventEndTime}
-        timezone={timezone}
-        onEventDateChange={setEventDate}
-        onEventEndTimeChange={setEventEndTime}
-        onTimezoneChange={setTimezone}
-      />
-      <label className='flex items-center gap-sm'>
-        <input
-          type='checkbox'
-          checked={isRecurring}
-          onChange={(e) => setIsRecurring(e.target.checked)}
-        />
-        Recurring event
-      </label>
-      {isRecurring && (
-        <>
-          <label>
-            Repeats
-            <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-              <option value='daily'>Daily</option>
-              <option value='weekly'>Weekly</option>
-              <option value='monthly'>Monthly</option>
-            </select>
-          </label>
-          <label>
-            Until
-            <input type='date' required value={until} onChange={(e) => setUntil(e.target.value)} />
-          </label>
-        </>
-      )}
-      {error && <p className='box-danger'>{error}</p>}
-      <div className='flex gap-sm'>
-        <StampButton type='submit' variant='primary' disabled={submitting}>
-          {submitting ? 'Creating...' : isRecurring ? 'Create recurring quest' : 'Create quest'}
-        </StampButton>
-        <StampButton type='button' onClick={() => setCreating(false)} disabled={submitting}>
-          Cancel
-        </StampButton>
-      </div>
-    </form>
+    <CreateQuestForm quests={quests} onCreated={afterCreated} onCancel={() => setCreating(false)} />
   );
 
   return (
     <div className={isDesktop ? 'quest-feed-layout' : undefined}>
       <div className='quest-feed-main'>
-        <div className='quest-feed-greeting'>
-          <h1>Your Quests</h1>
-          {/* <p>
-            {seriesList.length} quest{seriesList.length === 1 ? '' : 's'} open — manage what's happening nearby.
-          </p> */}
-        </div>
-
-        <StampButton
-          type='button'
-          variant='primary'
-          onClick={() => setCreating((v) => !v)}
-          style={{ marginBottom: 16 }}
-        >
-          <IconPlus /> {creating ? 'Cancel' : 'Create new quest'}
-        </StampButton>
-
         {/* Mobile shows the form inline, right below the button above —
             desktop shows it in the sticky detail pane instead (below), which
             doesn't exist at this width. */}
@@ -622,7 +457,6 @@ function OrgQuests() {
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.22 }}
             >
-              <h2>Create a quest</h2>
               {createForm}
             </motion.section>
           </AnimatePresence>
@@ -638,11 +472,17 @@ function OrgQuests() {
                 series={series}
                 isOpen={!isDesktop && openSeriesId === series.seriesId}
                 isActive={isDesktop && activeSeriesId === series.seriesId}
-                onSelect={() =>
+                onSelect={() => {
+                  // Picking a quest from the list always means "show me this
+                  // one" — if the create-quest form was open, it's cancelled
+                  // (its draft is autosaved, so nothing is lost) rather than
+                  // leaving the organizer stuck looking at the form while a
+                  // different row highlights as selected underneath it.
+                  setCreating(false);
                   setOpenSeriesId(
                     !isDesktop && openSeriesId === series.seriesId ? null : series.seriesId,
-                  )
-                }
+                  );
+                }}
               >
                 {!isDesktop && openSeriesId === series.seriesId && (
                   <QuestSeriesDetailPane series={series} onChanged={load} />
@@ -656,10 +496,7 @@ function OrgQuests() {
       {isDesktop && (
         <div className='ink-card quest-detail-pane'>
           {creating ? (
-            <div className='quest-card-body'>
-              <h2>Create a quest</h2>
-              {createForm}
-            </div>
+            <div className='quest-card-body'>{createForm}</div>
           ) : activeSeries ? (
             <QuestSeriesDetailPane series={activeSeries} onChanged={load} showTitle />
           ) : (
@@ -679,20 +516,22 @@ function OrgQuests() {
 // and the org's own profile page instead (see App.jsx's routing and
 // OrganizationProfile.jsx's owner edit mode).
 export function Quests() {
-  const { user } = useAuth();
-  const [org, setOrg] = useState(null);
-
-  useEffect(() => {
-    if (!user) return;
-    getDoc(doc(db, 'organizations', user.uid)).then((snap) => {
-      if (snap.exists()) setOrg(snap.data());
-    });
-  }, [user]);
+  const [creating, setCreating] = useState(false);
 
   return (
     <PageMotion>
-      <TopBar title={org ? org.name : 'Organization'} hero />
-      <OrgQuests />
+      <TopBar
+        title='Your Quests'
+        hero
+        actions={
+          // Open-only — once the form is open, closing it is exclusively the
+          // form's own Cancel button's job, so this never flips to "Cancel".
+          <StampButton type='button' variant='primary' onClick={() => setCreating(true)}>
+            <IconPlus /> Create Quest
+          </StampButton>
+        }
+      />
+      <OrgQuests creating={creating} setCreating={setCreating} />
     </PageMotion>
   );
 }

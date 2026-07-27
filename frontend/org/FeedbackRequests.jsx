@@ -35,7 +35,11 @@ function FeedbackHistory({ orgId }) {
   useEffect(() => {
     let cancelled = false;
     getDocs(
-      query(collection(db, 'feedbackRequests'), where('status', '==', 'completed'), where('orgId', '==', orgId)),
+      query(
+        collection(db, 'feedbackRequests'),
+        where('status', '==', 'completed'),
+        where('orgId', '==', orgId),
+      ),
     ).then(async (snap) => {
       const rows = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
@@ -53,7 +57,7 @@ function FeedbackHistory({ orgId }) {
     };
   }, [orgId]);
 
-  if (entries === null) return <LoadingSpinner label="Loading feedback history..." />;
+  if (entries === null) return <LoadingSpinner label='Loading feedback history...' />;
 
   return (
     <section>
@@ -61,22 +65,22 @@ function FeedbackHistory({ orgId }) {
       {entries.length === 0 ? (
         <p>You haven&rsquo;t answered any feedback requests yet.</p>
       ) : (
-        <div className="ink-card data-list">
+        <div className='ink-card data-list'>
           {entries.map((entry) => (
-            <div key={entry.id} className="data-row">
-              <div className="data-row-head">
-                <p className="data-row-title">{entry.memberName || 'Unnamed'}</p>
-                <span className="data-stat">{entry.questTitle}</span>
+            <div key={entry.id} className='data-row'>
+              <div className='data-row-head'>
+                <p className='data-row-title'>{entry.memberName || 'Unnamed'}</p>
+                <span className='data-stat'>{entry.questTitle}</span>
               </div>
-              <p className="data-row-sub">Overall score: {entry.score}/10</p>
-              <ul className="data-sublist">
+              <p className='data-row-sub'>Overall score: {entry.score}/10</p>
+              <ul className='data-sublist'>
                 {Object.entries(FEEDBACK_QUESTIONS).map(([key, question]) => (
                   <li key={key}>
                     {question} — <strong>{entry.answers?.[key]}/10</strong>
                   </li>
                 ))}
               </ul>
-              {entry.extraThoughts && <p className="data-row-sub">{entry.extraThoughts}</p>}
+              {entry.extraThoughts && <p className='data-row-sub'>{entry.extraThoughts}</p>}
             </div>
           ))}
         </div>
@@ -96,8 +100,12 @@ export function FeedbackRequests() {
 
   return (
     <PageMotion>
-      <TopBar title="Feedback Requests" />
-      <PendingFeedbackRequests scopeField="orgId" scopeValue={user.uid} title="Pending feedback requests" />
+      {/* <TopBar title="Feedback Requests" /> */}
+      <PendingFeedbackRequests
+        scopeField='orgId'
+        scopeValue={user.uid}
+        title='Pending feedback requests'
+      />
       <FeedbackHistory orgId={user.uid} />
     </PageMotion>
   );

@@ -7,9 +7,10 @@ import { IconCalendar } from './icons.jsx';
 // Outlook open a prefilled compose screen in a new tab; the ICS link opens
 // or downloads a .ics file, which is how Apple Calendar (and Outlook
 // desktop) import an event. `iconOnly` swaps the "Add to calendar" text
-// button for a small calendar icon button — used inline next to a quest's
-// date row (see org/Quests.jsx) instead of a separate action further down.
-export function AddToCalendar({ quest, iconOnly = false }) {
+// button for a small calendar icon button; `className`/`style` pass through
+// to the text-button variant so a caller (see org/Quests.jsx) can size it
+// to match a neighboring button like "View Attendees".
+export function AddToCalendar({ quest, iconOnly = false, className, style }) {
   const [open, setOpen] = useState(false);
 
   if (!quest.eventDate) return null;
@@ -30,7 +31,7 @@ export function AddToCalendar({ quest, iconOnly = false }) {
           <IconCalendar />
         </button>
       ) : (
-        <StampButton type="button" onClick={() => setOpen((v) => !v)}>
+        <StampButton type="button" onClick={() => setOpen((v) => !v)} className={className} style={style}>
           Add to calendar
         </StampButton>
       )}

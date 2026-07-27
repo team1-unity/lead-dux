@@ -4,7 +4,18 @@ import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/fire
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
-import { IconList, IconGrid, IconGear, IconPerson, IconTrophy, IconJournal, IconQrCode, IconPlus, IconMap, IconHome } from './icons.jsx';
+import {
+  IconList,
+  IconGrid,
+  IconGear,
+  IconPerson,
+  IconTrophy,
+  IconJournal,
+  IconQrCode,
+  IconPlus,
+  IconMap,
+  IconHome,
+} from './icons.jsx';
 import { Logo } from './Logo.jsx';
 import { getInitials } from './initials.js';
 
@@ -32,7 +43,7 @@ const PRIMARY_BY_ROLE = {
   pending_org: [{ to: '/', icon: IconList, label: 'Quests' }],
   organization: [
     { to: '/org', icon: IconHome, label: 'Home' },
-    { to: '/org/quests', icon: IconList, label: 'Your Quests' },
+    { to: '/org/quests', icon: IconList, label: 'Quests' },
   ],
   admin: [
     { to: '/', icon: IconList, label: 'Quests' },
@@ -70,8 +81,8 @@ const FEATURES_BY_ROLE = {
   // redesign; Photo Submissions/Feedback Requests are the org's real daily
   // work, surfaced instead.
   organization: [
-    { to: '/org/photo-submissions', icon: IconGrid, label: 'Photo Submissions' },
-    { to: '/org/feedback-requests', icon: IconJournal, label: 'Feedback Requests' },
+    { to: '/org/photo-submissions', icon: IconGrid, label: 'Photo' },
+    { to: '/org/feedback-requests', icon: IconJournal, label: 'Feedback' },
   ],
   admin: [{ to: '/map', icon: IconMap, label: 'Map' }],
 };
@@ -151,7 +162,8 @@ export function BottomNav() {
   // the wireframes for both the org and user views) instead of a pill
   // alongside the other nav items — mobile keeps the normal Profile tab for
   // every role, unchanged.
-  const avatarOnDesktop = (role === 'organization' || role === 'user' || role === 'pending_org') && isDesktop;
+  const avatarOnDesktop =
+    (role === 'organization' || role === 'user' || role === 'pending_org') && isDesktop;
   // Only the org view shows its name in text next to the avatar (matching
   // that wireframe); the user view's avatar stands alone.
   const showNameNextToAvatar = role === 'organization';
@@ -171,14 +183,20 @@ export function BottomNav() {
   // dropdown (alongside Profile) instead of a separate pill — see
   // avatarOnDesktop above.
   const settingsInFab = !isDesktop && role === 'pending_org';
-  const fabMenuItems = !isDesktop && !flatNav
-    ? [...features, ...(settingsInFab ? [{ to: '/settings', icon: IconGear, label: 'Settings' }] : [])]
-    : [];
+  const fabMenuItems =
+    !isDesktop && !flatNav
+      ? [
+          ...features,
+          ...(settingsInFab ? [{ to: '/settings', icon: IconGear, label: 'Settings' }] : []),
+        ]
+      : [];
   const items = [
     ...(PRIMARY_BY_ROLE[role] || []),
     ...(showFeaturesInline ? features : []),
     ...(avatarOnDesktop ? [] : [{ to: '/profile', icon: IconPerson, label: 'Profile' }]),
-    ...(settingsInFab || avatarOnDesktop || flatNav ? [] : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
+    ...(settingsInFab || avatarOnDesktop || flatNav
+      ? []
+      : [{ to: '/settings', icon: IconGear, label: 'Settings' }]),
   ];
 
   return (
@@ -190,16 +208,16 @@ export function BottomNav() {
     <>
       {(fabOpen || avatarMenuOpen) && (
         <div
-          className="fab-backdrop"
+          className='fab-backdrop'
           onClick={() => {
             setFabOpen(false);
             setAvatarMenuOpen(false);
           }}
-          aria-hidden="true"
+          aria-hidden='true'
         />
       )}
-      <div className="bottom-nav" role="navigation" aria-label="Primary">
-        <Link to="/" className="bottom-nav-brand" aria-hidden="true" tabIndex={-1}>
+      <div className='bottom-nav' role='navigation' aria-label='Primary'>
+        <Link to='/' className='bottom-nav-brand' aria-hidden='true' tabIndex={-1}>
           <Logo size={24} />
         </Link>
         {items.map((item, i) => {
@@ -209,13 +227,15 @@ export function BottomNav() {
             <Link
               key={item.to}
               to={item.to}
-              className="bottom-nav-item"
+              className='bottom-nav-item'
               aria-current={current ? 'page' : undefined}
               title={item.label}
             >
-              <span className="bottom-nav-icon">
+              <span className='bottom-nav-icon'>
                 <Icon />
-                {item.badge && unreadFeedback > 0 && <span className="nav-badge">{unreadFeedback}</span>}
+                {item.badge && unreadFeedback > 0 && (
+                  <span className='nav-badge'>{unreadFeedback}</span>
+                )}
               </span>
               <span>{item.label}</span>
             </Link>
@@ -225,12 +245,12 @@ export function BottomNav() {
           // for roles with something to put behind it.
           if (i === (PRIMARY_BY_ROLE[role] || []).length - 1 && fabMenuItems.length > 0) {
             return (
-              <div className="bottom-nav-fab-wrap" key="fab-wrap">
+              <div className='bottom-nav-fab-wrap' key='fab-wrap'>
                 {row}
-                <div className="bottom-nav-fab-slot">
+                <div className='bottom-nav-fab-slot'>
                   <button
-                    type="button"
-                    className="bottom-nav-fab"
+                    type='button'
+                    className='bottom-nav-fab'
                     aria-expanded={fabOpen}
                     aria-label={fabOpen ? 'Close menu' : 'More'}
                     onClick={() => setFabOpen((v) => !v)}
@@ -244,14 +264,16 @@ export function BottomNav() {
                         <Link
                           key={f.to}
                           to={f.to}
-                          className="bottom-nav-fab-circle"
-                          role="menuitem"
+                          className='bottom-nav-fab-circle'
+                          role='menuitem'
                           title={f.label}
                           style={fabCircleStyle(fi, fabMenuItems.length)}
                         >
                           <FIcon />
-                          {f.badge && unreadFeedback > 0 && <span className="nav-badge">{unreadFeedback}</span>}
-                          <span className="visually-hidden">{f.label}</span>
+                          {f.badge && unreadFeedback > 0 && (
+                            <span className='nav-badge'>{unreadFeedback}</span>
+                          )}
+                          <span className='visually-hidden'>{f.label}</span>
                         </Link>
                       );
                     })}
@@ -262,26 +284,57 @@ export function BottomNav() {
           return row;
         })}
         {avatarOnDesktop && (
-          <div className="bottom-nav-avatar-wrap">
-            <button
-              type="button"
-              className="bottom-nav-avatar-link"
-              aria-haspopup="menu"
-              aria-expanded={avatarMenuOpen}
-              onClick={() => setAvatarMenuOpen((v) => !v)}
-            >
-              {showNameNextToAvatar && displayName && <span className="bottom-nav-org-name">{displayName}</span>}
-              <span className="nav-avatar">{getInitials(displayName)}</span>
-            </button>
-            {avatarMenuOpen && (
-              <div className="bottom-nav-avatar-menu" role="menu">
-                <Link to="/profile" role="menuitem" aria-current={location.pathname === '/profile' ? 'page' : undefined}>
-                  <IconPerson /> Profile
-                </Link>
-                <Link to="/settings" role="menuitem" aria-current={location.pathname === '/settings' ? 'page' : undefined}>
-                  <IconGear /> Settings
-                </Link>
-              </div>
+          <div className='bottom-nav-avatar-wrap'>
+            {role === 'organization' ? (
+              // An organization's "profile" IS its own public profile page
+              // (editable in place there when isOwner — see
+              // OrganizationProfile.jsx), same as clicking the avatar on
+              // org/Home.jsx — so this goes straight there instead of
+              // opening a menu. Settings moved to a gear icon on that page
+              // itself (matching the member Profile.jsx pattern) rather
+              // than living in a dropdown here.
+              <Link
+                to={`/organizations/${user.uid}`}
+                className='bottom-nav-avatar-link'
+                aria-current={
+                  location.pathname === `/organizations/${user.uid}` ? 'page' : undefined
+                }
+              >
+                {showNameNextToAvatar && displayName && (
+                  <span className='bottom-nav-org-name'>{displayName}</span>
+                )}
+                <span className='nav-avatar'>{getInitials(displayName)}</span>
+              </Link>
+            ) : (
+              <>
+                <button
+                  type='button'
+                  className='bottom-nav-avatar-link'
+                  aria-haspopup='menu'
+                  aria-expanded={avatarMenuOpen}
+                  onClick={() => setAvatarMenuOpen((v) => !v)}
+                >
+                  <span className='nav-avatar'>{getInitials(displayName)}</span>
+                </button>
+                {avatarMenuOpen && (
+                  <div className='bottom-nav-avatar-menu' role='menu'>
+                    <Link
+                      to='/profile'
+                      role='menuitem'
+                      aria-current={location.pathname === '/profile' ? 'page' : undefined}
+                    >
+                      <IconPerson /> Profile
+                    </Link>
+                    <Link
+                      to='/settings'
+                      role='menuitem'
+                      aria-current={location.pathname === '/settings' ? 'page' : undefined}
+                    >
+                      <IconGear /> Settings
+                    </Link>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

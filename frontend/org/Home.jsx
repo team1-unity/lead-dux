@@ -9,18 +9,34 @@ import { AmbientParticles } from '@shared/AmbientParticles.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { TrustTag } from '@shared/TrustTag.jsx';
 import { getTrustStatus, groupBySeries, isUpcoming } from '@shared/questSeries.js';
-import { IconChevron } from '@shared/icons.jsx';
+
+// A couple of lines of what's actually waiting on that page — cut off
+// (faded, not truncated with an ellipsis-per-line) rather than shown in
+// full, since this is a preview, not the real list. `empty` covers the
+// "nothing here" case so the tile still reads as intentional, not broken.
+function StatPreview({ items, empty }) {
+  if (items.length === 0) return <p className="field-optional org-home-stat-preview" style={{ marginTop: 6 }}>{empty}</p>;
+  return (
+    <div className="org-home-stat-preview">
+      <ul>
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // The org's new landing screen (see BottomNav's PRIMARY_BY_ROLE.organization)
-// — a status pill plus at-a-glance counts, replacing the old single
-// everything-inlined Dashboard.jsx. Each stat-card links to its own full
-// page (org/PhotoSubmissions.jsx, org/FeedbackRequests.jsx, org/Quests.jsx)
-// rather than duplicating their content here.
+// — a status pill plus at-a-glance stat-tiles, replacing the old single
+// everything-inlined Dashboard.jsx. Each tile links to its own full page
+// (org/PhotoSubmissions.jsx, org/FeedbackRequests.jsx, org/Quests.jsx) and
+// doubles as a preview of it, rather than duplicating that page's content
+// in full here.
 export function Home() {
   const { user } = useAuth();
   const [org, setOrg] = useState(null);
-  const [counts, setCounts] = useState(null);
-  const [upcomingSeries, setUpcomingSeries] = useState(null);
+  const [data, setData] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -39,20 +55,18 @@ export function Home() {
     ]).then(([photoSnap, feedbackSnap, questsSnap]) => {
       if (cancelled) return;
       const quests = questsSnap.docs.map((d) => d.data()).filter(isUpcoming);
-      const series = groupBySeries(quests);
-      setCounts({
-        photoSubmissions: photoSnap.size,
-        feedbackRequests: feedbackSnap.size,
-        quests: series.length,
+      setData({
+        photoSubmissions: photoSnap.docs.map((d) => d.data()),
+        feedbackRequests: feedbackSnap.docs.map((d) => d.data()),
+        quests: groupBySeries(quests),
       });
-      setUpcomingSeries(series);
     });
     return () => {
       cancelled = true;
     };
   }, [user]);
 
-  if (org === null || counts === null) return <LoadingSpinner label="Loading..." />;
+  if (org === null || data === null) return <LoadingSpinner label="Loading..." />;
 
   const trustStatus = getTrustStatus(org.reviewCount || 0, org.avgRating || 0);
 
@@ -78,39 +92,30 @@ export function Home() {
 
       <div className="org-home-stats">
         <Link to="/org/photo-submissions" className="ink-card org-home-stat-tile">
-          <span className="stat-hero-number">{counts.photoSubmissions}</span>
+          <span className="stat-hero-number">{data.photoSubmissions.length}</span>
           <span className="stat-hero-label">Pending Photo Submissions</span>
+          <StatPreview
+            items={data.photoSubmissions.slice(0, 3).map((s) => `${s.userName || 'Someone'} — ${s.questTitle}`)}
+            empty="Nothing pending right now."
+          />
         </Link>
         <Link to="/org/feedback-requests" className="ink-card org-home-stat-tile">
-          <span className="stat-hero-number">{counts.feedbackRequests}</span>
+          <span className="stat-hero-number">{data.feedbackRequests.length}</span>
           <span className="stat-hero-label">Pending Feedback Requests</span>
+          <StatPreview
+            items={data.feedbackRequests.slice(0, 3).map((r) => r.questTitle)}
+            empty="Nothing pending right now."
+          />
         </Link>
         <Link to="/org/quests" className="ink-card org-home-stat-tile">
-          <span className="stat-hero-number">{counts.quests}</span>
+          <span className="stat-hero-number">{data.quests.length}</span>
           <span className="stat-hero-label">Your Quests</span>
+          <StatPreview
+            items={data.quests.slice(0, 3).map((s) => s.primary.title)}
+            empty="No active quests right now."
+          />
         </Link>
       </div>
-
-      {/* A bare count grid reads emptier than it should — a quick glimpse of
-          what's actually upcoming gives Home some real content, not just
-          numbers. Full management stays on org/Quests.jsx. */}
-      <section className="ink-card">
-        <div className="flex justify-between items-center">
-          <h2 style={{ margin: 0 }}>Upcoming Quests</h2>
-          <Link to="/org/quests" aria-label="Manage your quests">
-            <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-          </Link>
-        </div>
-        {upcomingSeries.length === 0 ? (
-          <p className="data-stat" style={{ marginTop: 10 }}>No active quests right now.</p>
-        ) : (
-          <ul className="data-sublist" style={{ marginTop: 10 }}>
-            {upcomingSeries.slice(0, 3).map((series) => (
-              <li key={series.seriesId}>{series.primary.title}</li>
-            ))}
-          </ul>
-        )}
-      </section>
     </PageMotion>
   );
 }

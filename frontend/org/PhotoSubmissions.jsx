@@ -11,8 +11,12 @@ export function PhotoSubmissions() {
 
   return (
     <PageMotion>
-      <TopBar title="Photo Submissions" />
-      <PendingPhotoSubmissions scopeField="orgId" scopeValue={user.uid} title="Pending photo submissions" />
+      {/* <TopBar title="Photo Submissions" /> */}
+      <PendingPhotoSubmissions
+        scopeField='orgId'
+        scopeValue={user.uid}
+        title='Pending photo submissions'
+      />
     </PageMotion>
   );
 }

@@ -250,6 +250,11 @@ export function OrganizationProfile() {
             {org.category && <TagStamp tone={hashTone(org.category)}>{org.category}</TagStamp>}
           </div>
         </div>
+        {isOwner && (
+          <Link to="/settings" className="profile-settings-link" aria-label="Settings" title="Settings">
+            <IconGear />
+          </Link>
+        )}
       </div>
       {getTrustStatus(org.reviewCount || 0, org.avgRating || 0) === 'under_review' && (
         <p className="box-danger">

@@ -4,11 +4,15 @@
 // Settings on every screen, so a second path to the same place would be a
 // decorative duplicate. `hero` renders the title much larger than a normal
 // heading — used for an organization's own name on its dashboard, which
-// should read as a headline, not just another section header.
-export function TopBar({ title, hero = false }) {
+// should read as a headline, not just another section header. `actions`
+// renders alongside the title (`.top-bar` is already a space-between flex
+// row, so this lands on the opposite side with no extra layout needed) —
+// used for a page-level primary action like "Create new quest".
+export function TopBar({ title, hero = false, actions }) {
   return (
     <div className="top-bar">
       {title ? <h1 className={hero ? 'top-bar-title-hero' : undefined}>{title}</h1> : <span aria-hidden="true" />}
+      {actions}
     </div>
   );
 }

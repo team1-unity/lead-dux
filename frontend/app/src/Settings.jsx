@@ -345,7 +345,14 @@ export function Settings() {
 
   return (
     <PageMotion>
-      <BackLink to="/profile" label="Profile" />
+      {/* An organization's "profile" is its own public profile page
+          (editable in place there — see OrganizationProfile.jsx), not the
+          generic member Profile.jsx, since that's where its avatar/gear now
+          point (see BottomNav.jsx). */}
+      <BackLink
+        to={role === 'organization' ? `/organizations/${user.uid}` : '/profile'}
+        label="Profile"
+      />
       <TopBar title="Settings" />
       <div className="settings-grid">
         <ThemePicker />
