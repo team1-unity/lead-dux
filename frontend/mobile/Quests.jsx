@@ -727,7 +727,7 @@ export function QuestDetailBody({
         <p className='quest-meta-row'>
           {(primary.accommodationTags || []).length > 0
             ? `Accessibility: ${primary.accommodationTags.map(accommodationLabel).join(', ')}`
-            : 'Accessibility information not yet provided.'}
+            : 'Accessibility information not specified.'}
         </p>
       )}
       {!primary.isDefault && !isCompleted && primary.accommodationDetails && (
