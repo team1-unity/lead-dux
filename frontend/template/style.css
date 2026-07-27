@@ -1383,6 +1383,14 @@ nav {
   min-width: 0;
   padding: 0;
   position: relative;
+  /* .ink-card's own border-color (--border) is a near-invisible 8%-opacity
+     black in the light theme — fine for most cards, but a quest row sits
+     directly against the page's own cream background with nothing else to
+     separate them, so it reads as an edge that just stops rather than a
+     bounded card. A stronger, dedicated color-mix here (not a change to
+     --border itself, which cascades to every other card/button/input in
+     the app) keeps this scoped to quest rows specifically. */
+  border-color: color-mix(in srgb, var(--line-soft) 45%, transparent);
 }
 
 /* Quests.jsx's flat card layout: a stretched-link overlay covers the whole

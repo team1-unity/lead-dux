@@ -33,6 +33,7 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { ShareButton } from '@shared/QuestSeriesRow.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
+import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 import {
   IconCalendar,
   IconPin,
@@ -1144,6 +1145,20 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
             </p>
           )} */}
         </div>
+
+        {/* pending_org only — not 'user' too, unlike main's version of this
+            widget. 'user' already sees RankProgressCard on their own
+            mobile/Home.jsx landing page (this branch splits that role's
+            home screen out from the quest feed); pending_org has no
+            equivalent separate landing page (see App.jsx's PublicHome —
+            that role isn't part of this redesign pass and still lands
+            directly on this same quest feed, banner and all), so this is
+            the only place they'd ever see their rank/points otherwise. */}
+        {role === 'pending_org' && (
+          <div style={{ marginBottom: 16 }}>
+            <RankProgressCard />
+          </div>
+        )}
 
         {role === 'admin' && (
           <div className='stat-hero-row'>
