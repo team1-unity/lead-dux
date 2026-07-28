@@ -2729,6 +2729,39 @@ def submit_quest_reflection(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# Callable from the Journal page's per-entry "Change background picture"
+# menu item — a purely decorative field on the caller's own journal entry,
+# same self-scoped-by-path shape as submit_quest_reflection above (no
+# separate ownership check needed: the doc lives under
+# users/{req.auth.uid}/journal, so there's nothing to check against).
+# thumbnailUrl is a plain URL string (one of a small curated set the
+# frontend offers, same "store the URL, not something to resolve later"
+# choice organizations.logoUrl already made) — null clears it back to the
+# entry's default unwritten/blank look.
+@https_fn.on_call()
+def set_journal_thumbnail(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    quest_id = req.data.get("questId")
+    thumbnail_url = req.data.get("thumbnailUrl")
+    if not quest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
+    if thumbnail_url is not None and not isinstance(thumbnail_url, str):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "thumbnailUrl must be a string or null.",
+        )
+
+    ref = firestore.client().collection("users").document(req.auth.uid).collection("journal").document(quest_id)
+    if not ref.get().exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "No journal entry found for this quest yet.",
+        )
+    ref.update({"thumbnailUrl": thumbnail_url})
+    return {"success": True}
+
+
 # Organization hosting reflections -------------------------------------------
 #
 # The organization side of the same journal idea: once a quest occurrence

@@ -371,3 +371,62 @@ class TestSubmitQuestReflectionWithoutFeedback:
                 data={"questId": "quest-1", "body": "Too soon."}, uid="user-1", role="user",
             ))
         assert exc_info.value.code == https_fn.FunctionsErrorCode.NOT_FOUND
+
+
+class TestSetJournalThumbnail:
+    def test_sets_a_thumbnail_url(self, fake_firestore, make_request, call):
+        seed_journal_entry(fake_firestore, "user-1", "quest-1")
+
+        result = call(main.set_journal_thumbnail, make_request(
+            data={"questId": "quest-1", "thumbnailUrl": "https://images.unsplash.com/photo-1"},
+            uid="user-1", role="user",
+        ))
+
+        assert result == {"success": True}
+        entry = get_journal_entry(fake_firestore, "user-1", "quest-1")
+        assert entry["thumbnailUrl"] == "https://images.unsplash.com/photo-1"
+
+    def test_clears_a_thumbnail_url(self, fake_firestore, make_request, call):
+        seed_journal_entry(fake_firestore, "user-1", "quest-1", thumbnailUrl="https://images.unsplash.com/photo-1")
+
+        result = call(main.set_journal_thumbnail, make_request(
+            data={"questId": "quest-1", "thumbnailUrl": None}, uid="user-1", role="user",
+        ))
+
+        assert result == {"success": True}
+        entry = get_journal_entry(fake_firestore, "user-1", "quest-1")
+        assert entry["thumbnailUrl"] is None
+
+    def test_rejects_missing_quest_id(self, fake_firestore, make_request, call):
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.set_journal_thumbnail, make_request(
+                data={"thumbnailUrl": "https://images.unsplash.com/photo-1"}, uid="user-1", role="user",
+            ))
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_rejects_non_string_thumbnail_url(self, fake_firestore, make_request, call):
+        seed_journal_entry(fake_firestore, "user-1", "quest-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.set_journal_thumbnail, make_request(
+                data={"questId": "quest-1", "thumbnailUrl": 12345}, uid="user-1", role="user",
+            ))
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+
+    def test_rejects_when_no_journal_entry_exists_yet(self, fake_firestore, make_request, call):
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.set_journal_thumbnail, make_request(
+                data={"questId": "quest-1", "thumbnailUrl": "https://images.unsplash.com/photo-1"},
+                uid="user-1", role="user",
+            ))
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.NOT_FOUND
+
+    def test_rejects_signed_out_caller(self, fake_firestore, make_request, call):
+        seed_journal_entry(fake_firestore, "user-1", "quest-1")
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.set_journal_thumbnail, make_request(
+                data={"questId": "quest-1", "thumbnailUrl": "https://images.unsplash.com/photo-1"},
+                authenticated=False,
+            ))
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.UNAUTHENTICATED

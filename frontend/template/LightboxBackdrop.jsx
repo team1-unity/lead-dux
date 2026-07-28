@@ -41,6 +41,16 @@ export function LightboxBackdrop({ onClose, label, children }) {
     };
   }, []);
 
+  // Escape closes the same way clicking the backdrop does — every caller
+  // gets this for free rather than each wiring up its own keydown listener.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return createPortal(
     <div
       className="photo-lightbox-backdrop"
