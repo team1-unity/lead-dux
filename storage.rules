@@ -74,5 +74,18 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
       allow update, delete: if false;
     }
+
+    // A member's own choice of background picture for one journal entry
+    // (see set_journal_thumbnail in functions/main.py and Journal.jsx's
+    // ThumbnailPicker). Same shape as avatars above — a fresh
+    // {timestampMillis}.{ext} path each time.
+    match /journalThumbnails/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+      allow update, delete: if false;
+    }
   }
 }

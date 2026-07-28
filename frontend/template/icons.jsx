@@ -299,9 +299,9 @@ export function IconYouTube(props) {
 export function IconDots(props) {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" {...props}>
-      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="5" r="2" />
       <circle cx="12" cy="12" r="2" />
-      <circle cx="19" cy="12" r="2" />
+      <circle cx="12" cy="19" r="2" />
     </svg>
   );
 }

@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { AnimatePresence, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
-import { db } from '@shared/firebaseapp.jsx';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from 'framer-motion';
+import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import {
   callMarkFeedbackRead,
@@ -52,6 +60,25 @@ const THUMBNAIL_OPTIONS = [
   'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=400&q=60',
 ];
 
+// A user-uploaded background picture instead — same validation/path shape
+// Profile.jsx's own avatar upload already uses (see journalThumbnails/{uid}
+// in storage.rules), just a different folder.
+const THUMBNAIL_UPLOAD_CONTENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+];
+const THUMBNAIL_UPLOAD_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const THUMBNAIL_UPLOAD_EXT_BY_CONTENT_TYPE = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
+
 function toDate(value) {
   return value.toDate ? value.toDate() : new Date(value);
 }
@@ -67,8 +94,8 @@ function FeedbackStatus({ entry }) {
   if (entry.requestStatus === 'pending') {
     const expired = entry.expiresAt && toDate(entry.expiresAt).getTime() < Date.now();
     return (
-      <div className="journal-feedback">
-        <p style={{ margin: 0 }} className="data-stat">
+      <div className='journal-feedback-pending-corner'>
+        <p style={{ margin: 0, whiteSpace: 'normal' }} className='data-stat'>
           {expired
             ? "Expired — the organization didn't respond in time."
             : 'Feedback requested — waiting on the organization to respond.'}
@@ -78,8 +105,8 @@ function FeedbackStatus({ entry }) {
   }
 
   return (
-    <div className="journal-feedback">
-      <span className="journal-rating">{entry.score}/10</span>
+    <div className='journal-feedback'>
+      <span className='journal-rating'>{entry.score}/10</span>
       <ul style={{ marginTop: 8 }}>
         {Object.entries(FEEDBACK_QUESTIONS).map(([key, question]) => (
           <li key={key}>
@@ -88,9 +115,13 @@ function FeedbackStatus({ entry }) {
         ))}
       </ul>
       {entry.extraThoughts && <p style={{ margin: 0 }}>{entry.extraThoughts}</p>}
-      {entry.orgName && <p className="quest-org-line" style={{ marginTop: 6 }}>— {entry.orgName}</p>}
+      {entry.orgName && (
+        <p className='quest-org-line' style={{ marginTop: 6 }}>
+          — {entry.orgName}
+        </p>
+      )}
       {entry.pointsAwarded > 0 && (
-        <p className="box-success" style={{ marginTop: 8 }}>
+        <p className='box-success' style={{ marginTop: 8 }}>
           You earned {entry.pointsAwarded} points for this!
         </p>
       )}
@@ -123,19 +154,39 @@ function FeedbackRequestModal({ entry, requestsUsedThisMonth, onClose }) {
   }
 
   return (
-    <LightboxBackdrop onClose={onClose} label="Request feedback">
-      <div className="journal-expanded-card" style={{ width: 'min(380px, 100%)' }} onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="journal-expanded-close" onClick={onClose} aria-label="Close">
+    <LightboxBackdrop onClose={onClose} label='Request feedback'>
+      <div
+        className='journal-expanded-card'
+        style={{ width: 'min(380px, 100%)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type='button'
+          className='journal-expanded-close'
+          onClick={onClose}
+          aria-label='Close'
+        >
           <IconX width={18} height={18} />
         </button>
         <h3 style={{ marginTop: 0, paddingRight: 28 }}>Request feedback</h3>
-        <p className="data-stat">
-          You can only request feedback from an organization up to {FEEDBACK_REQUEST_MONTHLY_CAP} times a month.
-          You've used {requestsUsedThisMonth} of {FEEDBACK_REQUEST_MONTHLY_CAP} this month.
+        <p className='data-stat' style={{ whiteSpace: 'normal' }}>
+          You can only request feedback from an organization up to {FEEDBACK_REQUEST_MONTHLY_CAP}{' '}
+          times a month. You've used {requestsUsedThisMonth} of {FEEDBACK_REQUEST_MONTHLY_CAP} this
+          month.
         </p>
-        {error && <p className="box-danger">{error}</p>}
-        <StampButton type="button" variant="primary" onClick={request} disabled={requesting || atCap} style={{ marginTop: 8 }}>
-          {requesting ? 'Requesting...' : atCap ? "You've used all your requests this month" : 'Request feedback'}
+        {error && <p className='box-danger'>{error}</p>}
+        <StampButton
+          type='button'
+          variant='primary'
+          onClick={request}
+          disabled={requesting || atCap}
+          style={{ marginTop: 8 }}
+        >
+          {requesting
+            ? 'Requesting...'
+            : atCap
+              ? "You've used all your requests this month"
+              : 'Request feedback'}
         </StampButton>
       </div>
     </LightboxBackdrop>
@@ -167,22 +218,14 @@ function useColumnCount() {
 // The reference splits images round-robin into 3 fixed columns, each with
 // its own useTransform mapping one shared useScroll's progress to a
 // different vertical offset (alternating direction per column) so the
-// columns drift past each other as you scroll — and it gets a scroll range
-// to work with no matter how much content there is by tracking a
-// *fixed-height, internally-scrollable* container (useScroll({ container })
-// against a box with its own overflow-y: auto), not the page's own scroll.
-//
-// An earlier version of this tied the offset to the *page's* scroll
-// instead (useScroll({ target })), reasoning that this app never nests a
-// second scrollbar inside a page — but that means the "container entering/
-// exiting the viewport" progress it needs never actually spans a real
-// range whenever the whole grid fits on screen at once (a Journal with
-// only a handful of entries, on any reasonably tall monitor), so the
-// transform barely moved and the effect read as entirely absent. Matching
-// the reference's real mechanism (see .journal-columns' max-height +
-// overflow-y in style.css) fixes that — it always has a genuine 0-to-1
-// scroll range to animate against as long as there's more content than
-// fits in the box, independent of total entry count.
+// columns drift past each other as you scroll. The reference gets its
+// scroll range from a dedicated fixed-height, internally-scrollable
+// container — this app deliberately doesn't nest a second scrollbar
+// inside a page, so this tracks the *page's own* scroll instead
+// (useScroll() with no target/container at all tracks the document itself
+// — 0 at the very top of the page, 1 at the very bottom), and
+// .journal-columns is a plain, non-scrolling part of the page's normal
+// flow rather than its own box.
 //
 // Column count is 1/2/3 here (see useColumnCount) rather than always 3,
 // and the offset is a smaller range than the reference's full-bleed photo
@@ -190,14 +233,23 @@ function useColumnCount() {
 // disorienting depth cue. Disabled entirely (flat, static grid) for
 // reduced-motion users or a single column, where there's nothing to offset
 // against.
-function useParallaxColumnOffsets(containerRef, columnCount, disabled) {
-  const { scrollYProgress } = useScroll({ container: containerRef, offset: ['start start', 'end start'] });
+function useParallaxColumnOffsets(columnCount, disabled) {
+  const { scrollYProgress } = useScroll();
+  // scrollYProgress jumps in whatever discrete increments the browser
+  // reports for a given scroll input (a mouse wheel notch can easily be
+  // 100+ px in one event) — feeding that straight into useTransform makes
+  // the column jump to each new position instantly rather than gliding,
+  // which reads as a "snap" rather than a smooth drift regardless of how
+  // correct the underlying math is. useSpring adds inertia on top of the
+  // raw value — the transform now eases toward wherever scroll currently
+  // is instead of teleporting there.
+  const smoothProgress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, mass: 0.5 });
   // Always call a fixed number of hooks regardless of columnCount (rules
   // of hooks) — only as many as columnCount are actually used below.
-  const t0 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, -80]);
-  const t1 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, 80]);
-  const t2 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, -80]);
-  return [t0, t1, t2].slice(0, columnCount);
+  const t0 = useTransform(smoothProgress, [0, 1], disabled ? [0, 0] : [0, -80]);
+  const t1 = useTransform(smoothProgress, [0, 1], disabled ? [0, 0] : [0, 80]);
+  const t2 = useTransform(smoothProgress, [0, 1], disabled ? [0, 0] : [0, -80]);
+  return { offsets: [t0, t1, t2].slice(0, columnCount), scrollYProgress: smoothProgress };
 }
 
 // --- Adapted from the "LayoutGrid" reference pattern ---
@@ -212,7 +264,7 @@ function useParallaxColumnOffsets(containerRef, columnCount, disabled) {
 // only shows up before a request has ever been made — once
 // entry.requestStatus is set, there's nothing left to request until next
 // month, and FeedbackStatus already shows the result inline.
-function JournalCardMenu({ entry, onChangePicture, onRequestFeedback, onEdit }) {
+function JournalCardMenu({ entry, isEditing, onChangePicture, onRequestFeedback, onEdit }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
 
@@ -245,12 +297,22 @@ function JournalCardMenu({ entry, onChangePicture, onRequestFeedback, onEdit }) 
   const hasReflection = Boolean((entry.reflectionBody || '').trim());
 
   return (
-    <div style={{ position: 'relative' }}>
+    // Deliberately NOT position:relative — .journal-card-menu-trigger and
+    // .journal-card-menu both position absolutely relative to
+    // .journal-expanded-card (the nearest *positioned* ancestor once this
+    // plain div is skipped), which is what actually anchors them to the
+    // card's real corners. Giving this wrapper its own position:relative
+    // was the bug: it's only as tall as the trigger button, sitting near
+    // the top of the card in normal flow, so a `bottom`-anchored child
+    // measured from *its* bottom edge — not the card's — landing near the
+    // top instead. The div itself still groups trigger+menu for the
+    // outside-click check below (triggerRef.current.parentElement).
+    <div>
       <button
         ref={triggerRef}
-        type="button"
-        className="journal-card-menu-trigger"
-        aria-haspopup="menu"
+        type='button'
+        className='journal-card-menu-trigger'
+        aria-haspopup='menu'
         aria-expanded={open}
         aria-label={`Options for ${entry.questTitle}`}
         onClick={() => setOpen((v) => !v)}
@@ -258,28 +320,40 @@ function JournalCardMenu({ entry, onChangePicture, onRequestFeedback, onEdit }) 
         <IconDots width={16} height={16} />
       </button>
       {open && (
-        <div className="ink-card journal-card-menu" role="menu" aria-label="Journal entry options">
+        <div className='ink-card journal-card-menu' role='menu' aria-label='Journal entry options'>
           <button
-            type="button"
-            role="menuitem"
-            className="journal-card-menu-item"
+            type='button'
+            role='menuitem'
+            className='journal-card-menu-item'
             onClick={() => select(onChangePicture)}
           >
             Change background picture
           </button>
           {!entry.requestStatus && (
             <button
-              type="button"
-              role="menuitem"
-              className="journal-card-menu-item"
+              type='button'
+              role='menuitem'
+              className='journal-card-menu-item'
               onClick={() => select(onRequestFeedback)}
             >
               Request feedback
             </button>
           )}
-          <button type="button" role="menuitem" className="journal-card-menu-item" onClick={() => select(onEdit)}>
-            {hasReflection ? 'Edit journal entry' : 'Write journal entry'}
-          </button>
+          {/* A new/unwritten entry already opens straight into the write
+              form (see ExpandedJournalEntry's initial `editing` state) —
+              nothing for this item to switch into, so it's only offered
+              once there's an actual saved reflection to go back and edit —
+              and not while already mid-edit, for the same reason. */}
+          {hasReflection && !isEditing && (
+            <button
+              type='button'
+              role='menuitem'
+              className='journal-card-menu-item'
+              onClick={() => select(onEdit)}
+            >
+              Edit journal entry
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -307,9 +381,9 @@ function JournalCard({ entry, isOpen, onOpen }) {
   return (
     <motion.div
       layoutId={`journal-card-${entry.id}`}
-      className="journal-card"
+      className='journal-card'
       data-has-picture={hasPicture ? 'true' : 'false'}
-      role="button"
+      role='button'
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={onKeyDown}
@@ -326,12 +400,12 @@ function JournalCard({ entry, isOpen, onOpen }) {
           standing in for one that was never picked. */}
       {hasPicture && (
         <>
-          <img src={entry.thumbnailUrl} alt="" className="journal-card-bg" loading="lazy" />
-          <div className="journal-card-scrim" aria-hidden="true" />
+          <img src={entry.thumbnailUrl} alt='' className='journal-card-bg' loading='lazy' />
+          <div className='journal-card-scrim' aria-hidden='true' />
         </>
       )}
-      {isNew && <span className="journal-card-new-badge">New</span>}
-      <p className="journal-card-title">{entry.questTitle}</p>
+      {isNew && <span className='journal-card-new-badge'>New</span>}
+      <p className='journal-card-title'>{entry.questTitle}</p>
     </motion.div>
   );
 }
@@ -407,11 +481,12 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
     <LightboxBackdrop onClose={onClose} label={`${entry.questTitle} journal entry`}>
       <motion.div
         layoutId={`journal-card-${entry.id}`}
-        className="journal-expanded-card"
+        className='journal-expanded-card journal-expanded-card--entry'
         onClick={(e) => e.stopPropagation()}
       >
         <JournalCardMenu
           entry={entry}
+          isEditing={editing}
           onChangePicture={() => setPickingPicture(true)}
           onRequestFeedback={() => setRequestingFeedback(true)}
           onEdit={() => {
@@ -420,7 +495,12 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
             setEditing(true);
           }}
         />
-        <button type="button" className="journal-expanded-close" onClick={onClose} aria-label="Close">
+        <button
+          type='button'
+          className='journal-expanded-close'
+          onClick={onClose}
+          aria-label='Close'
+        >
           <IconX width={18} height={18} />
         </button>
         <motion.div
@@ -429,15 +509,21 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: reduce ? 0 : 0.25, ease: 'easeInOut' }}
         >
-          <h2 style={{ marginTop: 0, paddingRight: 92 }}>{entry.questTitle}</h2>
+          <h2 style={{ marginTop: 0, paddingRight: 40 }}>{entry.questTitle}</h2>
 
-          <FeedbackStatus entry={entry} />
+          {/* Hidden while actively editing — it's corner-anchored (see
+              .journal-feedback-pending-corner) in roughly the same bottom
+              area as the Save/Cancel buttons below, so showing both at
+              once would visually collide. */}
+          {!editing && <FeedbackStatus entry={entry} />}
 
-          <div className="journal-reflection">
-            <h3>Your Reflection</h3>
+          <div className='journal-reflection'>
+            {/* <h3>Your Reflection</h3> */}
             {editing ? (
               <>
-                <p style={{ marginTop: 0 }}>Here are some questions you can think about to start your reflection:</p>
+                <p style={{ marginTop: 0 }}>
+                  Here are some questions you can think about to start your reflection:
+                </p>
                 <ul>
                   {REFLECTION_PROMPTS.map((prompt) => (
                     <li key={prompt}>{prompt}</li>
@@ -452,37 +538,42 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
                     textarea just grows, and .journal-expanded-card's own
                     overflow-y:auto takes over once the card gets taller
                     than the modal can show. */}
-                <div className="quest-form-description-wrap" data-replicated-value={body}>
+                <div className='quest-form-description-wrap' data-replicated-value={body}>
                   <textarea
-                    className="quest-form-description-input"
+                    className='quest-form-description-input'
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
-                    placeholder="Answer one of these, all of them, or just free-write — whatever works for you."
+                    placeholder='Answer one of these, all of them, or just free-write — whatever works for you.'
                   />
                 </div>
-                {error && <p className="box-danger">{error}</p>}
-                <div className="flex items-center gap-sm" style={{ marginTop: 10 }}>
-                  <StampButton type="button" variant="primary" onClick={saveReflection} disabled={saving}>
+                {error && <p className='box-danger'>{error}</p>}
+                <div className='flex items-center gap-sm' style={{ marginTop: 10 }}>
+                  <StampButton
+                    type='button'
+                    variant='primary'
+                    onClick={saveReflection}
+                    disabled={saving}
+                  >
                     {saving ? 'Saving...' : 'Save reflection'}
                   </StampButton>
                   {savedBody.trim() && (
-                    <StampButton type="button" onClick={cancelEditing} disabled={saving}>
+                    <StampButton type='button' onClick={cancelEditing} disabled={saving}>
                       Cancel
                     </StampButton>
                   )}
                 </div>
               </>
             ) : (
-              <div className="journal-reflection-complete">
+              <div className='journal-reflection-complete'>
                 <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{savedBody}</p>
                 <AnimatePresence>
                   {justSaved && (
                     <motion.p
-                      key="saved-confirmation"
+                      key='saved-confirmation'
                       initial={reduce ? false : { opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={reduce ? undefined : { opacity: 0 }}
-                      className="journal-saved-confirmation"
+                      className='journal-saved-confirmation'
                       style={{ marginTop: 12 }}
                     >
                       ✓ Saved
@@ -513,8 +604,10 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
 // top of the already-open expanded card (both are just LightboxBackdrop
 // portals to document.body), same as FeedbackRequestModal above.
 function ThumbnailPicker({ entry, onClose }) {
-  const [saving, setSaving] = useState(null); // the url (or "remove") currently being saved, or null
+  const { user } = useAuth();
+  const [saving, setSaving] = useState(null); // the url (or "remove"/"upload") currently being saved, or null
   const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
 
   async function pick(url) {
     setSaving(url ?? 'remove');
@@ -528,38 +621,89 @@ function ThumbnailPicker({ entry, onClose }) {
     }
   }
 
+  async function handleFileChosen(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // lets choosing the same file again re-fire onChange
+    if (!file) return;
+    setError('');
+    if (!THUMBNAIL_UPLOAD_CONTENT_TYPES.includes(file.type)) {
+      setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
+      return;
+    }
+    if (file.size > THUMBNAIL_UPLOAD_MAX_SIZE_BYTES) {
+      setError('Photo must be smaller than 10MB.');
+      return;
+    }
+    setSaving('upload');
+    try {
+      const ext = THUMBNAIL_UPLOAD_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+      const path = `journalThumbnails/${user.uid}/${Date.now()}.${ext}`;
+      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+      const url = await getDownloadURL(storageRef(storage, path));
+      await callSetJournalThumbnail({ questId: entry.id, thumbnailUrl: url });
+      onClose();
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+      setSaving(null);
+    }
+  }
+
   return (
-    <LightboxBackdrop onClose={onClose} label="Choose a background picture">
-      <div className="journal-expanded-card" style={{ width: 'min(420px, 100%)' }} onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="journal-expanded-close" onClick={onClose} aria-label="Close">
+    <LightboxBackdrop onClose={onClose} label='Choose a background picture'>
+      <div
+        className='journal-expanded-card'
+        style={{ width: 'min(420px, 100%)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type='button'
+          className='journal-expanded-close'
+          onClick={onClose}
+          aria-label='Close'
+        >
           <IconX width={18} height={18} />
         </button>
         <h3 style={{ marginTop: 0, paddingRight: 28 }}>Choose a background picture</h3>
-        {error && <p className="box-danger">{error}</p>}
-        <div className="journal-thumbnail-picker-grid">
+        {error && <p className='box-danger'>{error}</p>}
+        <input
+          ref={fileInputRef}
+          type='file'
+          accept={THUMBNAIL_UPLOAD_CONTENT_TYPES.join(',')}
+          onChange={handleFileChosen}
+          style={{ display: 'none' }}
+        />
+        <StampButton
+          type='button'
+          onClick={() => fileInputRef.current?.click()}
+          disabled={Boolean(saving)}
+          style={{ marginBottom: 12 }}
+        >
+          {saving === 'upload' ? 'Uploading...' : 'Upload your own photo'}
+        </StampButton>
+        <div className='journal-thumbnail-picker-grid'>
           <button
-            type="button"
-            className="journal-thumbnail-picker-option flex items-center justify-center"
+            type='button'
+            className='journal-thumbnail-picker-option flex items-center justify-center'
             data-selected={!entry.thumbnailUrl ? 'true' : 'false'}
             onClick={() => pick(null)}
             disabled={Boolean(saving)}
-            aria-label="Remove picture"
+            aria-label='Remove picture'
           >
-            <span className="field-optional" style={{ fontSize: '0.75rem' }}>
+            <span className='field-optional' style={{ fontSize: '0.75rem' }}>
               {saving === 'remove' ? '...' : 'None'}
             </span>
           </button>
           {THUMBNAIL_OPTIONS.map((url) => (
             <button
               key={url}
-              type="button"
-              className="journal-thumbnail-picker-option"
+              type='button'
+              className='journal-thumbnail-picker-option'
               data-selected={entry.thumbnailUrl === url ? 'true' : 'false'}
               onClick={() => pick(url)}
               disabled={Boolean(saving)}
-              aria-label="Use this picture"
+              aria-label='Use this picture'
             >
-              <img src={url} alt="" loading="lazy" />
+              <img src={url} alt='' loading='lazy' />
             </button>
           ))}
         </div>
@@ -578,9 +722,11 @@ export function Journal() {
   const [entries, setEntries] = useState(null);
   const [openId, setOpenId] = useState(null);
   const reduce = useReducedMotion();
-  const gridRef = useRef(null);
   const columnCount = useColumnCount();
-  const columnOffsets = useParallaxColumnOffsets(gridRef, columnCount, reduce || columnCount === 1);
+  const { offsets: columnOffsets } = useParallaxColumnOffsets(
+    columnCount,
+    reduce || columnCount === 1,
+  );
 
   useEffect(() => {
     if (!user) return undefined;
@@ -598,7 +744,8 @@ export function Journal() {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
     return entries.filter(
-      (e) => e.requestStatus === 'completed' && e.completedAt && toDate(e.completedAt) >= monthStart,
+      (e) =>
+        e.requestStatus === 'completed' && e.completedAt && toDate(e.completedAt) >= monthStart,
     ).length;
   }, [entries]);
 
@@ -613,24 +760,29 @@ export function Journal() {
   const openEntry = useMemo(() => entries?.find((e) => e.id === openId), [entries, openId]);
 
   if (loading) return <LoadingSpinner />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to='/login' replace />;
 
   return (
     <PageMotion>
-      <TopBar title="Journal" />
+      <TopBar title='Journal' />
       {entries === null ? (
-        <LoadingSpinner label="Loading your journal..." />
+        <LoadingSpinner label='Loading your journal...' />
       ) : entries.length === 0 ? (
-        <div className="quest-empty">
+        <div className='quest-empty'>
           <h2>No Entries Yet</h2>
           <p>Check into an organization quest to start your first journal entry.</p>
         </div>
       ) : (
-        <div className="journal-columns" ref={gridRef}>
+        <div className='journal-columns'>
           {columns.map((column, i) => (
-            <motion.div key={i} className="journal-column" style={{ y: columnOffsets[i] }}>
+            <motion.div key={i} className='journal-column' style={{ y: columnOffsets[i] }}>
               {column.map((entry) => (
-                <JournalCard key={entry.id} entry={entry} isOpen={openId === entry.id} onOpen={() => setOpenId(entry.id)} />
+                <JournalCard
+                  key={entry.id}
+                  entry={entry}
+                  isOpen={openId === entry.id}
+                  onOpen={() => setOpenId(entry.id)}
+                />
               ))}
             </motion.div>
           ))}
