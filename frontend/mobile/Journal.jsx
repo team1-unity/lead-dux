@@ -41,67 +41,28 @@ const FEEDBACK_QUESTIONS = {
 
 const FEEDBACK_REQUEST_MONTHLY_CAP = 3; // mirrors FEEDBACK_REQUEST_MONTHLY_CAP in functions/main.py
 
-// A small curated set of background pictures a member can pick for a saved
+// A small curated set of background pictures a member can pick for an
 // entry (see set_journal_thumbnail in functions/main.py) — no upload flow,
-// just a handful of stock photos plus "remove". The first one doubles as
-// the default look for a saved entry that never had one picked.
+// just a handful of stock photos plus "remove". A card with none picked
+// yet stays blank (see JournalCard) rather than falling back to one of
+// these by default.
 const THUMBNAIL_OPTIONS = [
   'https://images.unsplash.com/photo-1554080353-a576cf803bda?auto=format&fit=crop&w=400&q=60',
   'https://images.unsplash.com/photo-1505144808419-1957a94ca61e?auto=format&fit=crop&w=400&q=60',
   'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=400&q=60',
 ];
-const DEFAULT_THUMBNAIL = THUMBNAIL_OPTIONS[0];
 
 function toDate(value) {
   return value.toDate ? value.toDate() : new Date(value);
 }
 
-// The section covering a requested/answered piece of feedback for this
-// entry — entirely separate from the always-present reflection below it.
-// `requestsUsedThisMonth` is just a client-side hint for the "you've used
-// N of 3" copy; the real cap enforcement is server-side in
-// request_quest_feedback/submit_feedback_request_response.
-//
-// `autoRequest`: the card's 3-dot menu's "Request feedback" item opens
-// straight into the expanded entry and fires this section's own request()
-// once on mount, rather than duplicating its loading/error handling at the
-// call site — see ExpandedJournalEntry below.
-function FeedbackSection({ entry, requestsUsedThisMonth, onRequested, autoRequest }) {
-  const [requesting, setRequesting] = useState(false);
-  const [error, setError] = useState('');
-
-  async function request() {
-    setError('');
-    setRequesting(true);
-    try {
-      await onRequested(entry.id);
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setRequesting(false);
-    }
-  }
-
-  useEffect(() => {
-    if (autoRequest && !entry.requestStatus) request();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRequest]);
-
-  if (!entry.requestStatus) {
-    const atCap = requestsUsedThisMonth >= FEEDBACK_REQUEST_MONTHLY_CAP;
-    return (
-      <div className="journal-feedback">
-        <p style={{ margin: 0 }} className="data-stat">
-          Feeling good about how this one went? You can ask the organization for feedback on it — up to{' '}
-          {FEEDBACK_REQUEST_MONTHLY_CAP} times a month.
-        </p>
-        {error && <p className="box-danger">{error}</p>}
-        <StampButton type="button" onClick={request} disabled={requesting || atCap} style={{ marginTop: 8 }}>
-          {requesting ? 'Requesting...' : atCap ? "You've used all your requests this month" : 'Request feedback'}
-        </StampButton>
-      </div>
-    );
-  }
+// Read-only — whatever the organization has already said (or "waiting"/
+// "expired") about a feedback request already made for this entry. Shown
+// inline in the expanded view whenever entry.requestStatus is set; the
+// *action* of making a new request lives in FeedbackRequestModal below
+// instead (triggered from the 3-dot menu), not here.
+function FeedbackStatus({ entry }) {
+  if (!entry.requestStatus) return null;
 
   if (entry.requestStatus === 'pending') {
     const expired = entry.expiresAt && toDate(entry.expiresAt).getTime() < Date.now();
@@ -134,6 +95,50 @@ function FeedbackSection({ entry, requestsUsedThisMonth, onRequested, autoReques
         </p>
       )}
     </div>
+  );
+}
+
+// The 3-dot menu's "Request feedback" destination — a standalone modal
+// stating the once-requested-that's-it, up-to-3x-a-month policy, rather
+// than an always-visible inline button. Only ever opened when there's no
+// requestStatus yet (the menu hides this item once there is — see
+// JournalCardMenu below), so this only has one real job: confirm the
+// request.
+function FeedbackRequestModal({ entry, requestsUsedThisMonth, onClose }) {
+  const [requesting, setRequesting] = useState(false);
+  const [error, setError] = useState('');
+  const atCap = requestsUsedThisMonth >= FEEDBACK_REQUEST_MONTHLY_CAP;
+
+  async function request() {
+    setError('');
+    setRequesting(true);
+    try {
+      await callRequestQuestFeedback(entry.id);
+      onClose();
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  return (
+    <LightboxBackdrop onClose={onClose} label="Request feedback">
+      <div className="journal-expanded-card" style={{ width: 'min(380px, 100%)' }} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="journal-expanded-close" onClick={onClose} aria-label="Close">
+          <IconX width={18} height={18} />
+        </button>
+        <h3 style={{ marginTop: 0, paddingRight: 28 }}>Request feedback</h3>
+        <p className="data-stat">
+          You can only request feedback from an organization up to {FEEDBACK_REQUEST_MONTHLY_CAP} times a month.
+          You've used {requestsUsedThisMonth} of {FEEDBACK_REQUEST_MONTHLY_CAP} this month.
+        </p>
+        {error && <p className="box-danger">{error}</p>}
+        <StampButton type="button" variant="primary" onClick={request} disabled={requesting || atCap} style={{ marginTop: 8 }}>
+          {requesting ? 'Requesting...' : atCap ? "You've used all your requests this month" : 'Request feedback'}
+        </StampButton>
+      </div>
+    </LightboxBackdrop>
   );
 }
 
@@ -173,7 +178,7 @@ function useColumnCount() {
 // exiting the viewport" progress it needs never actually spans a real
 // range whenever the whole grid fits on screen at once (a Journal with
 // only a handful of entries, on any reasonably tall monitor), so the
-// transform barely moves and the effect reads as entirely absent. Matching
+// transform barely moved and the effect read as entirely absent. Matching
 // the reference's real mechanism (see .journal-columns' max-height +
 // overflow-y in style.css) fixes that — it always has a genuine 0-to-1
 // scroll range to animate against as long as there's more content than
@@ -197,12 +202,16 @@ function useParallaxColumnOffsets(containerRef, columnCount, disabled) {
 
 // --- Adapted from the "LayoutGrid" reference pattern ---
 //
-// One 3-dot menu, shared by both card states (see JournalCard below) — own
-// click-outside/Escape/focus-return handling, deliberately not built by
-// generalizing AddPropertyMenu.jsx (that component has one existing caller
-// with different semantics — a filtered add-list, not a fixed 3 actions —
-// so forcing a shared base now is more risk than this ~30 lines of overlap
-// is worth).
+// The 3-dot menu — lives inside the *expanded* card only (not the
+// collapsed grid cell; a collapsed card shows nothing but its background
+// picture and title). Own click-outside/Escape/focus-return handling,
+// deliberately not built by generalizing AddPropertyMenu.jsx (that
+// component has one existing caller with different semantics — a filtered
+// add-list, not a fixed set of actions — so forcing a shared base now is
+// more risk than this ~30 lines of overlap is worth). "Request feedback"
+// only shows up before a request has ever been made — once
+// entry.requestStatus is set, there's nothing left to request until next
+// month, and FeedbackStatus already shows the result inline.
 function JournalCardMenu({ entry, onChangePicture, onRequestFeedback, onEdit }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
@@ -236,7 +245,7 @@ function JournalCardMenu({ entry, onChangePicture, onRequestFeedback, onEdit }) 
   const hasReflection = Boolean((entry.reflectionBody || '').trim());
 
   return (
-    <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+    <div style={{ position: 'relative' }}>
       <button
         ref={triggerRef}
         type="button"
@@ -258,14 +267,16 @@ function JournalCardMenu({ entry, onChangePicture, onRequestFeedback, onEdit }) 
           >
             Change background picture
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="journal-card-menu-item"
-            onClick={() => select(onRequestFeedback)}
-          >
-            Request feedback
-          </button>
+          {!entry.requestStatus && (
+            <button
+              type="button"
+              role="menuitem"
+              className="journal-card-menu-item"
+              onClick={() => select(onRequestFeedback)}
+            >
+              Request feedback
+            </button>
+          )}
           <button type="button" role="menuitem" className="journal-card-menu-item" onClick={() => select(onEdit)}>
             {hasReflection ? 'Edit journal entry' : 'Write journal entry'}
           </button>
@@ -277,13 +288,11 @@ function JournalCardMenu({ entry, onChangePicture, onRequestFeedback, onEdit }) 
 
 // A collapsed grid cell — carries the layoutId the expanded view (below)
 // shares, so clicking it morphs into that centered card instead of just
-// appearing. Two visual states, driven off whether a reflection has
-// actually been saved yet (there's no third "locked/upcoming" state: every
-// journal entry here already represents a quest the caller has checked
-// into — see check_in_to_event in main.py — so nothing is ever "not yet
-// available").
-function JournalCard({ entry, isOpen, onOpen, onChangePicture, onRequestFeedback, onEdit }) {
-  const state = (entry.reflectionBody || '').trim() ? 'saved' : 'unwritten';
+// appearing. Nothing but the background picture and the quest title (plus
+// an unread-feedback indicator, which is real status, not decoration) —
+// no menu here and no distinction for whether a reflection exists yet;
+// that's all inside the expanded view now.
+function JournalCard({ entry, isOpen, onOpen }) {
   const isNew = !entry.read && entry.requestStatus === 'completed';
 
   function onKeyDown(e) {
@@ -293,11 +302,13 @@ function JournalCard({ entry, isOpen, onOpen, onChangePicture, onRequestFeedback
     }
   }
 
+  const hasPicture = Boolean(entry.thumbnailUrl);
+
   return (
     <motion.div
       layoutId={`journal-card-${entry.id}`}
       className="journal-card"
-      data-state={state}
+      data-has-picture={hasPicture ? 'true' : 'false'}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -310,21 +321,17 @@ function JournalCard({ entry, isOpen, onOpen, onChangePicture, onRequestFeedback
       animate={{ opacity: isOpen ? 0 : 1 }}
       transition={{ duration: 0.15 }}
     >
-      {state === 'saved' && (
+      {/* Blank until a picture is actually chosen (see "Change background
+          picture" in the expanded card's menu) — no default stock photo
+          standing in for one that was never picked. */}
+      {hasPicture && (
         <>
-          <img src={entry.thumbnailUrl || DEFAULT_THUMBNAIL} alt="" className="journal-card-bg" loading="lazy" />
+          <img src={entry.thumbnailUrl} alt="" className="journal-card-bg" loading="lazy" />
           <div className="journal-card-scrim" aria-hidden="true" />
         </>
       )}
-      <JournalCardMenu
-        entry={entry}
-        onChangePicture={onChangePicture}
-        onRequestFeedback={onRequestFeedback}
-        onEdit={onEdit}
-      />
       {isNew && <span className="journal-card-new-badge">New</span>}
       <p className="journal-card-title">{entry.questTitle}</p>
-      {state === 'unwritten' && <p className="journal-card-hint">✎ Tap to reflect</p>}
     </motion.div>
   );
 }
@@ -338,13 +345,21 @@ function JournalCard({ entry, isOpen, onOpen, onChangePicture, onRequestFeedback
 // existed). The outer layoutId is what morphs from the grid position; the
 // inner one fades its content up from below once settled — same two-layer
 // shape the LayoutGrid reference's SelectedCard uses.
-function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose, startInEditMode, autoRequestFeedback }) {
+//
+// Viewing only: an already-saved reflection shows as plain text with no
+// inline edit control — editing is reached exclusively through the 3-dot
+// menu's "Edit journal entry" (see JournalCardMenu), which lives here now
+// too. An entry with nothing saved yet has nothing to "view", so it opens
+// straight into the write form instead.
+function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
   const [savedBody, setSavedBody] = useState(entry.reflectionBody || '');
-  const [editing, setEditing] = useState(startInEditMode || !(entry.reflectionBody || '').trim());
+  const [editing, setEditing] = useState(!(entry.reflectionBody || '').trim());
   const [body, setBody] = useState(entry.reflectionBody || '');
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState('');
+  const [requestingFeedback, setRequestingFeedback] = useState(false);
+  const [pickingPicture, setPickingPicture] = useState(false);
   const reduce = useReducedMotion();
 
   useEffect(() => {
@@ -364,12 +379,6 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose, startInEd
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function startEditing() {
-    setBody(savedBody);
-    setError('');
-    setEditing(true);
-  }
 
   function cancelEditing() {
     setBody(savedBody);
@@ -401,6 +410,16 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose, startInEd
         className="journal-expanded-card"
         onClick={(e) => e.stopPropagation()}
       >
+        <JournalCardMenu
+          entry={entry}
+          onChangePicture={() => setPickingPicture(true)}
+          onRequestFeedback={() => setRequestingFeedback(true)}
+          onEdit={() => {
+            setBody(savedBody);
+            setError('');
+            setEditing(true);
+          }}
+        />
         <button type="button" className="journal-expanded-close" onClick={onClose} aria-label="Close">
           <IconX width={18} height={18} />
         </button>
@@ -410,14 +429,9 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose, startInEd
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: reduce ? 0 : 0.25, ease: 'easeInOut' }}
         >
-          <h2 style={{ marginTop: 0, paddingRight: 28 }}>{entry.questTitle}</h2>
+          <h2 style={{ marginTop: 0, paddingRight: 92 }}>{entry.questTitle}</h2>
 
-          <FeedbackSection
-            entry={entry}
-            requestsUsedThisMonth={requestsUsedThisMonth}
-            onRequested={callRequestQuestFeedback}
-            autoRequest={autoRequestFeedback}
-          />
+          <FeedbackStatus entry={entry} />
 
           <div className="journal-reflection">
             <h3>Your Reflection</h3>
@@ -450,38 +464,45 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose, startInEd
             ) : (
               <div className="journal-reflection-complete">
                 <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{savedBody}</p>
-                <div className="flex items-center gap-sm" style={{ marginTop: 12 }}>
-                  <StampButton type="button" onClick={startEditing} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
-                    Edit reflection
-                  </StampButton>
-                  <AnimatePresence>
-                    {justSaved && (
-                      <motion.span
-                        key="saved-confirmation"
-                        initial={reduce ? false : { opacity: 0, x: -6 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={reduce ? undefined : { opacity: 0 }}
-                        className="journal-saved-confirmation"
-                      >
-                        ✓ Saved
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </div>
+                <AnimatePresence>
+                  {justSaved && (
+                    <motion.p
+                      key="saved-confirmation"
+                      initial={reduce ? false : { opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={reduce ? undefined : { opacity: 0 }}
+                      className="journal-saved-confirmation"
+                      style={{ marginTop: 12 }}
+                    >
+                      ✓ Saved
+                    </motion.p>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </div>
         </motion.div>
       </motion.div>
+
+      {requestingFeedback && (
+        <FeedbackRequestModal
+          entry={entry}
+          requestsUsedThisMonth={requestsUsedThisMonth}
+          onClose={() => setRequestingFeedback(false)}
+        />
+      )}
+      {pickingPicture && <ThumbnailPicker entry={entry} onClose={() => setPickingPicture(false)} />}
     </LightboxBackdrop>
   );
 }
 
-// The "Change background picture" menu item's destination — a simple
+// The 3-dot menu's "Change background picture" destination — a simple
 // modal-on-top (no shared-element concerns, unlike the expand/morph
-// interaction above), so LightboxBackdrop is a direct fit as-is.
+// interaction above), so LightboxBackdrop is a direct fit as-is. Stacks on
+// top of the already-open expanded card (both are just LightboxBackdrop
+// portals to document.body), same as FeedbackRequestModal above.
 function ThumbnailPicker({ entry, onClose }) {
-  const [saving, setSaving] = useState(null); // the url (or null-for-"remove") currently being saved, or undefined
+  const [saving, setSaving] = useState(null); // the url (or "remove") currently being saved, or null
   const [error, setError] = useState('');
 
   async function pick(url) {
@@ -544,12 +565,7 @@ function ThumbnailPicker({ entry, onClose }) {
 export function Journal() {
   const { user, loading } = useAuth();
   const [entries, setEntries] = useState(null);
-  // Which entry (if any) is expanded, and how it was opened — card-body
-  // clicks open in read mode with no auto-action; the 3-dot menu's "Edit"
-  // forces edit mode, and its "Request feedback" fires that request
-  // immediately (see FeedbackSection's autoRequest above).
-  const [openAction, setOpenAction] = useState(null); // { id, edit, autoRequest } | null
-  const [pickingId, setPickingId] = useState(null);
+  const [openId, setOpenId] = useState(null);
   const reduce = useReducedMotion();
   const gridRef = useRef(null);
   const columnCount = useColumnCount();
@@ -563,8 +579,8 @@ export function Journal() {
     });
   }, [user]);
 
-  // Cosmetic only (see FeedbackSection) — how many requests have already
-  // completed this calendar month, across every entry.
+  // Cosmetic only (see FeedbackRequestModal) — how many requests have
+  // already completed this calendar month, across every entry.
   const requestsUsedThisMonth = useMemo(() => {
     if (!entries) return 0;
     const monthStart = new Date();
@@ -583,11 +599,7 @@ export function Journal() {
     return cols;
   }, [entries, columnCount]);
 
-  const openEntry = useMemo(
-    () => (openAction ? entries?.find((e) => e.id === openAction.id) : null),
-    [entries, openAction],
-  );
-  const pickingEntry = useMemo(() => entries?.find((e) => e.id === pickingId), [entries, pickingId]);
+  const openEntry = useMemo(() => entries?.find((e) => e.id === openId), [entries, openId]);
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
@@ -607,15 +619,7 @@ export function Journal() {
           {columns.map((column, i) => (
             <motion.div key={i} className="journal-column" style={{ y: columnOffsets[i] }}>
               {column.map((entry) => (
-                <JournalCard
-                  key={entry.id}
-                  entry={entry}
-                  isOpen={openAction?.id === entry.id}
-                  onOpen={() => setOpenAction({ id: entry.id, edit: false, autoRequest: false })}
-                  onChangePicture={() => setPickingId(entry.id)}
-                  onRequestFeedback={() => setOpenAction({ id: entry.id, edit: false, autoRequest: true })}
-                  onEdit={() => setOpenAction({ id: entry.id, edit: true, autoRequest: false })}
-                />
+                <JournalCard key={entry.id} entry={entry} isOpen={openId === entry.id} onOpen={() => setOpenId(entry.id)} />
               ))}
             </motion.div>
           ))}
@@ -628,14 +632,10 @@ export function Journal() {
             key={openEntry.id}
             entry={openEntry}
             requestsUsedThisMonth={requestsUsedThisMonth}
-            onClose={() => setOpenAction(null)}
-            startInEditMode={openAction?.edit}
-            autoRequestFeedback={openAction?.autoRequest}
+            onClose={() => setOpenId(null)}
           />
         )}
       </AnimatePresence>
-
-      {pickingEntry && <ThumbnailPicker entry={pickingEntry} onClose={() => setPickingId(null)} />}
     </PageMotion>
   );
 }

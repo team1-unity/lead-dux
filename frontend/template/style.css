@@ -3668,29 +3668,13 @@ button.data-row:active:not(:disabled) {
   outline-offset: 2px;
 }
 
-/* Unwritten — just-completed, no reflection yet: neutral fill, no photo. */
-.journal-card[data-state='unwritten'] {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 20px;
-  text-align: center;
-}
-.journal-card[data-state='unwritten'] .journal-card-title {
-  font-family: var(--font-heading);
-  font-weight: 700;
-  color: var(--line);
-}
-.journal-card-hint {
-  color: var(--line-soft);
-  font-size: 0.85rem;
-}
-
-/* Saved — has a reflection: background photo (or the same neutral fill if
-   no thumbnail was ever picked) + bottom scrim + overlaid title, same
-   photo-card shape PhotoGallery's thumbnails use. */
+/* Every collapsed card looks the same regardless of whether a reflection
+   has been saved yet — just the quest title, plain on a blank paper-well
+   fill until a background picture is actually picked (see "Change
+   background picture" in the expanded card's menu), then a photo + bottom
+   scrim + overlaid white title, same photo-card shape PhotoGallery's
+   thumbnails use. No hint text, no menu — both moved into the expanded
+   view (see ExpandedJournalEntry). */
 .journal-card-bg {
   position: absolute;
   inset: 0;
@@ -3704,15 +3688,18 @@ button.data-row:active:not(:disabled) {
   inset: 0;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0) 55%);
 }
-.journal-card[data-state='saved'] .journal-card-title {
+.journal-card-title {
   position: absolute;
   left: 14px;
   right: 14px;
   bottom: 14px;
   z-index: 1;
-  color: #ffffff;
+  color: var(--line);
   font-family: var(--font-heading);
   font-weight: 700;
+}
+.journal-card[data-has-picture='true'] .journal-card-title {
+  color: #ffffff;
 }
 .journal-card-new-badge {
   position: absolute;
@@ -3729,32 +3716,28 @@ button.data-row:active:not(:disabled) {
   border-radius: var(--radius-full);
 }
 
+/* The 3-dot menu — lives inside .journal-expanded-card now (top-right,
+   just left of the close button), not on the collapsed card. */
 .journal-card-menu-trigger {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 12px;
+  right: 52px;
   z-index: 2;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.35);
-  color: #ffffff;
-  border: none;
-  box-shadow: none;
-}
-.journal-card[data-state='unwritten'] .journal-card-menu-trigger {
   background: var(--paper-card);
-  color: var(--line);
   border: 1.5px solid var(--border);
+  color: var(--line);
 }
 .journal-card-menu {
   position: absolute;
-  top: 42px;
-  right: 8px;
+  top: 50px;
+  right: 12px;
   z-index: 3;
   display: flex;
   flex-direction: column;
