@@ -431,6 +431,15 @@ export async function callSubmitQuestReflection({ questId, body }) {
   return result.data;
 }
 
+// user: sets (or clears, with thumbnailUrl: null) the background picture on
+// the caller's own journal entry — purely decorative, independent of the
+// reflection/feedback on that same entry.
+export async function callSetJournalThumbnail({ questId, thumbnailUrl }) {
+  const fn = httpsCallable(functions, 'set_journal_thumbnail');
+  const result = await fn({ questId, thumbnailUrl });
+  return result.data;
+}
+
 // organization (own quests) or admin (any quest): saves (or updates) the
 // org's own private reflection on how hosting a specific, already-happened
 // occurrence went.
