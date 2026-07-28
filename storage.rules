@@ -40,5 +40,39 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
       allow update, delete: if false;
     }
+
+    // An org's own public "Community Photos" gallery (see
+    // add_organization_photo/remove_organization_photo in functions/main.py
+    // and OrganizationProfile.jsx). Readable by anyone signed in, same as
+    // the organizations/{uid} Firestore doc itself — writable only by the
+    // owning org, and even then only to add (never overwrite) a fresh
+    // {timestampMillis}.{ext} path; removing one goes through the Cloud
+    // Function instead (it deletes the Firestore array entry and the
+    // Storage object together, via the Admin SDK, which bypasses this rule
+    // entirely — that's why delete is false here, not because it's
+    // unreachable).
+    match /orgPhotos/{orgId}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.token.role == 'organization'
+        && request.auth.uid == orgId
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+      allow update, delete: if false;
+    }
+
+    // A member's own profile picture (see update_user_profile in
+    // functions/main.py and Profile.jsx's "Edit Profile"). Same shape as
+    // orgPhotos above — a fresh {timestampMillis}.{ext} path each time
+    // rather than overwriting, so the previous photo (however briefly)
+    // isn't deleted out from under anything still displaying its URL.
+    match /avatars/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+      allow update, delete: if false;
+    }
   }
 }

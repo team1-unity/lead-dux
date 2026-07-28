@@ -35,6 +35,15 @@ service cloud.firestore {
         allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.role == 'admin');
         allow write: if false;
       }
+
+      // A transient popup notice — a quest they'd RSVP'd to was rescheduled
+      // or cancelled (see update_quest/delete_quest* and dismiss_notification
+      // in functions/main.py). No history kept once dismissed, unlike
+      // journal above, so there's nothing here an admin needs to read either.
+      match /notifications/{notificationId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
     }
 
     // Pending organization signup request. Same read pattern as users/{uid}.

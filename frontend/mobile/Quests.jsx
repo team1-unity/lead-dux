@@ -20,6 +20,7 @@ import {
   attachSeriesRatings,
   attachOrgTrustStatus,
   isUpcoming,
+  toDate,
 } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
@@ -989,6 +990,11 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   // there's a second tab. Every other role still defaults to "org".
   const [segment, setSegment] = useState(role === 'admin' ? 'side-quests' : 'org');
   const [search, setSearch] = useState('');
+  // 'recommended' leaves load()'s own sort (relevance score, or the AI-
+  // generated recommendation order for org quests) untouched — this only
+  // applies a *different* ordering on top when explicitly chosen, rather
+  // than replacing that default sort's own logic.
+  const [sortBy, setSortBy] = useState('recommended');
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
 
@@ -1100,8 +1106,23 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
       });
     }
+    if (sortBy === 'soonest') {
+      // No date (a dateless side quest) sorts last, not first — there's no
+      // "soonest" to compare it against.
+      list = [...list].sort((a, b) => {
+        const aTime = a.primary.eventDate ? toDate(a.primary.eventDate).getTime() : Infinity;
+        const bTime = b.primary.eventDate ? toDate(b.primary.eventDate).getTime() : Infinity;
+        return aTime - bTime;
+      });
+    } else if (sortBy === 'newest') {
+      list = [...list].sort((a, b) => {
+        const aTime = a.primary.createdAt ? toDate(a.primary.createdAt).getTime() : 0;
+        const bTime = b.primary.createdAt ? toDate(b.primary.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
+    }
     return list;
-  }, [segmentedList, activeTag, search]);
+  }, [segmentedList, activeTag, search, sortBy]);
 
   const activeSeriesId = isDesktop ? (openSeriesId ?? visibleSeries[0]?.seriesId ?? null) : null;
   const activeSeries = visibleSeries.find((s) => s.seriesId === activeSeriesId) || null;
@@ -1200,16 +1221,25 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
           )}
         </div>
 
-        {/* "Sort by" has no real sort behavior wired up yet (the list is
-            relevance/AI-ranked — see the sort in load() above) — this is a
-            placeholder slot for the wireframe's pill, disabled rather than
-            pretending to do something it doesn't. It shares a row with the
-            tag chips, matching the wireframe's single filter-pill line. */}
+        {/* "Recommended" is load()'s own relevance/AI-ranked order (see
+            there) — the other two options apply a straightforward sort on
+            top instead. Shares a row with the tag chips, matching the
+            wireframe's single filter-pill line. */}
         {!mineOnly && (
           <div className='tag-filter-row'>
-            <StampButton type='button' disabled title='Coming soon'>
+            <label className='visually-hidden' htmlFor='quest-sort-by'>
               Sort by
-            </StampButton>
+            </label>
+            <select
+              id='quest-sort-by'
+              className='quest-sort-select'
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              <option value='recommended'>Recommended</option>
+              <option value='soonest'>Soonest</option>
+              <option value='newest'>Newest</option>
+            </select>
             {availableTags.length > 0 && (
               <>
                 <TagStamp

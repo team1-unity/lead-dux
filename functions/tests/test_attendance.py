@@ -17,13 +17,18 @@ class TestRsvpToQuest:
         quest = fake_firestore.client().collection("quests").document("quest-1").get().to_dict()
         assert "user-1" in quest["rsvpd"]
 
-    def test_rejects_quest_with_no_event_date(self, fake_firestore, make_request, call):
-        seed_quest(fake_firestore, "quest-1", eventDate=None)
+    def test_allows_a_dateless_one_off_side_quest(self, fake_firestore, make_request, call):
+        # A one-off (non-recurring) side/default quest legitimately has no
+        # eventDate at all (see create_default_quest's own module note in
+        # main.py — it's a self-directed challenge, not a scheduled event).
+        # rsvp_to_quest must not reject it just for lacking one.
+        seed_quest(fake_firestore, "quest-1", eventDate=None, isDefault=True, orgId=None, orgName=None, tier="iron")
 
-        with pytest.raises(https_fn.HttpsError) as exc_info:
-            call(main.rsvp_to_quest, make_request(data={"questId": "quest-1"}, uid="user-1", role="user"))
+        result = call(main.rsvp_to_quest, make_request(data={"questId": "quest-1"}, uid="user-1", role="user"))
 
-        assert exc_info.value.code == https_fn.FunctionsErrorCode.FAILED_PRECONDITION
+        assert result == {"success": True}
+        quest = fake_firestore.client().collection("quests").document("quest-1").get().to_dict()
+        assert "user-1" in quest["rsvpd"]
 
 
 class TestCancelRsvp:

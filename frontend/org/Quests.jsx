@@ -4,7 +4,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { groupBySeries, attachSeriesRatings, formatRecurrence } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { ConfirmBox, ShareButton, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
@@ -94,12 +94,18 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   // currently posted/printed/on screen) — gated behind a confirm rather
   // than firing on a single click, same treatment as the delete actions.
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
+  // Replaces this whole detail body with CreateQuestForm in edit mode
+  // (same component the "Add a quest" flow uses, via its editingQuest
+  // prop) rather than a separate form — one document-style quest editor,
+  // not two slightly different ones to keep in sync.
+  const [editing, setEditing] = useState(false);
 
   // Reset to the first occurrence and collapse any open sub-panels
   // whenever a different series is shown in this slot (desktop: clicking
   // a new row reuses this same mounted component rather than remounting).
   useEffect(() => {
     a.switchDate(occurrences[0].id);
+    setEditing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series.seriesId]);
 
@@ -111,6 +117,21 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   }, [a.qrOpen]);
 
   const rsvpCount = (selected.rsvpd || []).length;
+
+  if (editing) {
+    return (
+      <CreateQuestForm
+        quests={[]}
+        editingQuest={selected}
+        canMakeRecurring={!isSeries}
+        onCreated={() => {
+          setEditing(false);
+          onChanged();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
 
   return (
     <div className='quest-card-body'>
@@ -125,8 +146,9 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           <button
             type='button'
             className='quest-icon-btn'
-            disabled
-            title="Editing an existing quest isn't available yet"
+            onClick={() => setEditing(true)}
+            aria-label='Edit quest'
+            title='Edit'
           >
             <IconEdit />
           </button>
@@ -194,20 +216,31 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           </>
         )}
       </div>
-      {formatRecurrence(primary) && <p className='quest-org-line'>{formatRecurrence(primary)}</p>}
       <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
         {isSeries ? (
-          <label style={{ flex: '1 1 220px' }}>
-            Date
-            <select value={selectedId} onChange={(e) => a.switchDate(e.target.value)}>
+          // No visible "Date" text — the calendar icon stands in for it,
+          // matching the member-facing detail view (mobile/Quests.jsx). A
+          // visually-hidden <label> keeps the select's accessible name
+          // intact; the select itself sizes to its content/maxWidth rather
+          // than stretching the full row width.
+          <>
+            <IconCalendar style={{ flex: 'none' }} />
+            <label className='visually-hidden' htmlFor='org-quest-date-select'>
+              Date
+            </label>
+            <select
+              id='org-quest-date-select'
+              style={{ flex: 'none', maxWidth: 200 }}
+              value={selectedId}
+              onChange={(e) => a.switchDate(e.target.value)}
+            >
               {occurrences.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {formatEventDate(o.eventDate)} — {(o.rsvpd || []).length}
-                  {o.capacity ? `/${o.capacity}` : ''} RSVP'd
+                  {formatEventDate(o.eventDate)}
                 </option>
               ))}
             </select>
-          </label>
+          </>
         ) : (
           formatEventDate(selected.eventDate) && (
             <p className='quest-meta-row' style={{ margin: 0 }}>

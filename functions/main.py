@@ -904,6 +904,8 @@ def delete_organization(req: https_fn.CallableRequest) -> dict:
     for quest_doc in db.collection("quests").where("orgId", "==", target_uid).stream():
         quest = quest_doc.to_dict()
         series_ids.add(quest.get("seriesId") or quest_doc.id)
+        for uid in quest.get("rsvpd") or []:
+            _notify_user(db, uid, kind="quest_cancelled", quest_id=quest_doc.id, quest_title=quest.get("title"))
         _delete_quest(db, quest_doc.reference)
     for series_id in series_ids:
         _delete_series_reviews(db, series_id)
@@ -1322,6 +1324,168 @@ def create_default_quest(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "questId": doc_ref.id}
 
 
+# Callable from the org/admin quest-edit form — the pencil icon on a quest's
+# detail view (previously always disabled; see CreateQuestForm.jsx's edit
+# mode). Edits ONE occurrence, same granularity delete already draws
+# between "this date" and "the whole series" — a recurring series' overall
+# pattern (frequency/until) isn't editable here.
+#
+# Every field is optional in the payload (only what's actually present gets
+# validated/written) EXCEPT questId, so a caller can submit just the one
+# thing that changed rather than the whole quest every time.
+#
+# eventDate is the one field where "editable" has a real consequence: unlike
+# every other field, changing it invalidates whatever plans existing
+# RSVPs represent (an attendee, an org, or a QR check-in window all assume
+# the date on file is the real one) — so a changed eventDate clears
+# `rsvpd` back to empty and notifies whoever was on it (see _notify_user),
+# telling them to RSVP again if they still want to attend. This mirrors
+# what delete_quest/delete_quest_series/keep-only-this-date do for an
+# outright cancellation, just for a reschedule instead.
+@https_fn.on_call()
+def update_quest(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    quest_id = req.data.get("questId")
+    if not quest_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "questId is required.",
+        )
+
+    db = firestore.client()
+    ref = db.collection("quests").document(quest_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            f"No quest {quest_id}.",
+        )
+    quest = snap.to_dict()
+
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and quest.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only edit your own organization's quests.",
+        )
+
+    tz = _validate_timezone(req.data.get("timezone")) if "timezone" in req.data else (quest.get("timezone") or "UTC")
+
+    update = {"updatedAt": firestore.SERVER_TIMESTAMP}
+
+    if "title" in req.data:
+        title = req.data.get("title")
+        if not title:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "title is required.",
+            )
+        update["title"] = title
+
+    if "description" in req.data:
+        update["description"] = req.data.get("description") or ""
+
+    if "tags" in req.data:
+        update["tags"] = req.data.get("tags") or []
+
+    # location/placeId/lat/lng always travel together (see create_quest's
+    # own module note) — present if any of them is.
+    if "location" in req.data or "placeId" in req.data:
+        location = req.data.get("location") or ""
+        place_id = req.data.get("placeId")
+        if not quest.get("isDefault") and not place_id:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "A location must be selected from the suggestions.",
+            )
+        lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
+        update["location"] = location
+        update["placeId"] = place_id
+        update["lat"] = lat
+        update["lng"] = lng
+
+    if "capacity" in req.data:
+        capacity = _validate_capacity(req.data.get("capacity"))
+        current_rsvp_count = len(quest.get("rsvpd") or [])
+        if capacity is not None and capacity < current_rsvp_count:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"Capacity can't be set below the current {current_rsvp_count} RSVPs.",
+            )
+        update["capacity"] = capacity
+
+    if not quest.get("isDefault"):
+        if "accommodationTags" in req.data:
+            accommodation_tags = _validate_accommodation_tags(
+                req.data.get("accommodationTags") or [], "accommodationTags",
+            )
+            if not accommodation_tags:
+                raise https_fn.HttpsError(
+                    https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                    "Select at least one accessibility accommodation for this quest.",
+                )
+            update["accommodationTags"] = accommodation_tags
+        if "accommodationDetails" in req.data:
+            update["accommodationDetails"] = _validate_accommodation_details(req.data.get("accommodationDetails"))
+    elif "tier" in req.data:
+        update["tier"] = _validate_tier(req.data.get("tier"))
+
+    # The effective event_date after this update — either the new one being
+    # set below, or whatever's already on the doc — is what eventEndTime
+    # gets validated against, regardless of which of the two actually
+    # changed this call.
+    effective_event_date = quest.get("eventDate")
+    reschedule_notify_uids = []
+    old_event_date = None
+    if "eventDate" in req.data:
+        new_event_date = (
+            _parse_event_datetime(req.data.get("eventDate"), "eventDate", tz)
+            if req.data.get("eventDate")
+            else None
+        )
+        old_event_date = quest.get("eventDate")
+        if new_event_date != old_event_date:
+            update["eventDate"] = new_event_date
+            # Side quests can go from having a date to having none (or vice
+            # versa) freely — create_default_quest already treats a missing
+            # date as normal for them. Org quests always have one; nothing
+            # here re-enforces that specifically since the frontend form is
+            # what actually decides which fields a given quest type shows.
+            update["rsvpd"] = []
+            reschedule_notify_uids = list(quest.get("rsvpd") or [])
+        effective_event_date = new_event_date
+
+    if "eventEndTime" in req.data:
+        new_event_end_time = (
+            _parse_event_datetime(req.data.get("eventEndTime"), "eventEndTime", tz)
+            if req.data.get("eventEndTime")
+            else None
+        )
+        if new_event_end_time is not None and effective_event_date is not None and new_event_end_time <= effective_event_date:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "eventEndTime must be after eventDate.",
+            )
+        update["eventEndTime"] = new_event_end_time
+
+    if "timezone" in req.data:
+        update["timezone"] = tz
+
+    ref.update(update)
+
+    if reschedule_notify_uids:
+        notice_title = update.get("title", quest.get("title"))
+        for uid in reschedule_notify_uids:
+            _notify_user(
+                db, uid, kind="quest_rescheduled", quest_id=quest_id, quest_title=notice_title,
+                extra={"oldEventDate": old_event_date, "newEventDate": update.get("eventDate")},
+            )
+
+    return {"success": True}
+
+
 # Callable from the org dashboard (own quests only) and the admin dashboard
 # (any quest, including default neighborhood ones). Deletes just this one
 # occurrence — see delete_quest_series to remove an entire recurring series
@@ -1345,16 +1509,20 @@ def delete_quest(req: https_fn.CallableRequest) -> dict:
             https_fn.FunctionsErrorCode.NOT_FOUND,
             f"No quest {quest_id}.",
         )
+    quest = snap.to_dict()
 
     role = req.auth.token.get("role")
-    is_owning_org = role == "organization" and snap.to_dict().get("orgId") == req.auth.uid
+    is_owning_org = role == "organization" and quest.get("orgId") == req.auth.uid
     if role != "admin" and not is_owning_org:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.PERMISSION_DENIED,
             "You can only delete your own organization's quests.",
         )
 
+    rsvpd = list(quest.get("rsvpd") or [])
     _delete_quest(db, ref)
+    for uid in rsvpd:
+        _notify_user(db, uid, kind="quest_cancelled", quest_id=quest_id, quest_title=quest.get("title"))
     return {"success": True}
 
 
@@ -1399,6 +1567,11 @@ def delete_quest_series(req: https_fn.CallableRequest) -> dict:
 
     series_id = quest.get("seriesId") or quest_id
     deleted_count = 0
+    # Each occurrence has its own rsvpd (RSVP is per-date, not per-series),
+    # so notifications are gathered per occurrence actually deleted below —
+    # the one occurrence kept (if any) isn't cancelled, so its own RSVPs
+    # aren't touched or notified.
+    notify = []  # [(uid, questId, title)]
     for doc in db.collection("quests").where("seriesId", "==", series_id).stream():
         if keep_quest_id and doc.id == keep_quest_id:
             # seriesId is deliberately left as-is, not reset to doc.id —
@@ -1413,8 +1586,14 @@ def delete_quest_series(req: https_fn.CallableRequest) -> dict:
                 "recurrenceUntil": None,
             })
             continue
+        occurrence = doc.to_dict()
+        for uid in occurrence.get("rsvpd") or []:
+            notify.append((uid, doc.id, occurrence.get("title")))
         _delete_quest(db, doc.reference)
         deleted_count += 1
+
+    for uid, occurrence_id, title in notify:
+        _notify_user(db, uid, kind="quest_cancelled", quest_id=occurrence_id, quest_title=title)
 
     # Only when the ENTIRE series is gone (no date kept) does its review
     # history go with it — _delete_quest itself never touches reviews (see
@@ -1463,15 +1642,6 @@ def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
         )
 
     quest = snap.to_dict()
-    event_date = quest.get("eventDate")
-    if event_date is None:
-        # Predates the eventDate field (see create_quest/create_default_quest)
-        # — nothing to anchor a QR expiry to, and there's no edit-quest UI to
-        # backfill one, so this quest needs to be recreated instead.
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "This quest has no event date on file and can't accept RSVPs. Ask the organization to recreate it.",
-        )
 
     # Side quests are additionally gated by rank (tier unlock) and by how
     # many the caller already has in progress at once (see
@@ -2485,6 +2655,46 @@ def mark_feedback_read(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# A one-off popup notice at users/{uid}/notifications/{autoId} — distinct
+# from users/{uid}/journal (a permanent record of feedback/reflections tied
+# to a specific completed quest): a notification is transient and has no
+# reason to persist once seen, so dismissing it (see dismiss_notification
+# below) deletes the doc outright rather than flipping a `read` flag. Used
+# today for the two ways a quest can change out from under someone who's
+# already RSVP'd — see update_quest (reschedule) and the delete_quest*
+# family (cancellation) — but generic enough for any future "something
+# about a quest you're in changed" notice.
+def _notify_user(db, uid: str, *, kind: str, quest_id: str, quest_title: str, extra: dict = None) -> None:
+    doc = {
+        "kind": kind,
+        "questId": quest_id,
+        "questTitle": quest_title,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    }
+    if extra:
+        doc.update(extra)
+    db.collection("users").document(uid).collection("notifications").document().set(doc)
+
+
+# Callable from the Home page's dismissible notice banner (mobile/Home.jsx)
+# — the only way one of these is ever removed, matching the rest of the
+# app's "every write goes through a Cloud Function" rule (see
+# firestore.rules' module note).
+@https_fn.on_call()
+def dismiss_notification(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+    notification_id = req.data.get("notificationId")
+    if not notification_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "notificationId is required.",
+        )
+    firestore.client().collection("users").document(req.auth.uid).collection(
+        "notifications",
+    ).document(notification_id).delete()
+    return {"success": True}
+
+
 REFLECTION_MAX_LENGTH = 4000
 
 
@@ -3015,6 +3225,90 @@ def update_organization_profile(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# Callable from the org's own profile page — adds one photo to its public
+# "Community Photos" gallery. No moderation step (unlike quest proof
+# photos): an org's own gallery is the same trust level as everything else
+# it already controls on its profile (About section, quest descriptions),
+# so this publishes immediately. organizations.photos stores storage paths,
+# not resolved URLs — same pattern photoSubmissions already uses (see
+# submit_quest_photo) — the frontend resolves each one to a download URL
+# lazily via getDownloadURL, so there's nothing to keep in sync here if a
+# bucket's URL-signing scheme ever changes.
+@https_fn.on_call()
+def add_organization_photo(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization")
+
+    storage_path = req.data.get("storagePath")
+    if not storage_path:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "storagePath is required.",
+        )
+    # Confined to this org's own folder — the same client-side upload path
+    # convention (orgPhotos/{orgId}/...) is enforced here too, not just
+    # trusted, so a caller can't register some other path (their own
+    # unrelated file, or worse someone else's) into their gallery.
+    expected_prefix = f"orgPhotos/{req.auth.uid}/"
+    if not storage_path.startswith(expected_prefix):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "storagePath must be this organization's own upload.",
+        )
+
+    blob = admin_storage.bucket().blob(storage_path)
+    if not blob.exists():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "Uploaded photo not found — try uploading again.",
+        )
+    blob.reload()
+    if blob.size is not None and blob.size > MAX_PHOTO_SIZE_BYTES:
+        blob.delete()
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"Photo must be smaller than {MAX_PHOTO_SIZE_BYTES // (1024 * 1024)}MB.",
+        )
+    if blob.content_type not in ALLOWED_PHOTO_CONTENT_TYPES:
+        blob.delete()
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            f"contentType must be one of {sorted(ALLOWED_PHOTO_CONTENT_TYPES)}.",
+        )
+
+    firestore.client().collection("organizations").document(req.auth.uid).update({
+        "photos": firestore.ArrayUnion([storage_path]),
+    })
+    return {"success": True}
+
+
+# Callable from the org's own profile page — removes one photo from its own
+# gallery (never anyone else's; ownership is enforced the same way as
+# add_organization_photo above). Deletes the actual Storage object too, not
+# just the array entry, so a removed photo doesn't sit around orphaned.
+@https_fn.on_call()
+def remove_organization_photo(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization")
+
+    storage_path = req.data.get("storagePath")
+    if not storage_path:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "storagePath is required.",
+        )
+    expected_prefix = f"orgPhotos/{req.auth.uid}/"
+    if not storage_path.startswith(expected_prefix):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "storagePath must be this organization's own photo.",
+        )
+
+    firestore.client().collection("organizations").document(req.auth.uid).update({
+        "photos": firestore.ArrayRemove([storage_path]),
+    })
+    admin_storage.bucket().blob(storage_path).delete()
+    return {"success": True}
+
+
 # Callable from Settings — lets an already-onboarded "user" change their
 # interests after the fact (onboarding only ever sets them once).
 @https_fn.on_call()
@@ -3080,6 +3374,47 @@ def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
     db = firestore.client()
     db.collection("users").document(req.auth.uid).update(update)
     _refresh_quest_recommendations(db, req.auth.uid)
+    return {"success": True}
+
+
+# Callable from Profile's "Edit Profile" — a member's own display name and
+# profile picture. Email/password are Firebase Auth's own concern, not
+# Firestore, so the frontend calls updateEmail/updatePassword directly
+# against the client SDK instead of going through here (see Profile.jsx) —
+# this is only for the two fields that actually live on users/{uid}.
+# photoURL is a resolved download URL, not a storage path — same "store
+# the plain URL, not something to resolve later" choice organizations.
+# logoUrl already made, for the same reason (fewer places need to know how
+# to resolve a path).
+@https_fn.on_call()
+def update_user_profile(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "user")
+
+    update = {}
+    if "name" in req.data:
+        name = req.data.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "name is required.",
+            )
+        update["name"] = name.strip()
+    if "photoURL" in req.data:
+        photo_url = req.data.get("photoURL")
+        if photo_url is not None and not isinstance(photo_url, str):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "photoURL must be a string or null.",
+            )
+        update["photoURL"] = photo_url
+
+    if not update:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Provide a name and/or photoURL to update.",
+        )
+
+    firestore.client().collection("users").document(req.auth.uid).update(update)
     return {"success": True}
 
 

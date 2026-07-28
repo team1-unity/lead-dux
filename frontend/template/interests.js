@@ -4,5 +4,5 @@
 // Onboarding (set once) and Settings (change anytime).
 export const INTEREST_OPTIONS = [
   'environment', 'community', 'outdoors', 'education',
-  'technology', 'youth', 'arts', 'food security', 'fitness',
+  'technology', 'youth', 'arts', 'food-security', 'fitness',
 ];

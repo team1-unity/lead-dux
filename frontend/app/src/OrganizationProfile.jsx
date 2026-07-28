@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@shared/firebaseapp.jsx';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callUpdateOrganizationTags, callUpdateOrganizationProfile } from '@shared/fetch.jsx';
+import {
+  callUpdateOrganizationTags,
+  callUpdateOrganizationProfile,
+  callAddOrganizationPhoto,
+  callRemoveOrganizationPhoto,
+} from '@shared/fetch.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
@@ -343,6 +349,110 @@ function AboutEditForm({ org, onSaved, onCancel }) {
   );
 }
 
+const ORG_PHOTO_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const ORG_PHOTO_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const ORG_PHOTO_EXT_BY_CONTENT_TYPE = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
+
+// Wraps the generic, read-only PhotoGallery with the org-owner-only upload/
+// delete affordances — kept separate from PhotoGallery itself so that
+// component stays a plain "array of URLs in, grid+lightbox out" building
+// block (see its own module note) rather than knowing about storage paths,
+// Storage uploads, or who's allowed to manage a given gallery.
+//
+// `paths` are storage paths (organizations/{orgId}.photos), not resolved
+// URLs — same pattern quest proof photos already use (see
+// QuestPhotoSubmission.jsx) — resolved to download URLs here via
+// getDownloadURL rather than the Cloud Function returning them, so there's
+// nothing to keep in sync if the bucket's URL-signing scheme ever changes.
+function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
+  const [urls, setUrls] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      paths.map((p) => {
+        // Already a real URL — some seeded demo orgs have external
+        // (picsum.photos) placeholder URLs in this field from before this
+        // feature had a real writer at all (see seed_demo_data.py's
+        // photo_url). Only genuine Storage paths (new uploads via
+        // handleUpload below) need resolving; storageRef() would throw on
+        // a URL that isn't actually one of this bucket's own objects.
+        if (/^https?:\/\//.test(p)) return Promise.resolve(p);
+        return getDownloadURL(storageRef(storage, p)).catch(() => null);
+      }),
+    ).then((resolved) => {
+      if (!cancelled) setUrls(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [paths]);
+
+  async function handleUpload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // lets picking the exact same file again re-trigger onChange
+    if (!file) return;
+    setError('');
+    if (!ORG_PHOTO_CONTENT_TYPES.includes(file.type)) {
+      setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
+      return;
+    }
+    if (file.size > ORG_PHOTO_MAX_SIZE_BYTES) {
+      setError('Photo must be smaller than 10MB.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = ORG_PHOTO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+      const path = `orgPhotos/${orgId}/${Date.now()}.${ext}`;
+      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+      await callAddOrganizationPhoto(path);
+      onPathsChange([...paths, path]);
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleDelete(index) {
+    const path = paths[index];
+    try {
+      await callRemoveOrganizationPhoto(path);
+      onPathsChange(paths.filter((p) => p !== path));
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+    }
+  }
+
+  return (
+    <>
+      {isOwner && (
+        <label className="quest-form-ghost-btn stamp-btn" style={{ marginBottom: 12, display: 'inline-block' }}>
+          {uploading ? 'Uploading...' : '+ Add photo'}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            onChange={handleUpload}
+            disabled={uploading}
+            className="visually-hidden"
+          />
+        </label>
+      )}
+      {error && <p className="box-danger">{error}</p>}
+      <PhotoGallery photos={urls} onDelete={isOwner ? handleDelete : undefined} />
+    </>
+  );
+}
+
 function OrgQuestCard({ series }) {
   const { primary, occurrences } = series;
   const rsvpCount = (primary.rsvpd || []).length;
@@ -557,24 +667,13 @@ export function OrganizationProfile() {
       </div>
 
       <section className="ink-card" style={{ marginTop: 16 }}>
-        <div className="flex justify-between items-center">
-          <h2 style={{ margin: 0 }}>Community Photos</h2>
-          {isOwner && (
-            <div className="flex gap-sm">
-              {/* No upload/manage backend exists yet for an org's own photo
-                  gallery (org.photos has no writer) — placeholder icons for
-                  now, matching the wireframe's layout, same treatment as
-                  other not-built-yet actions this round. */}
-              <button type="button" className="quest-icon-btn" disabled title="Coming soon">
-                <IconEdit />
-              </button>
-              <button type="button" className="quest-icon-btn" disabled title="Coming soon">
-                <IconGear />
-              </button>
-            </div>
-          )}
-        </div>
-        <PhotoGallery photos={org.photos || []} />
+        <h2 style={{ margin: '0 0 12px' }}>Community Photos</h2>
+        <OrgPhotoGallery
+          orgId={orgId}
+          paths={org.photos || []}
+          isOwner={isOwner}
+          onPathsChange={(photos) => setOrg((prev) => ({ ...prev, photos }))}
+        />
       </section>
     </PageMotion>
   );

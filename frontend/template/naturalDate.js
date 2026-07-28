@@ -36,7 +36,15 @@ function monthIndexFromWord(word) {
 }
 
 const SLASH_DATE_RE = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/;
-const MONTH_NAME_DATE_RE = /^([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?$/;
+// Trailing `,?` tolerates a date phrase left with an unconsumed trailing
+// comma once parseNaturalWhen has already stripped the time portion off a
+// "Mon DD, YYYY, H:MM AM/PM" string — the app's own display format (see
+// formatEventDate) — e.g. "jun 18, 2026, 6:26 pm" leaves "jun 18, 2026,"
+// as the day phrase after the time's stripped. Without this, that trailing
+// comma left the whole regex (and therefore the date) unrecognized, even
+// though it's exactly what an organizer would see elsewhere in the app and
+// reasonably expect to be able to type or paste back in.
+const MONTH_NAME_DATE_RE = /^([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?,?$/;
 
 // Neither slash dates ("07/1") nor month-name dates ("december 12") specify
 // a year by default — this just checks the day is in range for its month
@@ -342,6 +350,36 @@ export function wallClockPartsInZone(date, timeZone) {
   );
   return {
     weekday: WEEKDAY_ABBR_DISPLAY.findIndex((w) => w.toLowerCase() === parts.weekday.toLowerCase()),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+  };
+}
+
+// Full year/month/day/hour/minute wall-clock breakdown of `date` as seen in
+// `timeZone` — unlike wallClockPartsInZone above (weekday+time only, enough
+// for carry-over's "next occurrence of this weekday pattern"), this is for
+// seeding the When field with an *exact* calendar date when editing an
+// existing quest (see CreateQuestForm.jsx's computeEditInitialState) —
+// there's a real fixed date to show back, not a pattern to project forward
+// from.
+export function fullWallClockPartsInZone(date, timeZone) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(date)
+      .map((p) => [p.type, p.value]),
+  );
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month) - 1,
+    day: Number(parts.day),
     hour: Number(parts.hour),
     minute: Number(parts.minute),
   };
