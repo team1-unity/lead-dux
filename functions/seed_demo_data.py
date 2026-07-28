@@ -1,23 +1,29 @@
-# Seeds a full presentation-ready demo dataset: verified organizations with
-# complete profiles (mission, contact info, socials, photos), a realistic
-# spread of organization quests (upcoming/nearly full/full/completed),
-# demo users at every rank with believable quest history, reviews/Trust
-# Scores, and the 6 default Iron neighborhood quests. Never deployed (no
-# @https_fn decorator anywhere in this file) — same one-time-local pattern
-# as bootstrap_admin.py/seed_quests.py.
+# Demo Seeder v2 — regenerates the full presentation/testing dataset for
+# every feature currently shipped: verified organizations with complete
+# profiles (mission, contact info, socials, community photo galleries),
+# a realistic spread of organization quests (upcoming/near-full/full/
+# completed/brand-new-org/recurring-series), demo users at every rank with
+# believable quest history and accessibility needs, reviews/Trust Scores,
+# Iron-through-Diamond side quests with mixed completion states, QR
+# attendance data ready to scan immediately, photo-submission moderation
+# queues (both org and admin), leader-requested feedback in both pending
+# and completed states, journal reflections, notification-banner demos,
+# and pending organization applications for the admin dashboard.
 #
 # Reuses main.py's already-initialized Firebase app plus its own
-# rank/points/attendance/review helpers (_rank_for_points, _attendance_ref,
-# _review_ref, ORG_QUEST_BASE_POINTS, TIER_BASE_POINTS) rather than
-# reimplementing that logic, so seeded data is always shape-correct with
-# whatever the deployed app actually reads.
+# rank/points/attendance/review/QR helpers (_rank_for_points,
+# _attendance_ref, _review_ref, _photo_submission_ref, _feedback_request_ref,
+# _journal_ref, _notify_user, ORG_QUEST_BASE_POINTS, TIER_BASE_POINTS)
+# rather than reimplementing that logic, so seeded data is always
+# shape-correct with whatever the deployed app actually reads.
 #
 # Safe to re-run — organizations/users are looked up by email first, so a
 # second run updates existing accounts instead of duplicating them. Quest/
-# attendance/review docs use deterministic ids for the same reason.
+# series/attendance/photoSubmissions/feedbackRequests docs all use
+# deterministic ids for the same reason (see wipe_old_seed_data).
 #
-# Usage (against production — a real service account key):
-#   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+# Usage (against production — a real service account key, or Application
+# Default Credentials from `gcloud auth application-default login`):
 #   cd functions && source venv/bin/activate && python3 seed_demo_data.py
 #
 # Usage (against the local emulator suite instead, for a dry run):
@@ -26,6 +32,7 @@
 #   export FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
 #   cd functions && source venv/bin/activate && python3 seed_demo_data.py
 
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import main
@@ -37,196 +44,251 @@ db = firestore.client()
 DEMO_PASSWORD = "password123"
 NOW = datetime.now(timezone.utc)
 
-ADMIN_EMAIL = "admin@leadershipquest.com"
+EMAIL_DOMAIN = "lead-dux.app"
+ADMIN_EMAIL = f"admin@{EMAIL_DOMAIN}"
 ADMIN_NAME = "Leadership Quest Admin"
+
+# The previous generation of this seeder (see git history) used these
+# addresses — wiped in wipe_old_demo_accounts() below so the app never ends
+# up with both an old- and new-domain copy of the same demo account. Frozen
+# here rather than derived, since NEW_* below has since diverged from it
+# (different domain, and org emails were never slug-derived to begin with).
+OLD_ADMIN_EMAIL = "admin@leadershipquest.com"
+OLD_USER_EMAIL_DOMAIN = "demo.leadershipquest.app"
+OLD_ORG_EMAILS = [
+    "volunteer@jccommunitykitchen.org", "info@hudsonyouthleadership.org",
+    "admin@green-tomorrow.org", "events@hobokenrescue.org", "hello@nextgenmentors.org",
+    "team@gardenstatevolunteers.org", "director@communitygarden.org", "contact@libertysports.org",
+    "hello@downtownalliance.org", "studio@creativefutures.org",
+]
 
 
 # --- Organizations -----------------------------------------------------
+#
+# 6 "normal" orgs (2 completed quests + 1 upcoming + 1 full-or-near-full),
+# 2 "recurring" orgs (same 3 one-off quests, plus a 3-occurrence recurring
+# series each — see RECURRING_SERIES below), 2 "brand new" orgs (no
+# completed quests/reviews at all yet — just upcoming/near-full, so the
+# Trust Score "new" tag and an empty-but-not-broken quest history both have
+# a real example to show).
 
 ORGS = [
     {
         "slug": "jc-community-kitchen", "name": "Jersey City Community Kitchen",
-        "email": "volunteer@jccommunitykitchen.org", "category": "Food Pantry",
+        "email": f"jc.kitchen@{EMAIL_DOMAIN}", "category": "Food Pantry", "group": "recurring",
         "city": "Jersey City", "state": "NJ", "phone": "(201) 555-0142",
         "website": "https://jccommunitykitchen.org",
         "missionStatement": "Ensuring every neighbor in Jersey City has access to a warm meal and a welcoming table.",
-        "reason": "We started in a church basement in 2014 packing lunches for day laborers, and now we run a full community kitchen five days a week.",
+        "reason": "We started in a church basement in 2014 packing lunches for day laborers, and now we run a full community kitchen five days a week. Today we serve roughly 300 meals a week across weeknight dinners, weekend service, and holiday meal drives, almost entirely powered by volunteers from the neighborhood we feed.",
         "social": {"instagram": "https://instagram.com/jccommunitykitchen", "facebook": "https://facebook.com/jccommunitykitchen"},
-        "photos": 8,
+        "photos": 9,
     },
     {
         "slug": "hudson-youth-leadership", "name": "Hudson Youth Leadership Center",
-        "email": "info@hudsonyouthleadership.org", "category": "Youth Leadership",
+        "email": f"hudson.youth@{EMAIL_DOMAIN}", "category": "Youth Leadership", "group": "normal",
         "city": "Union City", "state": "NJ", "phone": "(201) 555-0198",
         "website": "https://hudsonyouthleadership.org",
         "missionStatement": "Building tomorrow's community leaders through mentorship, public speaking, and hands-on civic projects.",
-        "reason": "Hudson County teens told us they wanted more say in their own neighborhoods — this Center is our answer.",
+        "reason": "Hudson County teens told us they wanted more say in their own neighborhoods — this Center is our answer. We run after-school public speaking workshops, a civic leadership roundtable series, and student council training for every middle and high school in the county.",
         "social": {"instagram": "https://instagram.com/hudsonyouthleadership", "facebook": "https://facebook.com/hudsonyouthleadership", "youtube": "https://youtube.com/@hudsonyouthleadership"},
         "photos": 10,
     },
     {
         "slug": "green-tomorrow-nj", "name": "Green Tomorrow NJ",
-        "email": "admin@green-tomorrow.org", "category": "Environmental",
+        "email": f"green.tomorrow@{EMAIL_DOMAIN}", "category": "Environmental", "group": "recurring",
         "city": "Montclair", "state": "NJ", "phone": "(973) 555-0176",
         "website": "https://green-tomorrow.org",
         "missionStatement": "A cleaner, greener New Jersey, one park cleanup and native planting at a time.",
-        "reason": "Founded by a handful of Montclair neighbors after a particularly bad litter season along the Third River.",
+        "reason": "Founded by a handful of Montclair neighbors after a particularly bad litter season along the Third River, we've since restored six acres of parkland and planted over two thousand native seedlings across Essex County.",
         "social": {"instagram": "https://instagram.com/greentomorrownj", "twitter": "https://x.com/greentomorrownj"},
         "photos": 12,
     },
     {
         "slug": "hoboken-animal-rescue", "name": "Hoboken Animal Rescue",
-        "email": "events@hobokenrescue.org", "category": "Animal Rescue",
+        "email": f"hoboken.rescue@{EMAIL_DOMAIN}", "category": "Animal Rescue", "group": "normal",
         "city": "Hoboken", "state": "NJ", "phone": "(201) 555-0133",
         "website": "https://hobokenrescue.org",
         "missionStatement": "No adoptable animal in Hudson County should wait more than 60 days for a home.",
-        "reason": "What began as one foster home in a Hoboken brownstone is now a full rescue network across Hudson County.",
+        "reason": "What began as one foster home in a Hoboken brownstone is now a full rescue network across Hudson County, running weekly adoption fairs, a foster-volunteer pipeline, and a shelter that never turns an animal away.",
         "social": {"instagram": "https://instagram.com/hobokenrescue", "facebook": "https://facebook.com/hobokenrescue", "tiktok": "https://tiktok.com/@hobokenrescue"},
-        "photos": 9,
+        "photos": 8,
     },
     {
         "slug": "nextgen-mentors", "name": "NextGen Mentors",
-        "email": "hello@nextgenmentors.org", "category": "Education",
+        "email": f"nextgen.mentors@{EMAIL_DOMAIN}", "category": "Education", "group": "normal",
         "city": "Newark", "state": "NJ", "phone": "(973) 555-0154",
         "website": "https://nextgenmentors.org",
         "missionStatement": "Pairing Newark students with working professionals who looked like them growing up.",
-        "reason": "Every mentor in our program was once a mentee — the whole model is built on paying it forward.",
+        "reason": "Every mentor in our program was once a mentee — the whole model is built on paying it forward. We run resume workshops, mock interviews, and a year-round 1:1 mentor match program for Newark high schoolers.",
         "social": {"instagram": "https://instagram.com/nextgenmentors", "linkedin": "https://linkedin.com/company/nextgenmentors"},
         "photos": 7,
     },
     {
         "slug": "garden-state-volunteers", "name": "Garden State Volunteers",
-        "email": "team@gardenstatevolunteers.org", "category": "Senior Services",
+        "email": f"garden.state@{EMAIL_DOMAIN}", "category": "Senior Services", "group": "normal",
         "city": "Bayonne", "state": "NJ", "phone": "(201) 555-0187",
         "website": "https://gardenstatevolunteers.org",
         "missionStatement": "Keeping Bayonne's senior residents connected, independent, and never alone on a Tuesday afternoon.",
-        "reason": "We run grocery runs, friendly visits, and tech-help sessions for seniors across Bayonne.",
+        "reason": "We run grocery runs, friendly visits, and tech-help sessions for seniors across Bayonne — most of our volunteers see the same handful of neighbors week after week.",
         "social": {"facebook": "https://facebook.com/gardenstatevolunteers"},
         "photos": 6,
     },
     {
         "slug": "riverfront-community-garden", "name": "Riverfront Community Garden",
-        "email": "director@communitygarden.org", "category": "Community Garden",
+        "email": f"community.garden@{EMAIL_DOMAIN}", "category": "Community Garden", "group": "normal",
         "city": "Weehawken", "state": "NJ", "phone": "(201) 555-0165",
         "website": "https://communitygarden.org",
         "missionStatement": "Turning an unused lot along the Hudson into fresh vegetables for the families who need them most.",
-        "reason": "The garden started with six raised beds behind the rec center — we're up to forty now.",
+        "reason": "The garden started with six raised beds behind the rec center — we're up to forty now, donating over a ton of produce a year to local food pantries.",
         "social": {"instagram": "https://instagram.com/riverfrontgarden", "facebook": "https://facebook.com/riverfrontgarden"},
         "photos": 11,
     },
     {
         "slug": "liberty-youth-sports", "name": "Liberty Youth Sports",
-        "email": "contact@libertysports.org", "category": "Community Sports",
+        "email": f"liberty.sports@{EMAIL_DOMAIN}", "category": "Community Sports", "group": "normal",
         "city": "Jersey City", "state": "NJ", "phone": "(201) 555-0121",
         "website": "https://libertysports.org",
         "missionStatement": "Every kid in Jersey City deserves a team, a coach, and a place to belong.",
-        "reason": "We field rec-league soccer, flag football, and track teams for kids who'd otherwise sit the season out.",
+        "reason": "We field rec-league soccer, flag football, and track teams for kids who'd otherwise sit the season out, and we're always short on volunteer coaches and gameday help.",
         "social": {"instagram": "https://instagram.com/libertyyouthsports", "facebook": "https://facebook.com/libertyyouthsports", "youtube": "https://youtube.com/@libertyyouthsports"},
         "photos": 9,
     },
     {
         "slug": "downtown-neighborhood-alliance", "name": "Downtown Neighborhood Alliance",
-        "email": "hello@downtownalliance.org", "category": "Neighborhood Association",
+        "email": f"downtown.alliance@{EMAIL_DOMAIN}", "category": "Neighborhood Association", "group": "brand_new",
         "city": "Jersey City", "state": "NJ", "phone": "(201) 555-0110",
         "website": "https://downtownalliance.org",
         "missionStatement": "A stronger downtown starts with neighbors who actually know each other.",
-        "reason": "Block parties, safety walks, and a monthly potluck — small things that add up to a real community.",
+        "reason": "We just got our nonprofit paperwork finalized this spring — block parties, safety walks, and a monthly potluck are our first real events as an organization.",
         "social": {"instagram": "https://instagram.com/downtownallianceJC", "facebook": "https://facebook.com/downtownallianceJC"},
-        "photos": 8,
+        "photos": 5,
     },
     {
         "slug": "creative-futures-collective", "name": "Creative Futures Collective",
-        "email": "studio@creativefutures.org", "category": "Arts & Culture",
+        "email": f"creative.futures@{EMAIL_DOMAIN}", "category": "Arts & Culture", "group": "brand_new",
         "city": "Newark", "state": "NJ", "phone": "(973) 555-0143",
         "website": "https://creativefutures.org",
         "missionStatement": "Free studio space and real audiences for Newark's next generation of working artists.",
-        "reason": "We turned a vacant storefront on Halsey Street into a gallery, workshop, and performance space.",
+        "reason": "We signed the lease on a vacant storefront on Halsey Street last month and are just now opening it up as a gallery, workshop, and performance space for local artists.",
         "social": {"instagram": "https://instagram.com/creativefuturesnwk", "tiktok": "https://tiktok.com/@creativefuturesnwk", "youtube": "https://youtube.com/@creativefuturesnwk"},
-        "photos": 10,
+        "photos": 5,
     },
 ]
 
+# Every accessibility accommodation combo a seeded org quest can offer,
+# cycled across all org quests below (see ACCOMMODATION_OPTIONS in
+# main.py) — organization quests require at least one non-empty
+# accommodationTags entry as of the accessibility-accommodations feature,
+# so every quest here needs one, not just a token few.
+ACCOMMODATION_CYCLE = [
+    ["wheelchair-accessible"],
+    ["wheelchair-accessible", "accessible-parking"],
+    ["asl-interpretation"],
+    ["sensory-friendly"],
+    ["elevator-access"],
+    ["wheelchair-accessible", "elevator-access"],
+]
+ACCOMMODATION_DETAILS_SAMPLE = "Ring the side door bell for step-free entry, or ask any volunteer in a green vest for help."
 
-# --- Quest templates per org (4 each: 2 completed, 1 upcoming, 1 nearly-full-or-full) ---
+_accommodation_cursor = 0
 
+
+def _next_accommodation():
+    global _accommodation_cursor
+    tags = ACCOMMODATION_CYCLE[_accommodation_cursor % len(ACCOMMODATION_CYCLE)]
+    details = ACCOMMODATION_DETAILS_SAMPLE if _accommodation_cursor % 5 == 4 else None
+    _accommodation_cursor += 1
+    return tags, details
+
+
+# One-off quests per org — "small"/"big" completed quests (so review counts
+# and attendee-history spread land naturally per org), one upcoming (not
+# full), one full-or-near-full. "brand_new" orgs skip the two completed
+# slots entirely — no quest history yet, no reviews yet, Trust Score
+# correctly reads "new". Tags intentionally use the app's 9 canonical
+# tones (community/education/environment/outdoors/technology/youth/
+# fitness/food-security/arts — see tagTones.js) wherever a tag should
+# actually drive interest-matching (Quests.jsx's relevanceScore) or a
+# tag-badge (badges.js), same as user interests below; extra descriptive
+# tags beyond those 9 are fine too (TagStamp just renders them neutral).
 QUEST_TEMPLATES = {
     "jc-community-kitchen": [
-        {"key": "A", "title": "Weekend Meal Prep & Serve", "days": -35, "capacity": 15, "count": 12, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
-        {"key": "B", "title": "Thanksgiving Food Drive Sorting", "days": -60, "capacity": 10, "count": 6, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
-        {"key": "upcoming", "title": "Weeknight Dinner Service", "days": 10, "capacity": 15, "count": 4, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
-        {"key": "near_full", "title": "Holiday Meal Packing Day", "days": 5, "capacity": 15, "count": 14, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
-        {"key": "upcoming2", "title": "Community Fridge Restock", "days": 20, "capacity": 12, "count": 3, "tags": ["community", "food security"], "location": "JC Community Kitchen, Jersey City"},
+        {"key": "completed_small", "title": "Thanksgiving Food Drive Sorting", "days": -60, "capacity": 10, "count": 4, "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City"},
+        {"key": "completed_big", "title": "Weekend Meal Prep & Serve", "days": -35, "capacity": 15, "count": 13, "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City"},
+        {"key": "near_full", "title": "Holiday Meal Packing Day", "days": 5, "capacity": 15, "count": 14, "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City", "qr_precheck": 2},
     ],
     "hudson-youth-leadership": [
-        {"key": "A", "title": "Public Speaking Workshop for Teens", "days": -28, "capacity": 20, "count": 15, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
-        {"key": "B", "title": "Civic Leadership Roundtable", "days": -50, "capacity": 12, "count": 7, "tags": ["youth", "community"], "location": "Union City Library"},
+        {"key": "completed_small", "title": "Civic Leadership Roundtable", "days": -50, "capacity": 12, "count": 3, "tags": ["youth", "community"], "location": "Union City Library"},
+        {"key": "completed_big", "title": "Public Speaking Workshop for Teens", "days": -28, "capacity": 20, "count": 16, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
         {"key": "upcoming", "title": "Youth Leadership Training: Goal Setting", "days": 14, "capacity": 20, "count": 5, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
         {"key": "full", "title": "Student Council Bootcamp", "days": 7, "capacity": 12, "count": 12, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
-        {"key": "upcoming2", "title": "Debate Club Kickoff Night", "days": 21, "capacity": 18, "count": 5, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
     ],
     "green-tomorrow-nj": [
-        {"key": "A", "title": "Third River Park Cleanup", "days": -21, "capacity": 20, "count": 18, "tags": ["environment", "outdoors"], "location": "Third River Park, Montclair"},
-        {"key": "B", "title": "Native Plant Restoration Day", "days": -45, "capacity": 12, "count": 9, "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair"},
-        {"key": "upcoming", "title": "Fall Leaf Composting Workshop", "days": 12, "capacity": 25, "count": 6, "tags": ["environment"], "location": "Edgemont Park, Montclair"},
-        {"key": "near_full", "title": "Branch Brook Park Cleanup", "days": 4, "capacity": 25, "count": 22, "tags": ["environment", "outdoors"], "location": "Branch Brook Park, Montclair"},
-        {"key": "upcoming2", "title": "Pollinator Garden Planting", "days": 25, "capacity": 18, "count": 4, "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair"},
+        {"key": "completed_small", "title": "Native Plant Restoration Day", "days": -45, "capacity": 12, "count": 5, "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair"},
+        {"key": "completed_big", "title": "Third River Park Cleanup", "days": -21, "capacity": 20, "count": 18, "tags": ["environment", "outdoors"], "location": "Third River Park, Montclair"},
+        {"key": "near_full", "title": "Branch Brook Park Cleanup", "days": 4, "capacity": 25, "count": 23, "tags": ["environment", "outdoors"], "location": "Branch Brook Park, Montclair", "qr_precheck": 2},
     ],
     "hoboken-animal-rescue": [
-        {"key": "A", "title": "Adoption Fair Volunteer Day", "days": -30, "capacity": 12, "count": 10, "tags": ["community", "outdoors"], "location": "Church Square Park, Hoboken"},
-        {"key": "B", "title": "Shelter Deep-Clean & Enrichment Day", "days": -55, "capacity": 8, "count": 5, "tags": ["community"], "location": "Hoboken Animal Rescue Shelter"},
+        {"key": "completed_small", "title": "Shelter Deep-Clean & Enrichment Day", "days": -55, "capacity": 8, "count": 3, "tags": ["community"], "location": "Hoboken Animal Rescue Shelter"},
+        {"key": "completed_big", "title": "Adoption Fair Volunteer Day", "days": -30, "capacity": 12, "count": 11, "tags": ["community", "outdoors"], "location": "Church Square Park, Hoboken"},
         {"key": "upcoming", "title": "Foster Orientation Night", "days": 9, "capacity": 10, "count": 3, "tags": ["community", "education"], "location": "Hoboken Animal Rescue Shelter"},
         {"key": "full", "title": "Winter Coat & Supply Drive", "days": 6, "capacity": 8, "count": 8, "tags": ["community"], "location": "Hoboken Animal Rescue Shelter"},
-        {"key": "upcoming2", "title": "Dog Walking Volunteer Morning", "days": 22, "capacity": 14, "count": 6, "tags": ["community", "outdoors"], "location": "Church Square Park, Hoboken"},
     ],
     "nextgen-mentors": [
-        {"key": "A", "title": "Mentor Match Night", "days": -24, "capacity": 20, "count": 14, "tags": ["education", "youth"], "location": "Newark Public Library"},
-        {"key": "B", "title": "Resume & Interview Workshop", "days": -48, "capacity": 10, "count": 6, "tags": ["education"], "location": "NextGen Mentors HQ, Newark"},
+        {"key": "completed_small", "title": "Resume & Interview Workshop", "days": -48, "capacity": 10, "count": 4, "tags": ["education"], "location": "NextGen Mentors HQ, Newark"},
+        {"key": "completed_big", "title": "Mentor Match Night", "days": -24, "capacity": 20, "count": 17, "tags": ["education", "youth"], "location": "Newark Public Library"},
         {"key": "upcoming", "title": "New Mentor Orientation", "days": 16, "capacity": 12, "count": 4, "tags": ["education", "community"], "location": "NextGen Mentors HQ, Newark"},
-        {"key": "near_full", "title": "Career Panel: Careers in Tech", "days": 5, "capacity": 20, "count": 18, "tags": ["education", "technology"], "location": "Newark Public Library"},
-        {"key": "upcoming2", "title": "Mock Interview Night: Finance Track", "days": 23, "capacity": 14, "count": 3, "tags": ["education", "youth"], "location": "NextGen Mentors HQ, Newark"},
+        {"key": "near_full", "title": "Career Panel: Careers in Tech", "days": 5, "capacity": 20, "count": 19, "tags": ["education", "technology"], "location": "Newark Public Library"},
     ],
     "garden-state-volunteers": [
-        {"key": "A", "title": "Grocery Run for Seniors", "days": -33, "capacity": 10, "count": 8, "tags": ["community"], "location": "Bayonne Senior Center"},
-        {"key": "B", "title": "Tech Help Desk for Seniors", "days": -62, "capacity": 6, "count": 4, "tags": ["community", "technology"], "location": "Bayonne Senior Center"},
+        {"key": "completed_small", "title": "Tech Help Desk for Seniors", "days": -62, "capacity": 6, "count": 3, "tags": ["community", "technology"], "location": "Bayonne Senior Center"},
+        {"key": "completed_big", "title": "Grocery Run for Seniors", "days": -33, "capacity": 10, "count": 9, "tags": ["community"], "location": "Bayonne Senior Center"},
         {"key": "upcoming", "title": "Friendly Visits Volunteer Training", "days": 11, "capacity": 10, "count": 2, "tags": ["community"], "location": "Bayonne Senior Center"},
         {"key": "full", "title": "Senior Center Holiday Party Setup", "days": 8, "capacity": 10, "count": 10, "tags": ["community"], "location": "Bayonne Senior Center"},
-        {"key": "upcoming2", "title": "Holiday Card Writing for Seniors", "days": 17, "capacity": 12, "count": 4, "tags": ["community"], "location": "Bayonne Senior Center"},
     ],
     "riverfront-community-garden": [
-        {"key": "A", "title": "Fall Harvest Volunteer Day", "days": -26, "capacity": 20, "count": 16, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
-        {"key": "B", "title": "Compost Bin Build Day", "days": -52, "capacity": 10, "count": 7, "tags": ["environment", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
+        {"key": "completed_small", "title": "Compost Bin Build Day", "days": -52, "capacity": 10, "count": 4, "tags": ["environment", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
+        {"key": "completed_big", "title": "Fall Harvest Volunteer Day", "days": -26, "capacity": 20, "count": 17, "tags": ["community", "outdoors", "food-security"], "location": "Riverfront Community Garden, Weehawken"},
         {"key": "upcoming", "title": "Spring Bed Prep Workshop", "days": 18, "capacity": 20, "count": 5, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
         {"key": "near_full", "title": "Community Planting Day", "days": 3, "capacity": 20, "count": 19, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
-        {"key": "upcoming2", "title": "Pollinator Bed Planting", "days": 26, "capacity": 16, "count": 5, "tags": ["environment", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
     ],
     "liberty-youth-sports": [
-        {"key": "A", "title": "Fall Soccer Coaching Clinic", "days": -20, "capacity": 15, "count": 11, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
-        {"key": "B", "title": "Flag Football Jamboree Volunteer Day", "days": -44, "capacity": 10, "count": 6, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
+        {"key": "completed_small", "title": "Flag Football Jamboree Volunteer Day", "days": -44, "capacity": 10, "count": 3, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
+        {"key": "completed_big", "title": "Fall Soccer Coaching Clinic", "days": -20, "capacity": 15, "count": 12, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
         {"key": "upcoming", "title": "Winter Track Coaching Signup Night", "days": 13, "capacity": 15, "count": 3, "tags": ["youth", "fitness"], "location": "Liberty Youth Sports HQ, Jersey City"},
         {"key": "full", "title": "Youth Soccer Tournament Volunteer Day", "days": 6, "capacity": 15, "count": 15, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
-        {"key": "upcoming2", "title": "Spring Sign-Up Fair Volunteer Day", "days": 19, "capacity": 20, "count": 6, "tags": ["youth", "fitness"], "location": "Liberty Youth Sports HQ, Jersey City"},
     ],
     "downtown-neighborhood-alliance": [
-        {"key": "A", "title": "Neighborhood Safety Walk", "days": -29, "capacity": 12, "count": 9, "tags": ["community"], "location": "Downtown Jersey City"},
-        {"key": "B", "title": "Fall Block Party Cleanup", "days": -58, "capacity": 15, "count": 13, "tags": ["community", "outdoors"], "location": "Van Vorst Park, Jersey City"},
         {"key": "upcoming", "title": "Monthly Neighbor Potluck", "days": 10, "capacity": 30, "count": 6, "tags": ["community"], "location": "Van Vorst Park, Jersey City"},
-        {"key": "near_full", "title": "Downtown Mural Cleanup Day", "days": 4, "capacity": 20, "count": 17, "tags": ["community", "arts"], "location": "Downtown Jersey City"},
-        {"key": "upcoming2", "title": "Storefront Window Painting", "days": 15, "capacity": 15, "count": 4, "tags": ["community", "arts"], "location": "Downtown Jersey City"},
+        {"key": "near_full", "title": "Downtown Mural Cleanup Day", "days": 4, "capacity": 20, "count": 18, "tags": ["community", "arts"], "location": "Downtown Jersey City"},
     ],
     "creative-futures-collective": [
-        {"key": "A", "title": "Open Studio Volunteer Night", "days": -23, "capacity": 12, "count": 9, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
-        {"key": "B", "title": "Gallery Install Volunteer Day", "days": -49, "capacity": 8, "count": 5, "tags": ["arts"], "location": "Halsey Street Studio, Newark"},
         {"key": "upcoming", "title": "Youth Art Workshop: Community Murals", "days": 15, "capacity": 16, "count": 4, "tags": ["arts", "youth"], "location": "Halsey Street Studio, Newark"},
-        {"key": "full", "title": "Halsey Street Pop-Up Gallery Fundraiser", "days": 5, "capacity": 10, "count": 10, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
-        {"key": "upcoming2", "title": "Open Mic Night Volunteer Crew", "days": 28, "capacity": 12, "count": 3, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
+        {"key": "near_full", "title": "Halsey Street Pop-Up Gallery Fundraiser", "days": 5, "capacity": 10, "count": 9, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
     ],
 }
 
-# Real-world coordinates for every `location` string used in QUEST_TEMPLATES
-# below — without these, EventsMap.jsx correctly (by design) excludes a
-# quest from the map entirely, which is what made earlier seeded org quests
-# invisible there. DEFAULT_IRON_QUESTS deliberately stays uncoordinated
-# (its locations are genuinely "anywhere," not a specific point).
+# A 3-occurrence weekly recurring series per "recurring"-group org — first
+# occurrence already happened (completed, reviewable), the other two are
+# upcoming. Mirrors exactly what create_recurring_quest itself would have
+# produced: every occurrence shares one seriesId (the first occurrence's
+# own doc id) plus the same recurrenceFrequency/recurrenceUntil (see
+# _quest_doc_fields/create_recurring_quest in main.py) — the one thing a
+# single seed_org_quests pass can't produce, since that always makes
+# standalone quests.
+RECURRING_SERIES = {
+    "jc-community-kitchen": {
+        "title": "Weeknight Dinner Service", "capacity": 15,
+        "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City",
+        "occurrences": [(-7, 5), (7, 4), (14, 2)],
+    },
+    "green-tomorrow-nj": {
+        "title": "Pollinator Garden Planting", "capacity": 18,
+        "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair",
+        "occurrences": [(-14, 6), (7, 5), (21, 3)],
+    },
+}
+
 LOCATION_COORDS = {
     "JC Community Kitchen, Jersey City": (40.7178, -74.0431),
     "Hudson Youth Leadership Center, Union City": (40.7795, -74.0246),
@@ -258,7 +320,7 @@ QUEST_DESCRIPTIONS = {
     "Student Council Bootcamp": "An intensive day of training for incoming student council members across Hudson County schools.",
     "Third River Park Cleanup": "Bring gloves and good shoes — we're clearing litter and invasive growth along the Third River.",
     "Native Plant Restoration Day": "Help us plant native species that support local pollinators along the Edgemont Park trail.",
-    "Fall Leaf Composting Workshop": "Learn how to turn fallen leaves into next season's compost, then help us start this year's pile.",
+    "Pollinator Garden Planting": "Plant this season's pollinator-friendly bed alongside garden members and neighborhood families.",
     "Branch Brook Park Cleanup": "A full-morning cleanup across Branch Brook Park's cherry blossom groves.",
     "Adoption Fair Volunteer Day": "Help run our outdoor adoption fair — set up, greet visitors, and walk dogs between meet-and-greets.",
     "Shelter Deep-Clean & Enrichment Day": "A deep clean of the shelter plus enrichment activities for animals waiting on their forever homes.",
@@ -280,24 +342,10 @@ QUEST_DESCRIPTIONS = {
     "Flag Football Jamboree Volunteer Day": "Help run stations, keep score, and cheer on our flag football jamboree.",
     "Winter Track Coaching Signup Night": "Sign up to coach or help with our winter indoor track program.",
     "Youth Soccer Tournament Volunteer Day": "Volunteers needed to run our end-of-season youth soccer tournament.",
-    "Neighborhood Safety Walk": "An evening walk through downtown to flag broken streetlights, potholes, and safety concerns.",
-    "Fall Block Party Cleanup": "Help pack up and clean up after our biggest block party of the year.",
-    "Monthly Neighbor Potluck": "Bring a dish, meet your neighbors — our monthly potluck at Van Vorst Park.",
+    "Monthly Neighbor Potluck": "Bring a dish, meet your neighbors — our very first monthly potluck at Van Vorst Park.",
     "Downtown Mural Cleanup Day": "Clean and touch up the community mural wall downtown ahead of its anniversary.",
-    "Open Studio Volunteer Night": "Help host our monthly open studio night for local working artists.",
-    "Gallery Install Volunteer Day": "Hang and light this season's gallery show alongside our curators.",
     "Youth Art Workshop: Community Murals": "Teens design and paint a mural panel with guidance from a working muralist.",
-    "Halsey Street Pop-Up Gallery Fundraiser": "A one-night pop-up gallery and fundraiser supporting next year's studio scholarships.",
-    "Community Fridge Restock": "Stock and organize the neighborhood community fridge with fresh donated groceries.",
-    "Debate Club Kickoff Night": "Help launch this semester's teen debate club with practice rounds and topic drafting.",
-    "Pollinator Garden Planting": "Plant a new native pollinator bed to support local bees and butterflies.",
-    "Dog Walking Volunteer Morning": "Give shelter dogs a morning walk and some one-on-one attention before adoption hours.",
-    "Mock Interview Night: Finance Track": "Mentors run mock interviews for students prepping for finance internships and entry-level roles.",
-    "Holiday Card Writing for Seniors": "Write and decorate holiday cards for homebound seniors in our friendly-visits program.",
-    "Pollinator Bed Planting": "Plant this season's pollinator-friendly bed alongside garden members and neighborhood families.",
-    "Spring Sign-Up Fair Volunteer Day": "Staff tables and greet families at our spring rec-league sign-up fair.",
-    "Storefront Window Painting": "Paint seasonal designs on downtown storefront windows alongside local shop owners.",
-    "Open Mic Night Volunteer Crew": "Run sound, seating, and sign-ups for this month's open mic night at the studio.",
+    "Halsey Street Pop-Up Gallery Fundraiser": "A one-night pop-up gallery and fundraiser supporting next year's studio scholarships — our very first public event.",
 }
 
 
@@ -305,41 +353,64 @@ QUEST_DESCRIPTIONS = {
 
 USERS = [
     # Iron: 0-99 points
-    {"name": "Maria Ortiz", "points": 0, "interests": ["community", "food security"]},
+    {"name": "Maria Ortiz", "points": 0, "interests": ["community", "food-security"]},
     {"name": "Devon Carter", "points": 20, "interests": ["environment", "outdoors"]},
-    {"name": "Priya Nair", "points": 40, "interests": ["education", "technology"]},
+    {"name": "Priya Nair", "points": 40, "interests": ["education", "technology"], "accommodationNeeds": ["wheelchair-accessible"]},
     {"name": "Malik Thompson", "points": 60, "interests": ["youth", "fitness"]},
     {"name": "Sofia Ramirez", "points": 80, "interests": ["arts", "community"]},
     # Bronze: 100-199
     {"name": "Ethan Walsh", "points": 100, "interests": ["environment"]},
     {"name": "Amara Okafor", "points": 120, "interests": ["community", "youth"]},
     {"name": "Liam Chen", "points": 140, "interests": ["technology", "education"]},
-    {"name": "Jasmine Rivera", "points": 160, "interests": ["food security", "community"]},
-    {"name": "Noah Kim", "points": 180, "interests": ["outdoors", "fitness"]},
+    {"name": "Jasmine Rivera", "points": 160, "interests": ["food-security", "community"]},
+    {"name": "Noah Kim", "points": 180, "interests": ["outdoors", "fitness"], "accommodationNeeds": ["sensory-friendly"]},
     # Silver: 200-299
     {"name": "Camila Torres", "points": 200, "interests": ["arts", "youth"]},
     {"name": "Tyler Brooks", "points": 220, "interests": ["environment", "outdoors"]},
-    {"name": "Aaliyah Jackson", "points": 240, "interests": ["community", "education"]},
+    {"name": "Aaliyah Jackson", "points": 240, "interests": ["community", "education"], "accommodationNeeds": ["asl-interpretation"]},
     {"name": "Ben Whitfield", "points": 260, "interests": ["fitness", "youth"]},
-    {"name": "Grace Nguyen", "points": 280, "interests": ["food security", "community"]},
+    {"name": "Grace Nguyen", "points": 280, "interests": ["food-security", "community"]},
     # Gold: 300-399
     {"name": "Marcus Bell", "points": 300, "interests": ["youth", "fitness"]},
     {"name": "Isabella Rossi", "points": 320, "interests": ["arts", "community"]},
     {"name": "Omar Haddad", "points": 340, "interests": ["technology", "education"]},
-    {"name": "Chloe Martin", "points": 360, "interests": ["environment", "outdoors"]},
-    {"name": "Xavier Delgado", "points": 380, "interests": ["community", "food security"]},
+    {"name": "Chloe Martin", "points": 360, "interests": ["environment", "outdoors"], "accommodationNeeds": ["accessible-parking"]},
+    {"name": "Xavier Delgado", "points": 380, "interests": ["community", "food-security"]},
     # Diamond: 400+
     {"name": "Hannah Cohen", "points": 400, "interests": ["community", "education"], "certified": True},
     {"name": "Diego Fernandez", "points": 440, "interests": ["environment", "outdoors"], "certified": True},
     {"name": "Zoe Patterson", "points": 480, "interests": ["youth", "arts"], "certified": False},
     {"name": "Caleb Osei", "points": 520, "interests": ["fitness", "community"], "certified": False},
-    {"name": "Lena Whitmore", "points": 560, "interests": ["food security", "education"], "certified": False},
+    {"name": "Lena Whitmore", "points": 560, "interests": ["food-security", "education"], "certified": False, "accommodationNeeds": ["elevator-access"]},
 ]
+
+# Marcus Bell's completed leader-requested feedback response (see
+# seed_feedback_and_journal below) earns the +20 bonus — added here so his
+# stored `points` total stays consistent with the bonus his own Journal
+# entry shows him as having received. Only Marcus, not any other named
+# user, actually gets a bonus-earning completed feedback doc, so this set
+# must stay in lockstep with seed_feedback_and_journal's own
+# `completed_feedback` list below.
+FEEDBACK_BONUS_RECIPIENTS = {"Marcus Bell"}
 
 EXPERIENCE_CYCLE = ["new", "some", "experienced"]
 TIME_CYCLE = ["monthly", "weekly", "flexible"]
 GROUP_CYCLE = ["solo", "team", "leading"]
 MOTIVATION_CYCLE = ["experience", "community", "impact", "requirement"]
+
+# Cycled across every demo user so submit_onboarding's required location/
+# placeId/lat/lng (and _has_enough_accessible_org_quests, for the 5 users
+# above with accommodationNeeds) have real values to work with — a gap in
+# the previous seeder, which left every demo user with no location at all.
+NJ_LOCATIONS = [
+    ("Jersey City, NJ", "seed-place-jersey-city", 40.7178, -74.0431),
+    ("Hoboken, NJ", "seed-place-hoboken", 40.7440, -74.0324),
+    ("Union City, NJ", "seed-place-union-city", 40.7795, -74.0246),
+    ("Newark, NJ", "seed-place-newark", 40.7357, -74.1724),
+    ("Montclair, NJ", "seed-place-montclair", 40.8259, -74.2090),
+    ("Bayonne, NJ", "seed-place-bayonne", 40.6687, -74.1143),
+    ("Weehawken, NJ", "seed-place-weehawken", 40.7695, -74.0110),
+]
 
 REVIEW_BODIES = [
     "This was my first volunteer event and everyone was incredibly welcoming.",
@@ -388,6 +459,103 @@ DEFAULT_IRON_QUESTS = [
     },
 ]
 
+# Tiers above Iron unlock as a user's rank rises (see _unlocked_tiers in
+# main.py) — the previous seeder only ever created Iron quests, so no
+# higher tier had any real data to gate against. One list per tier, same
+# shape as DEFAULT_IRON_QUESTS.
+BRONZE_QUESTS = [
+    {
+        "title": "Organize a Small Cleanup With Two Neighbors",
+        "description": "Recruit two neighbors and spend an hour cleaning up a stretch of street or a small park together. Leadership starts with getting a small group moving on something that matters.",
+        "tags": ["environment", "cleanup", "community", "leadership", "outdoors"],
+        "location": "Your neighborhood",
+    },
+    {
+        "title": "Facilitate a Family Game Night With No Devices",
+        "description": "Plan and run a screen-free game night for your family or roommates — pick the games, set the rules, keep everyone engaged. Small-scale facilitation is still facilitation.",
+        "tags": ["community", "family", "connection", "leadership"],
+        "location": "Anywhere",
+    },
+    {
+        "title": "Mentor Someone Younger Through a Skill You Know",
+        "description": "Spend an hour teaching a skill you're confident in — cooking, a sport, an instrument, a craft — to someone younger than you. Notice what it takes to explain something clearly.",
+        "tags": ["youth", "education", "mentorship", "leadership"],
+        "location": "Anywhere",
+    },
+]
+
+SILVER_QUESTS = [
+    {
+        "title": "Organize a Donation Drive for a Local Cause",
+        "description": "Pick a cause you care about and organize a small donation drive among friends, family, or coworkers — food, clothing, or supplies. Handle the logistics end to end: collecting, sorting, and delivering.",
+        "tags": ["community", "food-security", "service", "leadership"],
+        "location": "Your neighborhood",
+    },
+    {
+        "title": "Start a Recurring Study or Skill-Share Group",
+        "description": "Get a small group together on a regular cadence to study or trade skills — a book club, a coding practice group, a language exchange. Keep it running for at least three sessions.",
+        "tags": ["education", "technology", "leadership", "community"],
+        "location": "Anywhere",
+    },
+    {
+        "title": "Coach a Pickup Sports Game for Neighborhood Kids",
+        "description": "Organize and referee a pickup game for kids in your neighborhood — set teams, keep it fair, keep it fun. A low-stakes way to practice real-time group leadership.",
+        "tags": ["youth", "fitness", "leadership", "outdoors"],
+        "location": "Any local park",
+    },
+]
+
+GOLD_QUESTS = [
+    {
+        "title": "Plan and Run a Neighborhood Event From Scratch",
+        "description": "Plan a small neighborhood event — a block party, a potluck, a cleanup day — from the first idea through actually running it. Handle the invites, the logistics, and being the person people ask questions to on the day.",
+        "tags": ["community", "leadership", "event-planning", "arts"],
+        "location": "Your neighborhood",
+    },
+    {
+        "title": "Start a Recurring Volunteer Meetup You Personally Organize",
+        "description": "Start and run your own recurring volunteer meetup — not one hosted by an existing organization, one you organize yourself, start to finish, at least twice.",
+        "tags": ["community", "leadership", "organizing"],
+        "location": "Anywhere",
+    },
+]
+
+DIAMOND_QUESTS = [
+    {
+        "title": "Mentor a Bronze-Rank Leader Through Their Next Quest",
+        "description": "Reach out to someone earlier in their leadership journey and walk alongside them through their next quest — talk through what to expect, debrief with them afterward. Leadership at this level means investing in someone else's growth.",
+        "tags": ["leadership", "mentorship", "community", "education"],
+        "location": "Anywhere",
+    },
+    {
+        "title": "Design and Pitch a New Community Initiative to a Local Org",
+        "description": "Identify a real gap in your community, design a concrete initiative to address it, and actually pitch it to a local organization or civic body. Bring a plan, not just an idea.",
+        "tags": ["leadership", "community", "organizing", "civic"],
+        "location": "Anywhere",
+    },
+]
+
+TIER_QUEST_LISTS = {
+    "iron": DEFAULT_IRON_QUESTS,
+    "bronze": BRONZE_QUESTS,
+    "silver": SILVER_QUESTS,
+    "gold": GOLD_QUESTS,
+    "diamond": DIAMOND_QUESTS,
+}
+
+# One deterministic completion-state demo per tier: "rsvp_only" (accepted,
+# not yet submitted — occupies one of the 2 concurrent side-quest slots,
+# see SIDE_QUEST_CONCURRENT_LIMIT), "pending" (photo submitted, awaiting
+# admin review), "completed" (approved — real attendance + tier points).
+# Only users whose rank actually unlocks a tier are ever assigned to it.
+TIER_COMPLETION_PLAN = {
+    "iron": [("Maria Ortiz", "rsvp_only", 0), ("Devon Carter", "pending", 1), ("Priya Nair", "completed", 2)],
+    "bronze": [("Liam Chen", "rsvp_only", 2), ("Amara Okafor", "pending", 1), ("Ethan Walsh", "completed", 0)],
+    "silver": [("Aaliyah Jackson", "rsvp_only", 2), ("Tyler Brooks", "pending", 1), ("Camila Torres", "completed", 0)],
+    "gold": [("Isabella Rossi", "pending", 1), ("Marcus Bell", "completed", 0)],
+    "diamond": [("Diego Fernandez", "pending", 1), ("Hannah Cohen", "completed", 0)],
+}
+
 
 def logo_url(name):
     return f"https://api.dicebear.com/9.x/initials/svg?seed={name.replace(' ', '+')}&backgroundType=gradientLinear"
@@ -402,6 +570,31 @@ def get_or_create_user(email, password, display_name):
         return auth.get_user_by_email(email)
     except auth.UserNotFoundError:
         return auth.create_user(email=email, password=password, display_name=display_name)
+
+
+# Removes every account from the *previous* generation of this seeder
+# (different email domain — see OLD_* above) so re-running this file
+# replaces demo accounts instead of leaving stale duplicates behind
+# alongside the new @lead-dux.app ones. Looked up by email, so this can
+# never touch a real (non-demo) account.
+def wipe_old_demo_accounts():
+    old_emails = (
+        [OLD_ADMIN_EMAIL]
+        + OLD_ORG_EMAILS
+        + [f"{u['name'].lower().replace(' ', '.')}@{OLD_USER_EMAIL_DOMAIN}" for u in USERS]
+    )
+    removed = 0
+    for email in old_emails:
+        try:
+            user = auth.get_user_by_email(email)
+        except auth.UserNotFoundError:
+            continue
+        db.collection("organizations").document(user.uid).delete()
+        db.collection("users").document(user.uid).delete()
+        db.collection("ORGREQ").document(user.uid).delete()
+        auth.delete_user(user.uid)
+        removed += 1
+    print(f"  Removed {removed} old demo account(s) from the previous email domain")
 
 
 def seed_admin():
@@ -453,16 +646,23 @@ def seed_organizations():
 def seed_users():
     user_uids = []
     for i, u in enumerate(USERS):
-        email = f"{u['name'].lower().replace(' ', '.')}@demo.leadershipquest.app"
+        email = f"{u['name'].lower().replace(' ', '.')}@{EMAIL_DOMAIN}"
         user = get_or_create_user(email, DEMO_PASSWORD, u["name"])
         auth.set_custom_user_claims(user.uid, {"role": "user"})
 
-        rank = main._rank_for_points(u["points"])
+        points = u["points"] + (20 if u["name"] in FEEDBACK_BONUS_RECIPIENTS else 0)
+        rank = main._rank_for_points(points)
+        location, place_id, lat, lng = NJ_LOCATIONS[i % len(NJ_LOCATIONS)]
         doc = {
             "email": email,
             "name": u["name"],
             "age": 22 + (i % 40),
+            "location": location,
+            "placeId": place_id,
+            "lat": lat,
+            "lng": lng,
             "interests": u["interests"],
+            "accommodationNeeds": u.get("accommodationNeeds", []),
             "experienceLevel": EXPERIENCE_CYCLE[i % len(EXPERIENCE_CYCLE)],
             "experienceLevelOther": "",
             "timeAvailability": TIME_CYCLE[i % len(TIME_CYCLE)],
@@ -473,7 +673,7 @@ def seed_users():
             "motivationOther": "",
             "leaderGoal": "Build the confidence to organize something in my own neighborhood.",
             "isSuspended": False,
-            "points": u["points"],
+            "points": points,
             "rank": rank,
             "createdAt": firestore.SERVER_TIMESTAMP,
             "updatedAt": firestore.SERVER_TIMESTAMP,
@@ -483,17 +683,18 @@ def seed_users():
             doc["certificateIssuedAt"] = NOW - timedelta(days=10)
         db.collection("users").document(user.uid).set(doc, merge=True)
         user_uids.append({"uid": user.uid, "email": email, "name": u["name"], "rank": rank})
-        print(f"User ready: {u['name']} <{email}> — {rank} ({u['points']} pts)")
+        print(f"User ready: {u['name']} <{email}> — {rank} ({points} pts)")
     return user_uids
 
 
-# Wipes only documents this script itself would have created (every seed
-# quest/series/attendance doc id is deterministically prefixed "seed-" — see
-# quest_id above and check_in_to_event's {eventId}_{uid} attendance id
-# convention in main.py) — never touches a real org's real quest data, even
-# if this runs against a project that has both. Run before reseeding so a
-# fix to LOCATION_COORDS/QUEST_TEMPLATES (or a template dropped from the
-# list) actually lands, rather than just upserting on top of stale docs.
+# Wipes every document this script itself would have created — every seed
+# quest/series/attendance/photoSubmission/feedbackRequest doc id is
+# deterministically prefixed "seed-" (quest_id above; attendance/
+# photoSubmissions/feedbackRequests all key off {eventId}_{userId} via
+# main.py's _attendance_doc_id, so they inherit the same prefix through
+# eventId) — never touches a real org's real quest data, even if this runs
+# against a project that has both. Run before reseeding so a template
+# change actually lands, rather than just upserting on top of stale docs.
 def wipe_old_seed_data():
     def delete_prefixed(collection_name):
         deleted = 0
@@ -525,14 +726,45 @@ def wipe_old_seed_data():
     delete_prefixed("questSeries")
     delete_prefixed("quests")
     delete_prefixed("attendance")
+    delete_prefixed("photoSubmissions")
+    delete_prefixed("feedbackRequests")
+
+
+# users/{uid}/journal and users/{uid}/notifications are subcollections, so
+# the top-level wipe above can't reach them — cleared per demo user
+# instead. Every doc in both is something this script itself created for a
+# demo account (real per-user notifications/journal are never touched,
+# since this only ever runs for the fixed demo user list).
+def wipe_seed_user_activity(user_uids):
+    for u in user_uids:
+        user_ref = db.collection("users").document(u["uid"])
+        for doc in user_ref.collection("journal").stream():
+            if doc.id.startswith("seed-"):
+                doc.reference.delete()
+        for doc in user_ref.collection("notifications").stream():
+            doc.reference.delete()
+
+
+def _mint_qr_fields():
+    return {"qrToken": secrets.token_urlsafe(24), "qrTokenVersion": 0}
 
 
 def seed_org_quests(org_uids, user_uids):
     """Returns a list of completed-quest records (with attendee uids) so
-    reviews can be drawn from real attendees."""
+    reviews/photo-submissions/feedback/journal can be drawn from real
+    attendees, plus the full list of quest docs actually created (for the
+    org dashboard's "your quests" screen to have plenty to show)."""
     completed_quests = []
     attendee_cursor = 0
     n_users = len(user_uids)
+
+    def next_attendees(count):
+        nonlocal attendee_cursor
+        picked = []
+        for _ in range(count):
+            picked.append(user_uids[attendee_cursor % n_users]["uid"])
+            attendee_cursor += 1
+        return picked
 
     for org in ORGS:
         org_uid = org_uids[org["slug"]]
@@ -542,21 +774,21 @@ def seed_org_quests(org_uids, user_uids):
             event_date = NOW + timedelta(days=template["days"], hours=18)
             is_completed = template["days"] < 0
 
-            # Cycle attendees/RSVPs across the whole user pool so people
-            # naturally overlap across multiple organizations.
-            attendees = []
-            for _ in range(template["count"]):
-                attendees.append(user_uids[attendee_cursor % n_users]["uid"])
-                attendee_cursor += 1
-
+            attendees = next_attendees(template["count"])
             lat, lng = LOCATION_COORDS.get(template["location"], (None, None))
+            accommodation_tags, accommodation_details = _next_accommodation()
+            qr_fields = _mint_qr_fields()
+
             quest_ref.set({
                 "title": template["title"],
                 "description": QUEST_DESCRIPTIONS[template["title"]],
                 "tags": template["tags"],
                 "location": template["location"],
+                "placeId": None,
                 "lat": lat,
                 "lng": lng,
+                "accommodationTags": accommodation_tags,
+                "accommodationDetails": accommodation_details,
                 "timezone": "America/New_York",
                 "capacity": template["capacity"],
                 "seriesId": quest_id,
@@ -570,23 +802,141 @@ def seed_org_quests(org_uids, user_uids):
                 "tier": None,
                 "rsvpd": attendees,
                 "createdAt": firestore.SERVER_TIMESTAMP,
+                **qr_fields,
             })
 
-            if is_completed:
-                for uid in attendees:
+            # qr_precheck: a handful of an upcoming event's own attendees
+            # are seeded as already checked in via QR (backend has no
+            # "too early" check — see check_in_to_event's module note in
+            # main.py — only that the check-in window hasn't closed yet),
+            # sitting right alongside others who are RSVP'd but haven't
+            # scanned in yet. Demonstrates every QR attendance state on one
+            # real, currently-upcoming event rather than only ever on
+            # already-completed ones.
+            precheck_n = template.get("qr_precheck", 0)
+            checked_in_now = attendees[:precheck_n] if precheck_n else []
+
+            if is_completed or checked_in_now:
+                checked_in_uids = attendees if is_completed else checked_in_now
+                for uid in checked_in_uids:
+                    checkin_time = (event_date + timedelta(hours=1)) if is_completed else NOW
                     main._attendance_ref(db, quest_id, uid).set({
                         "userId": uid,
                         "orgId": org_uid,
                         "eventId": quest_id,
-                        "checkedInAt": event_date + timedelta(hours=1),
+                        "checkedInAt": checkin_time,
                         "pointsAwarded": main.ORG_QUEST_BASE_POINTS,
-                        "qrToken": "seed-token",
-                        "createdAt": event_date + timedelta(hours=1),
+                        "qrToken": qr_fields["qrToken"],
+                        "createdAt": checkin_time,
                     })
-                completed_quests.append({"quest_id": quest_id, "org_uid": org_uid, "event_date": event_date, "attendees": attendees})
+                    # Same private per-user journal entry check_in_to_event
+                    # itself creates on a real check-in — see its module
+                    # note in main.py — so the Journal page has real rows
+                    # to show, not just ones this seeder specially crafts
+                    # further down (see seed_feedback_and_journal).
+                    db.collection("users").document(uid).collection("journal").document(quest_id).set({
+                        "questId": quest_id,
+                        "questTitle": template["title"],
+                        "seriesId": quest_id,
+                        "orgId": org_uid,
+                        "orgName": org["name"],
+                        "eventDate": event_date,
+                        "reflectionBody": "",
+                        "reflectionUpdatedAt": None,
+                        "createdAt": firestore.SERVER_TIMESTAMP,
+                        "requestStatus": None,
+                    }, merge=True)
+                if is_completed:
+                    completed_quests.append({
+                        "quest_id": quest_id, "org_uid": org_uid, "org_name": org["name"],
+                        "event_date": event_date, "attendees": attendees, "title": template["title"],
+                    })
 
             status = "completed" if is_completed else ("full" if len(attendees) >= template["capacity"] else "upcoming")
             print(f"  Quest: {template['title']} ({org['name']}) — {status}, {len(attendees)}/{template['capacity']}")
+
+    return completed_quests
+
+
+def seed_recurring_series(org_uids, user_uids):
+    """A 3-occurrence weekly recurring series per RECURRING_SERIES org —
+    see its own module note above. Returns any completed occurrences in
+    the same shape seed_org_quests' completed_quests uses, so reviews can
+    be drawn from them too."""
+    completed_quests = []
+    attendee_cursor = 1000  # offset so this doesn't retrace seed_org_quests' own cursor sequence
+    n_users = len(user_uids)
+
+    def next_attendees(count):
+        nonlocal attendee_cursor
+        picked = []
+        for _ in range(count):
+            picked.append(user_uids[attendee_cursor % n_users]["uid"])
+            attendee_cursor += 1
+        return picked
+
+    for slug, series in RECURRING_SERIES.items():
+        org_uid = org_uids[slug]
+        org_name = next(o["name"] for o in ORGS if o["slug"] == slug)
+        lat, lng = LOCATION_COORDS.get(series["location"], (None, None))
+        occurrence_dates = [NOW + timedelta(days=days, hours=18) for days, _ in series["occurrences"]]
+        series_id = f"seed-{slug}-series-0"
+        until = occurrence_dates[-1]
+
+        for i, (days, count) in enumerate(series["occurrences"]):
+            quest_id = f"seed-{slug}-series-{i}"
+            event_date = occurrence_dates[i]
+            is_completed = days < 0
+            attendees = next_attendees(count)
+            accommodation_tags, accommodation_details = _next_accommodation()
+
+            db.collection("quests").document(quest_id).set({
+                "title": series["title"],
+                "description": QUEST_DESCRIPTIONS[series["title"]],
+                "tags": series["tags"],
+                "location": series["location"],
+                "placeId": None,
+                "lat": lat,
+                "lng": lng,
+                "accommodationTags": accommodation_tags,
+                "accommodationDetails": accommodation_details,
+                "timezone": "America/New_York",
+                "capacity": series["capacity"],
+                "seriesId": series_id,
+                "recurrenceFrequency": "weekly",
+                "recurrenceUntil": until,
+                "eventDate": event_date,
+                "eventEndTime": event_date + timedelta(hours=3),
+                "orgId": org_uid,
+                "orgName": org_name,
+                "isDefault": False,
+                "tier": None,
+                "rsvpd": attendees,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                **_mint_qr_fields(),
+            })
+
+            if is_completed:
+                for uid in attendees:
+                    checkin_time = event_date + timedelta(hours=1)
+                    main._attendance_ref(db, quest_id, uid).set({
+                        "userId": uid, "orgId": org_uid, "eventId": quest_id,
+                        "checkedInAt": checkin_time, "pointsAwarded": main.ORG_QUEST_BASE_POINTS,
+                        "qrToken": "seed-token", "createdAt": checkin_time,
+                    })
+                    db.collection("users").document(uid).collection("journal").document(quest_id).set({
+                        "questId": quest_id, "questTitle": series["title"], "seriesId": series_id,
+                        "orgId": org_uid, "orgName": org_name, "eventDate": event_date,
+                        "reflectionBody": "", "reflectionUpdatedAt": None,
+                        "createdAt": firestore.SERVER_TIMESTAMP, "requestStatus": None,
+                    }, merge=True)
+                completed_quests.append({
+                    "quest_id": quest_id, "org_uid": org_uid, "org_name": org_name,
+                    "event_date": event_date, "attendees": attendees, "title": series["title"],
+                })
+
+            status = "completed" if is_completed else "upcoming"
+            print(f"  Quest: {series['title']} ({org_name}) [series, occurrence {i + 1}/{len(series['occurrences'])}] — {status}, {len(attendees)}/{series['capacity']}")
 
     return completed_quests
 
@@ -605,7 +955,8 @@ def seed_reviews(completed_quests, org_uids):
 
     review_index = 0
     for cq in completed_quests:
-        series_ref = db.collection("questSeries").document(cq["quest_id"])
+        series_id = cq["quest_id"].rsplit("-series-", 1)[0] + "-series-0" if "-series-" in cq["quest_id"] else cq["quest_id"]
+        series_ref = db.collection("questSeries").document(series_id)
         org_ref = org_ref_by_uid[cq["org_uid"]]
         review_count = 0
         rating_sum = 0
@@ -614,7 +965,7 @@ def seed_reviews(completed_quests, org_uids):
             body = REVIEW_BODIES[review_index % len(REVIEW_BODIES)]
             review_index += 1
 
-            review_ref = main._review_ref(db, cq["quest_id"], uid, cq["quest_id"])
+            review_ref = main._review_ref(db, series_id, uid, cq["quest_id"])
             review_ref.set({
                 "uid": uid,
                 "questId": cq["quest_id"],
@@ -627,7 +978,14 @@ def seed_reviews(completed_quests, org_uids):
             rating_sum += rating
 
         if review_count:
-            series_ref.set({"reviewCount": review_count, "avgRating": rating_sum / review_count}, merge=True)
+            series_snap = series_ref.get()
+            series_data = series_snap.to_dict() or {}
+            series_current_count = series_data.get("reviewCount", 0)
+            series_current_avg = series_data.get("avgRating", 0)
+            series_new_count = series_current_count + review_count
+            series_new_avg = ((series_current_avg * series_current_count) + rating_sum) / series_new_count
+            series_ref.set({"reviewCount": series_new_count, "avgRating": series_new_avg}, merge=True)
+
             org_snap = org_ref.get()
             org_data = org_snap.to_dict() or {}
             org_current_count = org_data.get("reviewCount", 0)
@@ -638,60 +996,302 @@ def seed_reviews(completed_quests, org_uids):
             print(f"  Reviews: {cq['quest_id']} — {review_count} reviews, avg {rating_sum / review_count:.1f}")
 
 
-def seed_default_iron_quests():
-    # No eventDate/eventEndTime — matches create_default_quest, which now
-    # leaves both unset for a one-off side quest (a self-directed
-    # challenge, not a scheduled event). isUpcoming() (questSeries.js)
-    # already treats a missing eventDate as always-current, so there's no
-    # far-future eventEndTime hack needed anymore either. orgName is None,
-    # not the literal "Neighborhood", for the same reason — see
-    # create_default_quest's module note.
-    for quest in DEFAULT_IRON_QUESTS:
-        quest_id = f"seed-default-{quest['title'][:30].lower().replace(' ', '-').replace(chr(39), '')}"
-        db.collection("quests").document(quest_id).set({
-            "title": quest["title"],
-            "description": quest["description"],
-            "tags": quest["tags"],
-            "location": quest["location"],
-            "timezone": "America/New_York",
-            "capacity": None,
-            "seriesId": quest_id,
-            "recurrenceFrequency": None,
-            "recurrenceUntil": None,
-            "eventDate": None,
-            "eventEndTime": None,
-            "orgId": None,
-            "orgName": None,
-            "isDefault": True,
-            "tier": "iron",
-            "rsvpd": [],
-            "createdAt": firestore.SERVER_TIMESTAMP,
+# Every tier's self-directed side quests, plus the deterministic
+# completion-state demo from TIER_COMPLETION_PLAN (rsvp-only/pending/
+# completed) so the Side Quest page and admin's photo-moderation queue
+# both have real, immediately-testable data the moment this finishes — no
+# need to manually RSVP or submit anything first.
+def seed_default_and_tier_quests(user_uids, admin_uid):
+    name_to_uid = {row["name"]: row["uid"] for row in user_uids}
+
+    quest_ids_by_tier = {}
+    title_by_quest_id = {}
+    for tier, quests in TIER_QUEST_LISTS.items():
+        ids = []
+        for quest in quests:
+            quest_id = f"seed-default-{tier}-{quest['title'][:30].lower().replace(' ', '-').replace(chr(39), '')}"
+            title_by_quest_id[quest_id] = quest["title"]
+            db.collection("quests").document(quest_id).set({
+                "title": quest["title"],
+                "description": quest["description"],
+                "tags": quest["tags"],
+                "location": quest["location"],
+                "placeId": None,
+                "lat": None,
+                "lng": None,
+                "accommodationTags": [],
+                "accommodationDetails": None,
+                "timezone": "America/New_York",
+                "capacity": None,
+                "seriesId": quest_id,
+                "recurrenceFrequency": None,
+                "recurrenceUntil": None,
+                "eventDate": None,
+                "eventEndTime": None,
+                "orgId": None,
+                "orgName": None,
+                "isDefault": True,
+                "tier": tier,
+                "rsvpd": [],
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                **_mint_qr_fields(),
+            })
+            ids.append(quest_id)
+            print(f"Default {tier.title()} quest ready: {quest['title']}")
+        quest_ids_by_tier[tier] = ids
+
+    # Wire up the deterministic rsvp-only/pending/completed demo per tier.
+    for tier, plan in TIER_COMPLETION_PLAN.items():
+        quest_ids = quest_ids_by_tier[tier]
+        tier_points = main.TIER_BASE_POINTS[tier]
+        for user_name, state, quest_index in plan:
+            uid = name_to_uid.get(user_name)
+            if uid is None or quest_index >= len(quest_ids):
+                continue
+            quest_id = quest_ids[quest_index]
+            quest_title = title_by_quest_id[quest_id]
+            db.collection("quests").document(quest_id).update({"rsvpd": firestore.ArrayUnion([uid])})
+
+            if state != "rsvp_only":
+                user_name_str = next((u["name"] for u in user_uids if u["uid"] == uid), None)
+                photo_ref = main._photo_submission_ref(db, quest_id, uid)
+                reflection = "This challenge pushed me a little outside my comfort zone, but I'm glad I followed through on it."
+                photo_url_value = photo_url(f"{tier}-{quest_index}", 1)
+
+                if state == "pending":
+                    photo_ref.set({
+                        "questId": quest_id, "userId": uid, "orgId": None, "isDefault": True,
+                        "questTitle": quest_title, "userName": user_name_str,
+                        "storagePath": photo_url_value, "contentType": "image/jpeg",
+                        "reflection": reflection, "status": "pending", "pointsAwarded": 0,
+                        "rejectionReason": None, "reviewedAt": None, "reviewedBy": None,
+                        "createdAt": firestore.SERVER_TIMESTAMP, "updatedAt": firestore.SERVER_TIMESTAMP,
+                    })
+                elif state == "completed":
+                    photo_ref.set({
+                        "questId": quest_id, "userId": uid, "orgId": None, "isDefault": True,
+                        "questTitle": quest_title, "userName": user_name_str,
+                        "storagePath": photo_url_value, "contentType": "image/jpeg",
+                        "reflection": reflection, "status": "approved", "pointsAwarded": tier_points,
+                        "rejectionReason": None, "reviewedAt": firestore.SERVER_TIMESTAMP, "reviewedBy": admin_uid,
+                        "createdAt": NOW - timedelta(days=3), "updatedAt": firestore.SERVER_TIMESTAMP,
+                    })
+                    main._attendance_ref(db, quest_id, uid).set({
+                        "userId": uid, "orgId": None, "eventId": quest_id,
+                        "checkedInAt": NOW - timedelta(days=3), "pointsAwarded": tier_points,
+                        "qrToken": None, "createdAt": NOW - timedelta(days=3),
+                    })
+            print(f"  {tier.title()} side quest '{quest_title}' — {user_name}: {state}")
+
+
+def seed_org_quest_photo_submissions(completed_quests, org_uids, admin_uid):
+    """A few proof-of-participation bonus photos on top of already-checked-
+    in organization quests — one pending (org's own queue), one approved,
+    one rejected, so PendingPhotoSubmissions has a real mix to review
+    immediately rather than an empty "no pending submissions" page."""
+    if len(completed_quests) < 3:
+        return
+    picks = [
+        (completed_quests[0], "pending"),
+        (completed_quests[min(1, len(completed_quests) - 1)], "approved"),
+        (completed_quests[min(2, len(completed_quests) - 1)], "rejected"),
+    ]
+    for cq, state in picks:
+        uid = cq["attendees"][0]
+        user_snap = db.collection("users").document(uid).get()
+        user_name = user_snap.to_dict().get("name") if user_snap.exists else None
+        ref = main._photo_submission_ref(db, cq["quest_id"], uid)
+        photo_url_value = photo_url(f"org-bonus-{cq['quest_id']}", 1)
+        base = {
+            "questId": cq["quest_id"], "userId": uid, "orgId": cq["org_uid"], "isDefault": False,
+            "questTitle": cq["title"], "userName": user_name,
+            "storagePath": photo_url_value, "contentType": "image/jpeg",
+            "reflection": None, "createdAt": cq["event_date"] + timedelta(hours=2),
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+        if state == "pending":
+            ref.set({**base, "status": "pending", "pointsAwarded": 0, "rejectionReason": None, "reviewedAt": None, "reviewedBy": None})
+        elif state == "approved":
+            ref.set({**base, "status": "approved", "pointsAwarded": main.PHOTO_BONUS_POINTS, "rejectionReason": None, "reviewedAt": firestore.SERVER_TIMESTAMP, "reviewedBy": cq["org_uid"]})
+        else:
+            ref.set({**base, "status": "rejected", "pointsAwarded": 0, "rejectionReason": "Photo doesn't clearly show participation at the event — could you resubmit with the event visible in frame?", "reviewedAt": firestore.SERVER_TIMESTAMP, "reviewedBy": cq["org_uid"]})
+        print(f"  Org-quest bonus photo: {cq['title']} — {user_name}: {state}")
+
+
+def _ensure_attended(cq, uid):
+    """Guarantees (quest, uid) really has an attendance doc + journal entry
+    — used below to attach feedback/reflection demos to specific NAMED
+    users regardless of where the attendee-cycling cursor in
+    seed_org_quests happened to place them, so a named user's stored
+    `points` (see FEEDBACK_BONUS_RECIPIENTS in seed_users) always lines up
+    with real, visible activity of theirs."""
+    db.collection("quests").document(cq["quest_id"]).update({"rsvpd": firestore.ArrayUnion([uid])})
+    attendance_ref = main._attendance_ref(db, cq["quest_id"], uid)
+    if not attendance_ref.get().exists:
+        checkin_time = cq["event_date"] + timedelta(hours=1)
+        attendance_ref.set({
+            "userId": uid, "orgId": cq["org_uid"], "eventId": cq["quest_id"],
+            "checkedInAt": checkin_time, "pointsAwarded": main.ORG_QUEST_BASE_POINTS,
+            "qrToken": "seed-token", "createdAt": checkin_time,
         })
-        print(f"Default Iron quest ready: {quest['title']}")
+    main._journal_ref(db, uid, cq["quest_id"]).set({
+        "questId": cq["quest_id"], "questTitle": cq["title"], "seriesId": cq["quest_id"],
+        "orgId": cq["org_uid"], "orgName": cq["org_name"], "eventDate": cq["event_date"],
+        "reflectionBody": "", "reflectionUpdatedAt": None,
+        "createdAt": firestore.SERVER_TIMESTAMP, "requestStatus": None,
+    }, merge=True)
+
+
+def seed_feedback_and_journal(completed_quests, user_uids):
+    """Leader-requested feedback in both a pending (awaiting the org's
+    response) and completed (some earning the bonus, one not) state, plus
+    a couple of real journal reflections — so the Journal page and the
+    org/admin "pending feedback requests" queue both have real content.
+    Targets specific named users (via _ensure_attended) rather than
+    whichever uid the attendee-cycling cursor happens to land on, so the
+    bonus-earning case stays consistent with FEEDBACK_BONUS_RECIPIENTS'
+    point bump in seed_users above."""
+    if len(completed_quests) < 2:
+        return
+    name_to_uid = {row["name"]: row["uid"] for row in user_uids}
+    cq_a, cq_b = completed_quests[0], completed_quests[1]
+
+    # Two real reflections.
+    for name, cq, text in [
+        ("Sofia Ramirez", cq_a, "Showing up felt small at the time, but seeing how many people we actually served made it click why this matters."),
+        ("Xavier Delgado", cq_b, "I was nervous going in, but everyone made it easy to jump in and help without needing much direction."),
+    ]:
+        uid = name_to_uid[name]
+        _ensure_attended(cq, uid)
+        db.collection("users").document(uid).collection("journal").document(cq["quest_id"]).set({
+            "reflectionBody": text, "reflectionUpdatedAt": firestore.SERVER_TIMESTAMP,
+        }, merge=True)
+
+    # One pending feedback request (leader asked, org hasn't answered yet).
+    pending_uid = name_to_uid["Grace Nguyen"]
+    _ensure_attended(cq_a, pending_uid)
+    expires_at = NOW + timedelta(days=main.FEEDBACK_REQUEST_WINDOW_DAYS)
+    main._feedback_request_ref(db, cq_a["quest_id"], pending_uid).set({
+        "questId": cq_a["quest_id"], "uid": pending_uid, "orgId": cq_a["org_uid"], "orgName": cq_a["org_name"],
+        "questTitle": cq_a["title"], "eventDate": cq_a["event_date"], "requestedAt": firestore.SERVER_TIMESTAMP,
+        "expiresAt": expires_at, "status": "pending", "answers": None, "extraThoughts": None,
+        "score": None, "pointsAwarded": 0, "completedAt": None,
+    })
+    main._journal_ref(db, pending_uid, cq_a["quest_id"]).set({
+        "requestStatus": "pending", "requestedAt": firestore.SERVER_TIMESTAMP, "expiresAt": expires_at,
+    }, merge=True)
+
+    # Two completed feedback requests — Marcus Bell earned the bonus
+    # (matches FEEDBACK_BONUS_RECIPIENTS' point bump in seed_users above),
+    # Omar Haddad scored under FEEDBACK_SCORE_THRESHOLD and earned nothing.
+    completed_feedback = [
+        ("Marcus Bell", cq_b, {"engagement": 9, "presence": 8, "involvement": 9, "initiative": 8, "attitude": 9}, "Genuinely one of our most reliable volunteers this month.", True),
+        ("Omar Haddad", cq_a, {"engagement": 5, "presence": 4, "involvement": 5, "initiative": 3, "attitude": 5}, "Showed up and did the work, but seemed distracted for most of the shift.", False),
+    ]
+    for name, cq, answers, extra_thoughts, earns_bonus in completed_feedback:
+        uid = name_to_uid[name]
+        _ensure_attended(cq, uid)
+        score = round(sum(answers.values()) / len(answers), 1)
+        points = main.FEEDBACK_BONUS_POINTS if earns_bonus else 0
+        main._feedback_request_ref(db, cq["quest_id"], uid).set({
+            "questId": cq["quest_id"], "uid": uid, "orgId": cq["org_uid"], "orgName": cq["org_name"],
+            "questTitle": cq["title"], "eventDate": cq["event_date"], "requestedAt": NOW - timedelta(days=4),
+            "expiresAt": NOW + timedelta(days=10), "status": "completed", "answers": answers,
+            "extraThoughts": extra_thoughts, "score": score, "pointsAwarded": points,
+            "completedAt": NOW - timedelta(days=2),
+        })
+        main._journal_ref(db, uid, cq["quest_id"]).set({
+            "requestStatus": "completed", "answers": answers, "extraThoughts": extra_thoughts,
+            "score": score, "pointsAwarded": points, "completedAt": NOW - timedelta(days=2),
+            "notified": False, "read": False,
+        }, merge=True)
+    print("  Feedback requests: 1 pending (Grace Nguyen), 2 completed (Marcus Bell earned the bonus, Omar Haddad did not)")
+
+
+def seed_notifications(user_uids):
+    """One quest_cancelled and one quest_rescheduled notice — see
+    NotificationBanner.jsx — so the member Home screen's must-dismiss
+    banner has something real to show without needing to actually delete
+    or reschedule a live quest first."""
+    by_name = {row["name"]: row["uid"] for row in user_uids}
+    main._notify_user(
+        db, by_name["Maria Ortiz"], kind="quest_cancelled",
+        quest_id="seed-demo-cancelled-quest", quest_title="Fall Cleanup Meetup",
+    )
+    main._notify_user(
+        db, by_name["Devon Carter"], kind="quest_rescheduled",
+        quest_id="seed-demo-rescheduled-quest", quest_title="Riverside Trail Restoration",
+        extra={"newEventDate": NOW + timedelta(days=20)},
+    )
+    print("  Notifications: quest_cancelled -> Maria Ortiz, quest_rescheduled -> Devon Carter")
+
+
+PENDING_ORG_APPLICATIONS = [
+    {
+        "email": f"riverside.arts@{EMAIL_DOMAIN}", "name": "Riverside Arts Collective",
+        "phone": "(201) 555-0199", "location": "Jersey City, NJ", "placeId": "seed-place-jersey-city",
+        "reason": "We're a small group of working artists looking to run free weekend workshops along the waterfront.",
+    },
+    {
+        "email": f"northward.trades@{EMAIL_DOMAIN}", "name": "Northward Trade Skills Initiative",
+        "phone": "(973) 555-0188", "location": "Newark, NJ", "placeId": "seed-place-newark",
+        "reason": "We teach basic home-repair and trade skills to young adults aging out of foster care and want to start hosting hands-on volunteer sessions.",
+    },
+]
+
+
+def seed_pending_org_applications():
+    for app in PENDING_ORG_APPLICATIONS:
+        user = get_or_create_user(app["email"], DEMO_PASSWORD, app["name"])
+        # Skip resetting role/ORGREQ if this demo application has already
+        # been approved (organizations/{uid} exists) since a previous run —
+        # a tester approving it is the whole point of seeding it as
+        # "pending" in the first place, so re-running this shouldn't yank
+        # it back to pending underneath them.
+        if db.collection("organizations").document(user.uid).get().exists:
+            print(f"Pending organization application already approved, left as-is: {app['name']} <{app['email']}>")
+            continue
+        auth.set_custom_user_claims(user.uid, {"role": "pending_org"})
+        db.collection("ORGREQ").document(user.uid).set({
+            "name": app["name"], "email": app["email"], "phone": app["phone"],
+            "location": app["location"], "placeId": app["placeId"], "reason": app["reason"],
+            "status": "pending", "createdAt": firestore.SERVER_TIMESTAMP,
+        })
+        print(f"Pending organization application ready: {app['name']} <{app['email']}>")
 
 
 def print_demo_accounts(org_uids, user_uids):
     print("\n" + "=" * 72)
     print("DEMO ACCOUNTS")
     print("=" * 72)
-    print(f"\nAdmin\n  {ADMIN_EMAIL} / {DEMO_PASSWORD}")
+    print(f"\nAdmin")
+    print(f"  {'Leadership Quest Admin':<28} {ADMIN_EMAIL:<32} admin")
 
     print("\nOrganizations")
     for org in ORGS:
-        print(f"  {org['name']:<32} {org['email']:<32} / {DEMO_PASSWORD}")
+        print(f"  {org['name']:<32} {org['email']:<32} organization")
 
-    print("\nUsers (sample)")
-    for u in user_uids[::5] + user_uids[-1:]:
-        print(f"  {u['name']:<20} {u['email']:<40} / {DEMO_PASSWORD}  ({u['rank']})")
+    print("\nPending organization applications (admin dashboard test data)")
+    for app in PENDING_ORG_APPLICATIONS:
+        print(f"  {app['name']:<32} {app['email']:<32} pending_org")
+
+    print("\nUsers")
+    for u in user_uids:
+        print(f"  {u['name']:<20} {u['email']:<32} user  ({u['rank']})")
+
+    print(f"\nPassword for every account above: {DEMO_PASSWORD}")
     print("\n" + "=" * 72)
 
 
 def main_seed():
-    print("Wiping old seed quest/series/attendance docs...")
+    print("Removing accounts from the previous seed generation...")
+    wipe_old_demo_accounts()
+
+    print("\nWiping old seed quest/series/attendance/photo/feedback docs...")
     wipe_old_seed_data()
 
-    print("Seeding admin...")
-    seed_admin()
+    print("\nSeeding admin...")
+    admin_uid = seed_admin()
 
     print("\nSeeding organizations...")
     org_uids = seed_organizations()
@@ -699,14 +1299,32 @@ def main_seed():
     print("\nSeeding demo users...")
     user_uids = seed_users()
 
+    print("\nClearing previously seeded journal/notification activity...")
+    wipe_seed_user_activity(user_uids)
+
     print("\nSeeding organization quests + attendance...")
     completed_quests = seed_org_quests(org_uids, user_uids)
+
+    print("\nSeeding recurring quest series...")
+    completed_quests += seed_recurring_series(org_uids, user_uids)
 
     print("\nSeeding reviews + Trust Scores...")
     seed_reviews(completed_quests, org_uids)
 
-    print("\nSeeding default Iron neighborhood quests...")
-    seed_default_iron_quests()
+    print("\nSeeding side quests (Iron through Diamond) + completion states...")
+    seed_default_and_tier_quests(user_uids, admin_uid)
+
+    print("\nSeeding organization-quest bonus photo submissions...")
+    seed_org_quest_photo_submissions(completed_quests, org_uids, admin_uid)
+
+    print("\nSeeding leader-requested feedback + journal reflections...")
+    seed_feedback_and_journal(completed_quests, user_uids)
+
+    print("\nSeeding notification-banner demo data...")
+    seed_notifications(user_uids)
+
+    print("\nSeeding pending organization applications...")
+    seed_pending_org_applications()
 
     print_demo_accounts(org_uids, user_uids)
     print("\nDone.")

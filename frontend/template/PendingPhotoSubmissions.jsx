@@ -146,7 +146,14 @@ export function PendingPhotoSubmissions({ scopeField, scopeValue, title = 'Pendi
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     setSubmissions(rows);
     const entries = await Promise.all(
-      rows.map(async (r) => [r.id, await getDownloadURL(storageRef(storage, r.storagePath)).catch(() => null)]),
+      rows.map(async (r) => {
+        // Already a real URL — seeded demo submissions use external
+        // (picsum.photos) placeholder URLs here, same reasoning as
+        // OrganizationProfile.jsx's OrgPhotoGallery. Only genuine Storage
+        // paths (real uploads via submit_quest_photo) need resolving.
+        if (/^https?:\/\//.test(r.storagePath)) return [r.id, r.storagePath];
+        return [r.id, await getDownloadURL(storageRef(storage, r.storagePath)).catch(() => null)];
+      }),
     );
     setUrls(Object.fromEntries(entries));
   }
