@@ -443,12 +443,23 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
                     <li key={prompt}>{prompt}</li>
                   ))}
                 </ul>
-                <textarea
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder="Answer one of these, all of them, or just free-write — whatever works for you."
-                  style={{ minHeight: 140 }}
-                />
+                {/* Same borderless auto-grow trick as CreateQuestForm.jsx's
+                    description field (see .quest-form-description-wrap in
+                    style.css): a 1-cell grid where the textarea and a
+                    hidden ::after (mirroring its value via
+                    data-replicated-value) both grow together, so there's
+                    no resize handle or internal scrollbar to fight — the
+                    textarea just grows, and .journal-expanded-card's own
+                    overflow-y:auto takes over once the card gets taller
+                    than the modal can show. */}
+                <div className="quest-form-description-wrap" data-replicated-value={body}>
+                  <textarea
+                    className="quest-form-description-input"
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Answer one of these, all of them, or just free-write — whatever works for you."
+                  />
+                </div>
                 {error && <p className="box-danger">{error}</p>}
                 <div className="flex items-center gap-sm" style={{ marginTop: 10 }}>
                   <StampButton type="button" variant="primary" onClick={saveReflection} disabled={saving}>
