@@ -84,6 +84,25 @@ function computeEditInitialState(quest) {
     const eventDateObj = quest.eventDate.toDate ? quest.eventDate.toDate() : new Date(quest.eventDate);
     whenText = dateToSlashNaturalText(fullWallClockPartsInZone(eventDateObj, tz));
   }
+  // Already part of a series (recurrenceFrequency set) — surface that as
+  // a prefilled "Recurring" property instead of leaving it invisible, even
+  // though the pattern itself isn't editable from here (see this
+  // component's own module note on canMakeRecurring/isSeries). Until is
+  // reformatted into the same slash text the field parses back out of
+  // (parseNaturalDateOnly), not just displayed, so it round-trips exactly
+  // like a freshly-typed value would.
+  let frequency = 'weekly';
+  let untilText = '';
+  if (quest.recurrenceFrequency) {
+    frequency = quest.recurrenceFrequency;
+    if (quest.recurrenceUntil) {
+      const untilDateObj = quest.recurrenceUntil.toDate
+        ? quest.recurrenceUntil.toDate()
+        : new Date(quest.recurrenceUntil);
+      const { year, month, day } = fullWallClockPartsInZone(untilDateObj, tz);
+      untilText = `${month + 1}/${day}/${year}`;
+    }
+  }
   return {
     title: quest.title || '',
     description: quest.description || '',
@@ -103,9 +122,10 @@ function computeEditInitialState(quest) {
     addedProperties: {
       capacity: quest.capacity != null,
       tags: (quest.tags || []).length > 0,
+      recurring: Boolean(quest.recurrenceFrequency),
     },
-    frequency: 'weekly',
-    untilText: '',
+    frequency,
+    untilText,
     restoredFromDraft: false,
   };
 }
@@ -277,6 +297,12 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
   // hasn't changed at all, nothing about the date could have either.
   const whenChanged = Boolean(editingQuest) && form.whenText !== initialRef.current.whenText;
 
+  // Prefilled from an existing series (see computeEditInitialState) rather
+  // than something the organizer just added — frequency/until aren't
+  // editable here for a quest already part of a series (see this
+  // component's own module note), so the row shows for context only.
+  const recurringIsReadOnly = Boolean(editingQuest) && !canMakeRecurring;
+
   const resolvedWhen = useMemo(() => parseNaturalWhen(form.whenText), [form.whenText]);
   const resolvedEnd = resolvedWhen ? resolveEndWhen(resolvedWhen, DURATION_MINUTES) : null;
   const whenHint = resolvedWhen ? formatWhenRange(resolvedWhen, resolvedEnd) : null;
@@ -369,7 +395,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
     if (!form.placeId) next.location = 'Select a location from the suggestions.';
     if (form.accommodationTags.length === 0)
       next.access = 'Select at least one accessibility accommodation.';
-    if (form.addedProperties.recurring && !resolvedUntil)
+    if (form.addedProperties.recurring && !recurringIsReadOnly && !resolvedUntil)
       next.until = 'Try something like "aug 30" or "12/31".';
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -423,7 +449,12 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
         // copies this quest's *current* fields onto every new occurrence
         // it generates, so anything just changed above (title, location,
         // ...) needs to already be saved before this runs, not after.
-        if (form.addedProperties.recurring) {
+        // Guarded on canMakeRecurring, not just addedProperties.recurring —
+        // the latter is also true when this quest was ALREADY part of a
+        // series (see computeEditInitialState's prefill), and calling
+        // make_quest_recurring again on an existing series isn't a thing
+        // this form does.
+        if (form.addedProperties.recurring && canMakeRecurring) {
           await callMakeQuestRecurring({
             questId: editingQuest.id,
             frequency: form.frequency,
@@ -737,14 +768,22 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
               transition={{ duration: reduce ? 0 : 0.18 }}
             >
               <div className='quest-form-row-label'>
-                <button
-                  type='button'
-                  className='quest-form-label-remove'
-                  aria-label='Remove Recurring property'
-                  onClick={() => removeProperty('recurring')}
-                >
-                  Recurring
-                </button>
+                {/* Already part of an existing series (prefilled from
+                    computeEditInitialState, not user-added) — nothing to
+                    remove here, since this form can't cancel a series'
+                    recurrence, only turn a standalone quest into one. */}
+                {recurringIsReadOnly ? (
+                  <span>Recurring</span>
+                ) : (
+                  <button
+                    type='button'
+                    className='quest-form-label-remove'
+                    aria-label='Remove Recurring property'
+                    onClick={() => removeProperty('recurring')}
+                  >
+                    Recurring
+                  </button>
+                )}
               </div>
               <div className='quest-form-row-value flex flex-col gap-sm'>
                 <label>
@@ -752,6 +791,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
                   <select
                     value={form.frequency}
                     onChange={(e) => patch({ frequency: e.target.value })}
+                    disabled={recurringIsReadOnly}
                   >
                     <option value='daily'>Daily</option>
                     <option value='weekly'>Weekly</option>
@@ -767,6 +807,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
                       value={form.untilText}
                       onChange={(e) => patch({ untilText: e.target.value })}
                       placeholder='e.g. aug 30, 12/31'
+                      disabled={recurringIsReadOnly}
                     />
                   </label>
                   <AnimatePresence mode='wait'>
