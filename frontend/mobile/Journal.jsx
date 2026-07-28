@@ -162,23 +162,36 @@ function useColumnCount() {
 // The reference splits images round-robin into 3 fixed columns, each with
 // its own useTransform mapping one shared useScroll's progress to a
 // different vertical offset (alternating direction per column) so the
-// columns drift past each other as the page scrolls. Same technique here,
-// with two adjustments for this app: the column count is 1/2/3 (see
-// useColumnCount) rather than always 3, and the offset is tied to the
-// page's own scroll via useScroll({ target }) rather than a dedicated
-// scrollable container — this app never nests a second scrollbar inside a
-// page, everything scrolls at the document level. The offset is also a
-// much smaller range than the reference's photo-wall effect: these cards
-// hold real buttons and menus, so it's a subtle depth cue, not a dramatic
-// scroll effect. Disabled entirely (flat, static grid) for reduced-motion
-// users or a single column, where there's nothing to offset against.
+// columns drift past each other as you scroll — and it gets a scroll range
+// to work with no matter how much content there is by tracking a
+// *fixed-height, internally-scrollable* container (useScroll({ container })
+// against a box with its own overflow-y: auto), not the page's own scroll.
+//
+// An earlier version of this tied the offset to the *page's* scroll
+// instead (useScroll({ target })), reasoning that this app never nests a
+// second scrollbar inside a page — but that means the "container entering/
+// exiting the viewport" progress it needs never actually spans a real
+// range whenever the whole grid fits on screen at once (a Journal with
+// only a handful of entries, on any reasonably tall monitor), so the
+// transform barely moves and the effect reads as entirely absent. Matching
+// the reference's real mechanism (see .journal-columns' max-height +
+// overflow-y in style.css) fixes that — it always has a genuine 0-to-1
+// scroll range to animate against as long as there's more content than
+// fits in the box, independent of total entry count.
+//
+// Column count is 1/2/3 here (see useColumnCount) rather than always 3,
+// and the offset is a smaller range than the reference's full-bleed photo
+// wall — these cards hold real buttons and menus, so it's a clear but not
+// disorienting depth cue. Disabled entirely (flat, static grid) for
+// reduced-motion users or a single column, where there's nothing to offset
+// against.
 function useParallaxColumnOffsets(containerRef, columnCount, disabled) {
-  const { scrollYProgress } = useScroll({ target: containerRef, offset: ['start end', 'end start'] });
+  const { scrollYProgress } = useScroll({ container: containerRef, offset: ['start start', 'end start'] });
   // Always call a fixed number of hooks regardless of columnCount (rules
   // of hooks) — only as many as columnCount are actually used below.
-  const t0 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, -36]);
-  const t1 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, 36]);
-  const t2 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, -36]);
+  const t0 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, -80]);
+  const t1 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, 80]);
+  const t2 = useTransform(scrollYProgress, [0, 1], disabled ? [0, 0] : [0, -80]);
   return [t0, t1, t2].slice(0, columnCount);
 }
 

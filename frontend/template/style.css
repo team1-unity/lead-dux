@@ -3632,10 +3632,17 @@ button.data-row:active:not(:disabled) {
    frontend/mobile/Journal.jsx). Columns are JS-distributed (see
    useColumnCount there), not a CSS auto-fit grid — the scroll-parallax
    offset per column needs a fixed column count to compute against. */
+/* Fixed height + its own scrollbar — not just a stylistic choice, this is
+   what gives useParallaxColumnOffsets (Journal.jsx) a real, guaranteed
+   0-to-1 scroll range to animate the columns against no matter how much
+   content there is (see that hook's own module note). */
 .journal-columns {
   display: flex;
   gap: 16px;
   align-items: flex-start;
+  max-height: 75vh;
+  overflow-y: auto;
+  padding: 4px 4px 4px 2px;
 }
 .journal-column {
   flex: 1;
