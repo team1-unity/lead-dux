@@ -1642,15 +1642,6 @@ def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
         )
 
     quest = snap.to_dict()
-    event_date = quest.get("eventDate")
-    if event_date is None:
-        # Predates the eventDate field (see create_quest/create_default_quest)
-        # — nothing to anchor a QR expiry to, and there's no edit-quest UI to
-        # backfill one, so this quest needs to be recreated instead.
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "This quest has no event date on file and can't accept RSVPs. Ask the organization to recreate it.",
-        )
 
     # Side quests are additionally gated by rank (tier unlock) and by how
     # many the caller already has in progress at once (see
