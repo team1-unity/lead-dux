@@ -3644,11 +3644,14 @@ button.data-row:active:not(:disabled) {
   align-items: flex-start;
   /* Fixed, not vh-based — 75vh scaled with the actual browser window
      height, so on a lot of real screens even 2 stacked cards per column
-     (as few as ~4-6 entries total, split across 3 columns) never actually
-     exceeded it, leaving nothing to scroll and the parallax effect
-     invisible. A smaller fixed height reliably needs scrolling with just
-     a couple of cards per column, regardless of window height. */
-  max-height: 480px;
+     never actually exceeded it, leaving nothing to scroll and the
+     parallax effect invisible. Deliberately smaller than a single card's
+     rendered height at any reasonable column width (cards are
+     aspect-ratio 4/5, so even at a generous ~350px column width that's a
+     ~440px-tall card) — so overflow, and the scroll range the parallax
+     transform needs, no longer depends on exactly how many entries there
+     are or how wide the window is. Even one card per column is enough. */
+  max-height: 300px;
   overflow-y: auto;
   padding: 4px 4px 4px 2px;
 }
