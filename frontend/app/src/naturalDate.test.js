@@ -110,6 +110,15 @@ describe('parseNaturalWhen', () => {
     );
   });
 
+  it('parses the app\'s own display format, comma before AND after the year', () => {
+    // formatEventDate's own output shape (e.g. "Jun 18, 2026, 6:26 PM") —
+    // an organizer editing an existing quest sees this exact string
+    // elsewhere on the page and should be able to type or paste it back in.
+    expect(parseNaturalWhen('Jun 18, 2026, 6:26 PM', REFERENCE)).toEqual(
+      whenOnly({ year: 2026, month: 5, day: 18, hour: 18, minute: 26 }),
+    );
+  });
+
   it('returns null for an invalid slash date (day out of range for the month)', () => {
     expect(parseNaturalWhen('2/30 6pm', REFERENCE)).toBeNull();
   });

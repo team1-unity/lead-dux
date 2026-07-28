@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callCreateQuest, callCreateRecurringQuest, callUpdateQuest } from '@shared/fetch.jsx';
+import {
+  callCreateQuest,
+  callCreateRecurringQuest,
+  callUpdateQuest,
+  callMakeQuestRecurring,
+} from '@shared/fetch.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { AddPropertyMenu } from '@shared/AddPropertyMenu.jsx';
 import { PlaceCombobox } from '@shared/PlaceCombobox.jsx';
@@ -20,6 +25,7 @@ import {
   formatWhenRange,
   tzAbbreviation,
   wallClockPartsInZone,
+  fullWallClockPartsInZone,
   nextOccurrenceOfPattern,
   parseNaturalDateOnly,
   formatDateOnly,
@@ -48,18 +54,19 @@ function patternToNaturalText({ year, month, day, hour, minute }) {
 
 // Same idea as patternToNaturalText above, but for an arbitrary already-set
 // date (editing an existing quest) rather than a recurring weekday pattern
-// — M/D instead of a weekday name, since there's no guarantee the org
-// wants "next <weekday>" semantics for a date that's already fixed. No
-// year: parseNaturalWhen's own slash-date rollover (assume this year
-// unless the date's already passed, then next year) already does the
-// right thing for a quest that's still upcoming, which editing one always
-// is in practice.
-function dateToSlashNaturalText({ month, day, hour, minute }) {
+// — M/D/YYYY instead of a weekday name, since there's no guarantee the org
+// wants "next <weekday>" semantics for a date that's already fixed. The
+// year is included explicitly (parseNaturalWhen's slash-date grammar
+// accepts one) rather than relying on its "assume this year unless already
+// passed" rollover — a quest being edited isn't guaranteed to be in the
+// future relative to right now, so that rollover isn't a safe assumption
+// to lean on here the way it is for a brand-new quest.
+function dateToSlashNaturalText({ year, month, day, hour, minute }) {
   const period = hour < 12 ? 'am' : 'pm';
   const h12 = hour % 12 === 0 ? 12 : hour % 12;
   const time =
     minute === 0 ? `${h12}${period}` : `${h12}:${String(minute).padStart(2, '0')}${period}`;
-  return `${month + 1}/${day} ${time}`;
+  return `${month + 1}/${day}/${year} ${time}`;
 }
 
 function draftKeyFor(orgUid) {
@@ -75,7 +82,7 @@ function computeEditInitialState(quest) {
   let whenText = '';
   if (quest.eventDate) {
     const eventDateObj = quest.eventDate.toDate ? quest.eventDate.toDate() : new Date(quest.eventDate);
-    whenText = dateToSlashNaturalText(wallClockPartsInZone(eventDateObj, tz));
+    whenText = dateToSlashNaturalText(fullWallClockPartsInZone(eventDateObj, tz));
   }
   return {
     title: quest.title || '',
@@ -187,14 +194,19 @@ function AccessChip({ selected, onClick, children }) {
 //
 // `editingQuest`, when passed, switches the whole form into edit mode for
 // that one existing occurrence instead of creating a new one — no carry-
-// over/draft (seeded straight from the quest instead), no recurring-series
-// property (editing is per-occurrence only, same granularity delete
-// already draws between "this date" and "the whole series" — a series'
-// overall pattern isn't editable here), and calls callUpdateQuest instead
-// of callCreateQuest/callCreateRecurringQuest. Touching the When field is
-// the one edit with a real consequence — see whenChanged below — so it's
-// gated behind its own confirmation instead of submitting immediately.
-export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest }) {
+// over/draft (seeded straight from the quest instead), and calls
+// callUpdateQuest instead of callCreateQuest/callCreateRecurringQuest.
+// Touching the When field is the one edit with a real consequence — see
+// whenChanged below — so it's gated behind its own confirmation instead of
+// submitting immediately. "Recurring" is still addable here (via
+// callMakeQuestRecurring, same call org/Quests.jsx's own — currently
+// unused-in-the-UI — useQuestSeriesActions.makeRecurring already wraps),
+// turning this one occurrence into the first date of a new series, but
+// only when `canMakeRecurring` says it isn't already part of one — a
+// series' overall pattern (frequency/until) isn't editable here once it
+// exists, same granularity delete already draws between "this date" and
+// "the whole series."
+export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, canMakeRecurring = true }) {
   const { user } = useAuth();
   const reduce = useReducedMotion();
   const initialRef = useRef(null);
@@ -206,7 +218,15 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest }) {
 
   const [form, setForm] = useState(initialRef.current);
   const [startedBlank, setStartedBlank] = useState(false);
-  const [editingLocation, setEditingLocation] = useState(!initialRef.current.placeId);
+  // A brand-new quest with nothing carried over has no placeId yet, so it
+  // should start in "searching" mode — but editing an existing quest
+  // always has a real location to show back, even on the (older) data
+  // that predates placeId being required, so this always starts showing
+  // that current value instead of a blank search box. Clicking it (see
+  // onFocus below) still opens the same search to replace it.
+  const [editingLocation, setEditingLocation] = useState(
+    editingQuest ? false : !initialRef.current.placeId,
+  );
   const [placeKey, setPlaceKey] = useState(0);
   const [accessNoteOpen, setAccessNoteOpen] = useState(
     Boolean(initialRef.current.accommodationDetails),
@@ -399,6 +419,17 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest }) {
       setSubmitError('');
       try {
         await callUpdateQuest({ ...base, questId: editingQuest.id });
+        // Update first, expand into a series second — make_quest_recurring
+        // copies this quest's *current* fields onto every new occurrence
+        // it generates, so anything just changed above (title, location,
+        // ...) needs to already be saved before this runs, not after.
+        if (form.addedProperties.recurring) {
+          await callMakeQuestRecurring({
+            questId: editingQuest.id,
+            frequency: form.frequency,
+            until: dateOnlyToString(resolvedUntil),
+          });
+        }
         onCreated();
       } catch (err) {
         setSubmitError(err.message || 'Something went wrong.');
@@ -839,7 +870,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest }) {
             items={ADD_PROPERTY_ITEMS.filter(
               (it) =>
                 (!form.addedProperties[it.key] || it.disabled) &&
-                !(editingQuest && it.key === 'recurring'),
+                !(it.key === 'recurring' && editingQuest && !canMakeRecurring),
             )}
             onSelect={addProperty}
           />

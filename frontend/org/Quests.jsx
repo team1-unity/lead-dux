@@ -123,6 +123,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
       <CreateQuestForm
         quests={[]}
         editingQuest={selected}
+        canMakeRecurring={!isSeries}
         onCreated={() => {
           setEditing(false);
           onChanged();
