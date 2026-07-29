@@ -46,9 +46,19 @@ export function MapQuestOverlay() {
     // thing that can scroll, same restore-previous-value pattern
     // LightboxBackdrop.jsx uses for html/body.
     const previousOverflow = target.style.overflow;
+    const previousScrollTop = target.scrollTop;
+    // The slot is positioned (`inset: 0`) against this same pane's scrolled
+    // coordinate space, not the viewport — if the list was scrolled down
+    // before a row/pin was opened, the pane's leftover scrollTop shifts the
+    // slot up by that same amount instead of covering the pane cleanly.
+    // Zeroing it here (restored below on close) is what makes "scroll the
+    // list, then open a quest" line up the same as opening one straight
+    // away.
+    target.scrollTop = 0;
     target.style.overflow = 'hidden';
     return () => {
       target.style.overflow = previousOverflow;
+      target.scrollTop = previousScrollTop;
     };
   }, []);
 
