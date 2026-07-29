@@ -91,6 +91,19 @@ export function getTrustStatus(reviewCount, avgRating) {
   return null;
 }
 
+// Merges each series' owning organization's uploaded logo (organizations/
+// {uid}.logoUrl, see update_organization_profile in functions/main.py) onto
+// the group — null for a default/neighborhood quest (no orgId) or an org
+// that hasn't uploaded one yet, same fallback shape as attachOrgTrustStatus
+// above. Callers pass orgLogoUrl straight to OrgAvatar, which falls back to
+// its own letter-tile placeholder whenever this comes back null.
+export function attachOrgLogos(groups, logoByOrgId) {
+  return groups.map((group) => ({
+    ...group,
+    orgLogoUrl: (group.primary.orgId && logoByOrgId.get(group.primary.orgId)) || null,
+  }));
+}
+
 const FREQUENCY_LABELS = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 
 export function formatRecurrence(quest) {

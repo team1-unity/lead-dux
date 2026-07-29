@@ -1481,6 +1481,9 @@ button.quest-card-head:hover:not(:disabled) {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 1.15rem;
+  /* Only applies once <OrgAvatar logoUrl> renders an <img> instead of the
+     letter tile above — harmless no-op on the non-replaced div case. */
+  object-fit: cover;
 }
 
 .quest-card-titles {
@@ -2202,6 +2205,13 @@ a.org-home-stat-tile:hover {
    inside its own box (a quest list beside a sticky detail pane) — a bare
    OS scrollbar there is a real signal there's more to see, unlike the
    tag row above, so this stays visible but styled instead of hidden. */
+/* position:relative — the containing block for MapQuestOverlay.jsx's
+   detail view (.events-map-detail-slot, portaled straight into this pane),
+   so it covers exactly this pane and nothing more, in both breakpoints'
+   layouts. */
+.events-map-list-pane {
+  position: relative;
+}
 .quest-list,
 .events-map-list-pane {
   scrollbar-width: thin;
@@ -2227,6 +2237,44 @@ a.org-home-stat-tile:hover {
 .tag-filter-row .tag-stamp,
 .tag-filter-row .stamp-btn {
   flex: none;
+}
+
+/* ScrollableTagRow (EventsMap.jsx) — a scroll-by-one-tap arrow at whichever
+   edge still has more tags past it, shown/hidden per the row's own actual
+   scroll position rather than always both. */
+.tag-filter-row-wrap {
+  position: relative;
+}
+.tag-filter-row-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-card);
+  border: 1.5px solid var(--border);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  color: var(--line);
+}
+.tag-filter-row-arrow-left {
+  left: -6px;
+}
+.tag-filter-row-arrow-right {
+  right: -6px;
+}
+/* The global button:hover/:active lift (transform: translateY(-1px/0), see
+   the base button rule) would otherwise clobber this button's own
+   translateY(-50%) centering, snapping it up/down on hover/press — pin the
+   transform back to just the centering offset so it stays still. */
+.tag-filter-row-arrow:hover:not(:disabled),
+.tag-filter-row-arrow:active:not(:disabled) {
+  transform: translateY(-50%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
 .quest-sort-select {
@@ -2460,12 +2508,14 @@ a.org-home-stat-tile:hover {
 
 /* .photo-lightbox-close normally floats half outside its content (a bare
    photo, in PhotoGallery.jsx/PendingPhotoSubmissions.jsx — negative offsets
-   look intentional against a borderless image). These two containers wrap
-   a bordered card instead, so that same floating-outside look would either
-   hang off the card's edge or (worse, for .detail-modal-content) get
-   clipped by its own overflow-y:auto — inset it within the card instead. */
+   look intentional against a borderless image). These containers wrap a
+   bordered card instead, so that same floating-outside look would either
+   hang off the card's edge or (worse, for .detail-modal-content/
+   .events-map-detail-slot) get clipped by its own overflow-y:auto — inset
+   it within the card instead. */
 .qr-modal-content > .photo-lightbox-close,
-.detail-modal-content > .photo-lightbox-close {
+.detail-modal-content > .photo-lightbox-close,
+.events-map-detail-slot > .photo-lightbox-close {
   top: 10px;
   right: 10px;
 }
@@ -3483,107 +3533,256 @@ button.data-row:active:not(:disabled) {
   margin-bottom: 14px;
 }
 
-/* Mobile: a genuine two-region split screen, not a scroll-position trick.
-   The whole page becomes a fixed-height flex shell filling the strip above
-   the bottom nav (negative margin cancels #root's own padding) — TopBar/
-   banner/map stay put at their natural height, and only
-   .events-map-list-pane (flex:1) scrolls.
-   This deliberately replaces an earlier position:sticky attempt: Framer
-   Motion's PageMotion wrapper (removed from this page) applies a
-   persistent inline transform after its mount animation settles, and any
-   transformed ancestor confines position:sticky to *its* box instead of
-   the viewport — the map never actually stuck. A fixed-height flex shell
-   sidesteps that class of bug entirely instead of fighting it. */
+/* Mobile: a true Google-Maps-style full-screen map — a fixed, viewport-
+   anchored layer (unlike every other page in the app, all normal document
+   flow within #root) so the map genuinely fills the whole screen behind
+   everything else. Search + the tag row float directly over it
+   (.events-map-mobile-overlays), visible only while MobileSheet.jsx's own
+   sheet is still collapsed/peeking (see EventsMap.jsx's sheetExpanded) —
+   "exploring the map." The sheet itself (.events-map-sheet) holds the
+   quest list/detail, dragged or tapped open to "browse the quests," which
+   is when the floating search/tags hide. */
 @media (max-width: 859px) {
   .events-map-page {
-    display: flex;
-    flex-direction: column;
+    position: fixed;
+    inset: 0;
     height: 100dvh;
-    margin: -24px -16px calc(-1 * (var(--nav-height) + 32px));
-    padding: 24px 16px 16px;
-    overflow: hidden;
-  }
-  .events-map-location-banner {
-    flex: none;
   }
   .events-map-layout {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    gap: 12px;
+    position: relative;
+    height: 100%;
   }
   .events-map-pane {
+    position: absolute;
+    inset: 0;
+  }
+  .events-map-mobile-overlays {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top));
+    left: 16px;
+    right: 16px;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .events-map-mobile-overlays .search-field {
+    max-width: none;
+    width: 100%;
+  }
+  .events-map-mobile-overlays .tag-filter-row {
+    max-width: none;
+  }
+  /* Same readability fix .events-map-overlays (desktop) already has — an
+     unselected selectable tag is normally `background: transparent` (just
+     a colored outline, meant for the page's own plain paper background),
+     which is see-through to whatever's on the map underneath it here.
+     --paper-card is already the app's own theme-aware white(light)/
+     black(dark) surface token, so this needs no new color logic. The
+     already-selected pill (tone-filled, already opaque) is untouched. */
+  .events-map-mobile-overlays .tag-stamp[data-selectable='true'] {
+    background: var(--paper-card);
+  }
+  .events-map-mobile-overlays .tag-stamp {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  }
+  /* MobileSheet.jsx — a fixed-height sliver always instantiated at this
+     same height regardless of collapsed/expanded; MobileSheet's own
+     `animate`/pan-driven `y` transform is what actually moves it between
+     "just the handle peeking" and "fully open," not a resize. */
+  .events-map-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 95vh;
+    background: var(--paper-card);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+  }
+  .events-map-sheet-handle {
     flex: none;
+    width: 100%;
+    padding: 10px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    box-shadow: none;
+    cursor: grab;
+    /* Lets framer-motion's onPan/onPanEnd fully own touch here instead of
+       fighting the browser's own scroll/pull-to-refresh gesture — the
+       list content below (its own overflow-y:auto) is a different element,
+       so this doesn't block scrolling once the sheet is open. */
+    touch-action: none;
+  }
+  .events-map-sheet-handle-bar {
+    width: 40px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background: var(--border);
   }
   .events-map-list-pane {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 2px;
+  }
+  /* The padding lives here, not on .events-map-list-pane itself — that pane
+     is also MapQuestOverlay.jsx's detail-slot's positioning parent
+     (.events-map-detail-slot is `inset: 0` relative to it), and an
+     absolutely-positioned `inset: 0` child fills its containing block's
+     full padding box, not the space *inside* that padding — so padding on
+     the pane itself doesn't reliably clear space around the detail view,
+     and previously left the still-rendered list peeking through underneath
+     it. Padding on this separate, purely-in-flow inner wrapper has no such
+     ambiguity. */
+  .events-map-list-pane-inner {
+    /* Extra bottom padding so the last row/action clears the fixed bottom
+       nav (.bottom-nav, position:fixed;bottom:0) rather than being
+       scrollable-but-hidden behind it. */
+    padding: 0 16px calc(16px + var(--nav-height));
   }
 }
 .events-map-container {
   width: 100%;
-  height: 38vh;
-  min-height: 220px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  height: 100%;
   overflow: hidden;
-  margin-bottom: 14px;
   background: var(--paper-well);
+  position: relative;
 }
-.events-map-list-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-/* This row sits alone, full-bleed above the map+list split — the 320px/
-   640px caps that make sense when search/tags share a row with a page
-   title elsewhere just leave it looking stranded here. */
-.events-map-list-controls .search-field {
-  max-width: none;
-  width: 100%;
-}
-.events-map-list-controls .tag-filter-row {
-  max-width: none;
-}
-
-/* Desktop: side-by-side instead of stacked — map fills the flexible left
-   column, quest list is a fixed-width scrollable right column. Mirrors
-   .quest-feed-layout's sticky-pane/scrolling-list split (org/Dashboard.jsx),
-   just with map and list swapping which side is fixed-width. */
-@media (min-width: 860px) {
-  .events-map-layout {
-    display: grid;
-    grid-template-columns: 1fr minmax(320px, 420px);
-    align-items: start;
-    gap: 24px;
-  }
-  .events-map-pane {
-    position: sticky;
-    top: calc(var(--nav-height-desktop) + 40px);
-  }
-  .events-map-container {
-    height: calc(100vh - var(--nav-height-desktop) - 80px);
-  }
-  .events-map-list-pane {
-    max-height: calc(100vh - var(--nav-height-desktop) - 80px);
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-}
-.events-map-selected {
-  margin-bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.events-map-selected-head {
+/* Shown only if loadMapsLibrary/loadMarkerLibrary actually rejects (see
+   EventsMap.jsx's mapError state) — Google Maps never got a chance to
+   render its own error UI onto this container in that case, since it's
+   never constructed at all. */
+.events-map-error {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* Desktop: a real Google-Maps-style layout — the whole page breaks out of
+   #root's own padding (same negative-margin trick the mobile block above
+   uses, just with desktop's own nav-height/padding values) so the sidebar
+   and map both run genuinely edge-to-edge instead of sitting in a smaller
+   bordered box within the page's normal content area. The "Nearby" heading
+   is dropped entirely at this breakpoint (see EventsMap.jsx) — there's no
+   room reserved for it here. Quest list + search share one continuous
+   sidebar card on the LEFT (.events-map-sidebar); the map fills the
+   flexible RIGHT column with no border/margin of its own. The tag filter
+   row and location banner both float directly over the map instead
+   (.events-map-overlays) — matches Google Maps' own category-shortcut row
+   floating over its map, rather than living in the sidebar. */
+@media (min-width: 860px) {
+  .events-map-page {
+    display: flex;
+    flex-direction: column;
+    /* border-box (global reset): height includes padding-top below, so
+       this is the box's true total height — top edge lands at the real
+       viewport top (see the negative margin) and bottom edge lands at the
+       real viewport bottom (no fixed bottom nav to clear at this
+       breakpoint, unlike mobile). */
+    height: 100vh;
+    /* The classic "break out of a centered max-width container" trick —
+       #root itself caps at 1180px and centers via margin:0 auto (see its
+       own rule), unlike every other page in the app, this one page needs
+       to reach the TRUE viewport edges on a wider screen, not just
+       #root's own (still page-padding-cancelling) box. width:auto with
+       matching negative left/right margins naturally resolves to exactly
+       100vw regardless of #root's own width; explicit width:100vw backs
+       that up rather than relying on the margin math alone. */
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    margin-right: calc(-50vw + 50%);
+    margin-top: calc(-1 * (var(--nav-height-desktop) + 40px));
+    margin-bottom: -48px;
+    /* Without this, the sidebar's search row and the map's floating
+       overlays rendered right under the fixed desktop topbar (.bottom-nav,
+       position:fixed;top:0) instead of clearing it — the negative margin
+       above cancels ALL of #root's reserved top space, so this puts back
+       just enough (the nav's own height, not the full original padding)
+       to stay visible below it. */
+    padding-top: var(--nav-height-desktop);
+    overflow: hidden;
+  }
+  .events-map-layout {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(340px, 420px) 1fr;
+  }
+  .events-map-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--paper-card);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+  }
+  .events-map-search-row {
+    flex: none;
+    margin-bottom: 12px;
+  }
+  .events-map-search-row .search-field {
+    max-width: none;
+    width: 100%;
+  }
+  .events-map-list-pane {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  /* See the mobile breakpoint's identical note — padding lives on the
+     inner wrapper, not this pane, so MapQuestOverlay.jsx's `inset: 0`
+     detail-slot fills the pane's full box with no gap for the underlying
+     list to peek through. */
+  .events-map-list-pane-inner {
+    padding-right: 4px;
+  }
+  .events-map-pane {
+    position: relative;
+  }
+  .events-map-overlays {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .events-map-overlays .events-map-location-banner {
+    margin-bottom: 0;
+  }
+  .events-map-overlays .tag-filter-row {
+    max-width: none;
+    margin-bottom: 0;
+  }
+  /* Individual pills get their own shadow here (unlike every other
+     .tag-stamp use in the app) — grounding for a row that's floating
+     directly over the map, not sitting on a page's plain background. */
+  .events-map-overlays .tag-stamp {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  }
+  /* An unselected selectable tag is normally `background: transparent` (see
+     .tag-stamp[data-selectable='true']) — just a colored outline, meant to
+     sit on the page's own plain paper background. Floating directly over
+     the map instead, that outline is see-through to whatever's on the map
+     underneath it and hard to read; force an opaque paper background here
+     specifically so the label stays legible regardless of what's on the
+     map behind it. The already-selected pill (tone-filled, already
+     opaque) is untouched. */
+  .events-map-overlays .tag-stamp[data-selectable='true'] {
+    background: var(--paper-card);
+  }
 }
 
 .events-map-list {
@@ -3603,20 +3802,13 @@ button.data-row:active:not(:disabled) {
   gap: 12px;
   width: 100%;
   text-align: left;
+  text-decoration: none;
   background: none;
   border: none;
   padding: 0;
   font: inherit;
   color: inherit;
   cursor: pointer;
-}
-.events-map-list-detail {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 .events-map-list-meta {
   flex: 1;
@@ -3628,6 +3820,251 @@ button.data-row:active:not(:disabled) {
   font-size: 0.82rem;
   color: var(--line-soft);
   white-space: nowrap;
+}
+/* ---------- Map quest detail (MapQuestDetailBody.jsx) — shared by the
+   overlay view opened from EventsMap.jsx and the standalone
+   /map/:seriesId page ---------- */
+.map-quest-hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--paper-well);
+}
+.map-quest-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.map-quest-hero-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--line-soft);
+}
+/* MapQuestOverlay.jsx's close button — floats directly on the hero photo
+   itself (a real lightbox close button, not one hanging in the padding
+   above it), rather than the generic .photo-lightbox-close every other
+   modal in this app uses (which floats relative to the whole bordered
+   card, not specifically the image at its top). */
+.map-quest-hero-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  color: var(--line);
+  z-index: 1;
+}
+/* Mobile's equivalent (see MapQuestDetailBody.jsx) — same treatment as
+   .map-quest-hero-close, just mirrored to the top-left corner for a
+   back-chevron instead of an X. */
+.map-quest-hero-back {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  color: var(--line);
+  z-index: 1;
+}
+
+/* Community-photos hero carousel (HeroCarousel, MapQuestDetailBody.jsx) —
+   a plain flex track of full-width slides, shifted with `transform:
+   translateX` to whichever slide is current; .map-quest-hero's own
+   `overflow: hidden` crops everything outside the active slide. Auto-
+   advances on a timer with no manual controls at all (by design — see the
+   component's own note), so the sliding transition is the only motion this
+   ever needs. */
+.map-quest-hero-carousel {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.map-quest-hero-carousel-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s ease;
+}
+.map-quest-hero-carousel-track .map-quest-hero-img {
+  flex: none;
+  width: 100%;
+  height: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-quest-hero-carousel-track {
+    transition: none;
+  }
+}
+
+/* Overview/Reviews/About (MapQuestDetailBody.jsx) — a plain underline tab
+   bar, not a full reusable Tabs component: this is the only place in the
+   app with this exact 3-tab shape today. */
+.map-quest-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin: 14px 0;
+}
+.map-quest-tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 8px 4px;
+  margin-right: 20px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--line-soft);
+  cursor: pointer;
+}
+.map-quest-tabs button:hover:not(:disabled) {
+  color: var(--line);
+  box-shadow: none;
+  transform: none;
+}
+.map-quest-tabs button[data-active='true'] {
+  color: var(--line);
+  border-bottom-color: var(--accent);
+}
+
+.map-quest-info-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* Reviews tab (MapQuestDetailBody.jsx) — one row per review, no enclosing
+   card/box (unlike .data-sublist elsewhere in the app), separated by a
+   thin divider instead, matching a real Google Maps review list rather
+   than the old flat bulleted-text version this replaced. */
+.map-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.map-review-row {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.map-review-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.map-review-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.map-review-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.map-review-header-text {
+  flex: 1;
+  min-width: 0;
+}
+.map-review-name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--line);
+}
+.map-review-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.map-review-stars {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 0.85rem;
+}
+.map-review-star-filled {
+  color: var(--brand-mustard);
+}
+.map-review-star-empty {
+  color: var(--border);
+}
+.map-review-date {
+  font-size: 0.78rem;
+  color: var(--line-soft);
+}
+.map-review-body {
+  margin: 0;
+  color: var(--line);
+  line-height: 1.55;
+}
+
+.single-pin-map {
+  width: 100%;
+  height: 220px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--paper-well);
+  margin-bottom: 14px;
+}
+
+/* MapQuestOverlay.jsx's detail view — portaled straight into
+   #events-map-list-pane (see EventsMap.jsx) rather than floated on top of
+   the page, so opening a quest reads as switching what this pane shows
+   (list → detail) instead of a modal popping up over everything. .events-
+   map-list-pane needs `position: relative` (added to its existing rule
+   above) as this slot's containing block; the slot itself just covers that
+   pane completely, in both the desktop side-by-side layout and mobile's
+   stacked one — either way, the map stays visible and interactive above/
+   beside it the whole time, since only the list pane's own content is
+   being replaced. */
+.events-map-detail-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 20px;
+}
+/* Mobile: same fixed-bottom-nav clearance the list itself needs — the
+   detail view's own content (its "View full quest details" button) was
+   otherwise rendered right at this pane's true bottom edge, underneath the
+   opaque nav bar (.bottom-nav, position:fixed;bottom:0), unreachable no
+   matter how far you scrolled. Declared after the base rule above (not
+   inside the earlier mobile media query block) so its padding-bottom
+   actually wins — same specificity, so source order decides, and the base
+   rule's shorthand `padding: 20px` would otherwise reset it back down. */
+@media (max-width: 859px) {
+  .events-map-detail-slot {
+    padding-bottom: calc(20px + var(--nav-height));
+  }
 }
 
 /* Journal — parallax multi-column grid of morphing entry cards (see

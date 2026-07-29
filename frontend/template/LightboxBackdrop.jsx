@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom';
 // absolutely-positioned Share icon) can end up rendering on top of it,
 // undimmed, instead of being covered like everything else. Portalling to
 // document.body sidesteps the whole ancestor chain.
-export function LightboxBackdrop({ onClose, label, children }) {
+export function LightboxBackdrop({ onClose, label, children, className }) {
   // Without this, a scroll gesture over the dimmed backdrop (rather than
   // directly over the card) scrolls the page behind it instead of the
   // card's own content — the backdrop itself has no overflow, so the
@@ -53,7 +53,7 @@ export function LightboxBackdrop({ onClose, label, children }) {
 
   return createPortal(
     <div
-      className="photo-lightbox-backdrop"
+      className={className ? `photo-lightbox-backdrop ${className}` : 'photo-lightbox-backdrop'}
       onClick={onClose}
       role="dialog"
       aria-modal="true"

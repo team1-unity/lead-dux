@@ -350,8 +350,10 @@ export async function callGetMyReview(questId) {
   return result.data;
 }
 
-// organization (own quests) or admin (any quest): lists every review left
-// on a quest.
+// Any signed-in user (no ownership/role gate on the backend — reviews are
+// meant to help anyone deciding whether to attend, see list_quest_reviews's
+// own module comment in functions/main.py): lists every review left on a
+// quest.
 export async function callListQuestReviews(questId) {
   const fn = httpsCallable(functions, 'list_quest_reviews');
   const result = await fn({ questId });
