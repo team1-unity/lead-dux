@@ -4,10 +4,12 @@ import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { storage } from './firebaseapp.jsx';
 import { StampButton } from './StampButton.jsx';
 import { ShareButton } from './QuestSeriesRow.jsx';
+import { OrgAvatar } from './OrgAvatar.jsx';
 import { TrustTag } from './TrustTag.jsx';
 import { DuckMark } from './Logo.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
-import { formatRecurrence, toDate, getTrustStatus } from './questSeries.js';
+import { useIsDesktop } from './useIsDesktop.js';
+import { toDate, getTrustStatus } from './questSeries.js';
 import { buildDirectionsUrl } from './mapLinks.js';
 import { callListQuestReviews } from './fetch.jsx';
 import {
@@ -19,6 +21,7 @@ import {
   IconInstagram,
   IconFacebook,
   IconX,
+  IconChevron,
   IconLinkedIn,
   IconTikTok,
   IconYouTube,
@@ -41,6 +44,26 @@ function formatEventDate(value) {
 function formatStars(rating) {
   const whole = Math.round(rating);
   return '★'.repeat(whole) + '☆'.repeat(5 - whole);
+}
+
+// A row of 5 individually-colored stars (filled = brand mustard, empty =
+// muted border color) rather than formatStars' plain ★/☆ text glyphs —
+// this is the one spot in the app rendering a single review's own rating,
+// where a Google-Maps-style two-tone star row reads more like a real
+// rating widget than a line of text. formatStars itself stays as-is for
+// the compact "★★★★☆ (12 reviews)" aggregate line elsewhere in this file
+// and the couple of other places in the app that already use it.
+function StarRow({ rating }) {
+  const whole = Math.round(rating);
+  return (
+    <span className="map-review-stars" aria-label={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span key={n} aria-hidden="true" className={n <= whole ? 'map-review-star-filled' : 'map-review-star-empty'}>
+          ★
+        </span>
+      ))}
+    </span>
+  );
 }
 
 // Organizations' Community Photos gallery (org.photos, an array of Storage
@@ -142,17 +165,33 @@ function ReviewsTab({ questId }) {
 
   if (loading) return <LoadingSpinner label="Loading reviews..." />;
   if (error) return <p className="box-danger">{error}</p>;
+  if (reviews.length === 0) return <p className="field-optional">No reviews yet.</p>;
 
   return (
-    <ul className="data-sublist">
-      {reviews.length === 0 && <li>No reviews yet.</li>}
+    <div className="map-reviews-list">
       {reviews.map((r) => (
-        <li key={`${r.uid}-${r.eventDate}`}>
-          {formatStars(r.rating)} — {r.name || 'Unnamed'}
-          {r.eventDate ? ` (${formatEventDate(r.eventDate)})` : ''}: {r.body}
-        </li>
+        <div key={`${r.uid}-${r.eventDate}`} className="map-review-row">
+          <div className="map-review-header">
+            {/* No reviewer photo in this data (list_quest_reviews only
+                returns uid/name/rating/body/dates) — the same colored-
+                initial-tile OrgAvatar already renders elsewhere for
+                organizations works just as well keyed to a reviewer's own
+                name/uid instead. */}
+            <div className="map-review-avatar">
+              <OrgAvatar name={r.name || 'Unnamed'} seed={r.uid} />
+            </div>
+            <div className="map-review-header-text">
+              <p className="map-review-name">{r.name || 'Unnamed'}</p>
+              <div className="map-review-meta">
+                <StarRow rating={r.rating} />
+                {r.eventDate && <span className="map-review-date">{formatEventDate(r.eventDate)}</span>}
+              </div>
+            </div>
+          </div>
+          <p className="map-review-body">{r.body}</p>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -225,15 +264,21 @@ function AboutTab({ org }) {
 // they stay put across all three instead of disappearing when Reviews/About
 // is selected.
 //
-// `onClose` (optional) renders a close button floating directly on the hero
-// photo itself, matching how a real photo lightbox close button sits over
-// the image — only MapQuestOverlay.jsx passes this; MapQuestPage.jsx (a
-// full standalone page, not an overlay) has nothing to close.
+// `onClose` (optional) renders a close/back button floating directly on the
+// hero photo itself, matching how a real photo lightbox close button sits
+// over the image — only MapQuestOverlay.jsx passes this; MapQuestPage.jsx
+// (a full standalone page, not an overlay) has nothing to close. Desktop
+// keeps a plain X in the top-right (closing a side panel back to the map);
+// mobile gets a back-chevron in the top-left instead (returning to the
+// sheet's list, a "back" action, not a modal dismissal) — this is the one
+// place in the component that branches on breakpoint, since the icon
+// itself (not just its position) differs.
 //
 // `series.org` (see useMapQuestSeries.js) is the owning organization's full
 // profile doc — optional, and every field read off it below just doesn't
 // render when absent.
 export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
+  const isDesktop = useIsDesktop();
   const { primary, org } = series;
   const [tab, setTab] = useState('overview');
   const trustStatus = getTrustStatus(org?.reviewCount || 0, org?.avgRating || 0);
@@ -243,9 +288,14 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
     <div className="map-quest-detail-body">
       <div className="map-quest-hero">
         <HeroCarousel photoPaths={org?.photos} orgLogoUrl={org?.logoUrl} />
-        {onClose && (
+        {onClose && isDesktop && (
           <button type="button" className="map-quest-hero-close" onClick={onClose} aria-label="Close">
             <IconX width={18} height={18} />
+          </button>
+        )}
+        {onClose && !isDesktop && (
+          <button type="button" className="map-quest-hero-back" onClick={onClose} aria-label="Back to map">
+            <IconChevron style={{ transform: 'rotate(90deg)' }} width={20} height={20} />
           </button>
         )}
       </div>
@@ -285,16 +335,16 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
             <IconPin /> {primary.location}
           </a>
         )}
-        {formatRecurrence(primary) ? (
+        {formatEventDate(primary.eventDate) && (
+          // Always the soonest *upcoming* date, not a recurrence-pattern
+          // summary — useMapQuestSeries.js/EventsMap.jsx both filter a
+          // series' occurrences to upcoming ones before picking `primary`,
+          // specifically so this reads as "when's it next happening,"
+          // matching why nobody needs a date picker on the map (see those
+          // files' own notes).
           <p className="quest-meta-row">
-            <IconCalendar /> {formatRecurrence(primary)}
+            <IconCalendar /> {formatEventDate(primary.eventDate)}
           </p>
-        ) : (
-          formatEventDate(primary.eventDate) && (
-            <p className="quest-meta-row">
-              <IconCalendar /> {formatEventDate(primary.eventDate)}
-            </p>
-          )
         )}
       </div>
 

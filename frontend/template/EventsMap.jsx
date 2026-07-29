@@ -15,10 +15,12 @@ import { TagStamp } from './TagStamp.jsx';
 import { DuckMark } from './Logo.jsx';
 import { IconSearch, IconChevron } from './icons.jsx';
 
-// How tall the sheet's own peeking sliver is when collapsed (handle bar +
-// one line of label text) — mirrors the fixed pixel values MobileSheet's
-// own drag-snap math is built around.
-const SHEET_PEEK_PX = 84;
+// How tall the sheet's own peeking sliver is when collapsed — handle bar +
+// label, plus enough extra to preview the first quest card's title/org
+// line underneath (not the whole card, just enough to read "yes, there are
+// real quests here"). Mirrors the fixed pixel value MobileSheet's own
+// drag-snap math is built around.
+const SHEET_PEEK_PX = 190;
 
 // Continental-US center — only ever shown when geolocation is denied/
 // unavailable AND no quest with coordinates exists to center on instead,
@@ -49,11 +51,6 @@ function formatDistance(km) {
   if (km == null) return null;
   const miles = km * 0.621371;
   return miles < 0.1 ? 'Here' : `${miles.toFixed(1)} mi`;
-}
-
-function formatStars(rating) {
-  const whole = Math.round(rating);
-  return '★'.repeat(whole) + '☆'.repeat(5 - whole);
 }
 
 // Wraps .tag-filter-row with a scroll-by-one-tap arrow at whichever edge
@@ -142,7 +139,7 @@ function ScrollableTagRow({ children, arrows = true }) {
 // onPan/onPanEnd are only wired to the handle, not the whole sheet, so the
 // list's own native scroll (once expanded) isn't hijacked by the same
 // gesture.
-function MobileSheet({ expanded, onExpandedChange, peekLabel, children }) {
+function MobileSheet({ expanded, onExpandedChange, children }) {
   const reduce = useReducedMotion();
   const sheetRef = useRef(null);
   const y = useMotionValue(0);
@@ -181,10 +178,6 @@ function MobileSheet({ expanded, onExpandedChange, peekLabel, children }) {
         aria-label={expanded ? 'Collapse quest list' : 'Expand quest list'}
       >
         <span className="events-map-sheet-handle-bar" aria-hidden="true" />
-        <span className="events-map-sheet-peek-label">
-          {peekLabel}
-          <IconChevron style={{ transform: expanded ? 'rotate(180deg)' : undefined }} />
-        </span>
       </motion.button>
       {children}
     </motion.div>
@@ -567,7 +560,6 @@ export function EventsMap() {
               <div className="events-map-list-meta">
                 <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>
                 <p className="quest-org-line">{g.primary.orgName}</p>
-                {g.reviewCount > 0 && <p className="events-map-list-rating">{formatStars(g.avgRating)}</p>}
               </div>
               {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
             </Link>
@@ -578,18 +570,6 @@ export function EventsMap() {
   );
 
   const hasListControls = seriesList !== null && withDistance.length > 0;
-
-  // MobileSheet's own peeking sliver, shown collapsed — a live count when
-  // there's one to give, otherwise whatever state actually applies (still
-  // loading / nothing to show / a real fetch error), so the sheet never
-  // just displays a stale-feeling number.
-  const sheetPeekLabel = dataError
-    ? 'Could not load nearby quests'
-    : seriesList === null
-      ? 'Loading nearby quests…'
-      : withDistance.length === 0
-        ? 'No mappable quests yet'
-        : `${withDistance.length} quest${withDistance.length === 1 ? '' : 's'} nearby`;
 
   return (
     <div className="events-map-page">
@@ -605,7 +585,7 @@ export function EventsMap() {
                 a view switch in place of the list, not a modal floating on
                 top of the page (see App.jsx's backgroundLocation routing). */}
             <div className="events-map-list-pane" id="events-map-list-pane">
-              {listContent}
+              <div className="events-map-list-pane-inner">{listContent}</div>
             </div>
           </div>
         )}
@@ -647,9 +627,9 @@ export function EventsMap() {
         )}
 
         {!isDesktop && (
-          <MobileSheet expanded={sheetExpanded} onExpandedChange={setSheetExpanded} peekLabel={sheetPeekLabel}>
+          <MobileSheet expanded={sheetExpanded} onExpandedChange={setSheetExpanded}>
             <div className="events-map-list-pane" id="events-map-list-pane">
-              {listContent}
+              <div className="events-map-list-pane-inner">{listContent}</div>
             </div>
           </MobileSheet>
         )}
