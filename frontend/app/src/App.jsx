@@ -22,6 +22,8 @@ import { Certificate } from './Certificate.jsx';
 import { OrganizationProfile } from './OrganizationProfile.jsx';
 import { QuestDetails } from './QuestDetails.jsx';
 import { SharedQuest } from './SharedQuest.jsx';
+import { MapQuestPage } from './MapQuestPage.jsx';
+import { MapQuestOverlay } from './MapQuestOverlay.jsx';
 import { Register as RegisterPublic } from '@mobile/Register.jsx';
 import { Onboarding } from '@mobile/Onboarding.jsx';
 import { Quests } from '@mobile/Quests.jsx';
@@ -183,88 +185,123 @@ function AppShell() {
   );
 }
 
+// Route tree lives here (rather than directly in App below) so it can call
+// useLocation() — needed for the "background location" pattern that gives
+// /map/:seriesId two different renders depending on how it was reached: a
+// row/pin clicked from within /map (EventsMap.jsx) navigates here with
+// state.backgroundLocation set to a fixed "/map" location, so the PRIMARY
+// <Routes> below keeps matching/rendering EventsMap (unchanged, still
+// panned/zoomed where it was) while a SECOND, overlay-only <Routes>
+// (matched against the real, current location — no override) renders
+// MapQuestOverlay.jsx floating on top of it. A direct load of the same URL
+// (a shared link, a refresh, no backgroundLocation state to fall back on)
+// has nothing to override the primary Routes with, so it matches
+// /map/:seriesId there instead and renders MapQuestPage.jsx, the full
+// standalone page — the graceful fallback the whole point of this pattern
+// is to guarantee. See EventsMap.jsx's own MAP_BACKGROUND_LOCATION and
+// MapQuestOverlay.jsx for the other two pieces of this.
+function AppRoutes() {
+  const location = useLocation();
+  const backgroundLocation = location.state?.backgroundLocation;
+
+  return (
+    <>
+      <Routes location={backgroundLocation || location}>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<RegisterPublic />} />
+        <Route path="/register/organization" element={<RegisterOrganization />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        {/* Deliberately outside AppShell — this is the one quest page that
+            has to work for a fully signed-out visitor (a share link
+            clicked from outside the app), so it can't sit behind the
+            same tree as routes that assume an authenticated role. A map
+            quest's own Share action reuses this exact link too (see
+            MapQuestDetailBody.jsx) rather than a second, map-flavored
+            share page — one shareable link per quest, not two. */}
+        <Route path="/share/:seriesId" element={<SharedQuest />} />
+        <Route element={<AppShell />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/quests" element={<QuestsPage />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/check-in" element={<CheckIn />} />
+          <Route path="/certificate" element={<Certificate />} />
+          <Route path="/organizations/:orgId" element={<OrganizationProfile />} />
+          <Route path="/quests/:seriesId" element={<QuestDetails />} />
+          <Route path="/badges" element={<Badges />} />
+          <Route path="/journal" element={<Journal />} />
+          <Route path="/map" element={<EventsMap />} />
+          <Route path="/map/:seriesId" element={<MapQuestPage />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/org"
+            element={
+              <ProtectedRoute requiredRole="organization">
+                <OrgHome />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/org/quests"
+            element={
+              <ProtectedRoute requiredRole="organization">
+                <OrgQuests />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/org/photo-submissions"
+            element={
+              <ProtectedRoute requiredRole="organization">
+                <OrgPhotoSubmissions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/org/feedback-requests"
+            element={
+              <ProtectedRoute requiredRole="organization">
+                <OrgFeedbackRequests />
+              </ProtectedRoute>
+            }
+          />
+          {/* No longer linked from nav (see BottomNav's
+              FEATURES_BY_ROLE.organization) — the host-reflection
+              feature itself still exists, just isn't a primary flow
+              anymore. Route stays so it's still reachable directly. */}
+          <Route
+            path="/org/journal"
+            element={
+              <ProtectedRoute requiredRole="organization">
+                <OrgJournal />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      {backgroundLocation && (
+        <Routes>
+          <Route path="/map/:seriesId" element={<MapQuestOverlay />} />
+        </Routes>
+      )}
+    </>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<RegisterPublic />} />
-          <Route path="/register/organization" element={<RegisterOrganization />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          {/* Deliberately outside AppShell — this is the one quest page that
-              has to work for a fully signed-out visitor (a share link
-              clicked from outside the app), so it can't sit behind the
-              same tree as routes that assume an authenticated role. */}
-          <Route path="/share/:seriesId" element={<SharedQuest />} />
-          <Route element={<AppShell />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/quests" element={<QuestsPage />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/check-in" element={<CheckIn />} />
-            <Route path="/certificate" element={<Certificate />} />
-            <Route path="/organizations/:orgId" element={<OrganizationProfile />} />
-            <Route path="/quests/:seriesId" element={<QuestDetails />} />
-            <Route path="/badges" element={<Badges />} />
-            <Route path="/journal" element={<Journal />} />
-            <Route path="/map" element={<EventsMap />} />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/org"
-              element={
-                <ProtectedRoute requiredRole="organization">
-                  <OrgHome />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/org/quests"
-              element={
-                <ProtectedRoute requiredRole="organization">
-                  <OrgQuests />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/org/photo-submissions"
-              element={
-                <ProtectedRoute requiredRole="organization">
-                  <OrgPhotoSubmissions />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/org/feedback-requests"
-              element={
-                <ProtectedRoute requiredRole="organization">
-                  <OrgFeedbackRequests />
-                </ProtectedRoute>
-              }
-            />
-            {/* No longer linked from nav (see BottomNav's
-                FEATURES_BY_ROLE.organization) — the host-reflection
-                feature itself still exists, just isn't a primary flow
-                anymore. Route stays so it's still reachable directly. */}
-            <Route
-              path="/org/journal"
-              element={
-                <ProtectedRoute requiredRole="organization">
-                  <OrgJournal />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
   );

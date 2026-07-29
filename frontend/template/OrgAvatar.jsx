@@ -2,10 +2,14 @@ import { hashTone } from './tagTones.js';
 
 // A bold colored initial tile — the "no logo yet" placeholder for a quest's
 // owning organization. This occupies the exact visual slot a real uploaded
-// org logo would take later; swapping in an <img> here (once orgs can
-// upload one) is the whole migration, nothing else about the layout needs
-// to change.
-export function OrgAvatar({ name, seed }) {
+// org logo takes once one exists: pass `logoUrl` (organizations/{uid}.
+// logoUrl, see update_organization_profile) and this renders that instead —
+// falls back to the letter tile whenever it's omitted/null, so every
+// existing caller that doesn't know about logos yet keeps working unchanged.
+export function OrgAvatar({ name, seed, logoUrl }) {
+  if (logoUrl) {
+    return <img src={logoUrl} alt="" className="org-avatar" aria-hidden="true" />;
+  }
   const tone = hashTone(seed ?? name);
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
   return (

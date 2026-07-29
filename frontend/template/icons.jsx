@@ -293,6 +293,18 @@ export function IconYouTube(props) {
   );
 }
 
+// A navigation-arrow glyph (Google Maps' own "directions" icon shape) — for
+// MapQuestDetailBody.jsx's Directions action, which just opens Google's own
+// directions URL rather than drawing a route on our own embedded map (see
+// mapLinks.js's buildDirectionsUrl).
+export function IconDirections(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M12 3l8 18-8-4-8 4z" />
+    </svg>
+  );
+}
+
 // The one icon in this file that's inherently a filled shape rather than a
 // stroked line (a kebab/overflow-menu trigger) — three plain dots, no
 // stroke at all.
