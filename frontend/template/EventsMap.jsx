@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
 import { useAuth } from './AuthContext.jsx';
@@ -7,13 +8,17 @@ import { groupBySeries, attachSeriesRatings, attachOrgLogos, isUpcoming, toDate 
 import { loadMapsLibrary, loadMarkerLibrary } from './googleMaps.js';
 import { MAP_STYLE, questPinIcon } from './mapStyle.js';
 import { useIsDesktop } from './useIsDesktop.js';
-import { TopBar } from './TopBar.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { OrgAvatar } from './OrgAvatar.jsx';
 import { TagStamp } from './TagStamp.jsx';
 import { DuckMark } from './Logo.jsx';
 import { IconSearch, IconChevron } from './icons.jsx';
+
+// How tall the sheet's own peeking sliver is when collapsed (handle bar +
+// one line of label text) — mirrors the fixed pixel values MobileSheet's
+// own drag-snap math is built around.
+const SHEET_PEEK_PX = 84;
 
 // Continental-US center — only ever shown when geolocation is denied/
 // unavailable AND no quest with coordinates exists to center on instead,
@@ -53,12 +58,16 @@ function formatStars(rating) {
 
 // Wraps .tag-filter-row with a scroll-by-one-tap arrow at whichever edge
 // still has more content past it (Google Maps' own category-shortcut row
-// does the same) — hidden entirely once there's nothing further that way,
-// so it never shows a dead-end arrow. A plain scroll-position check rather
-// than IntersectionObserver-per-chip: this row is small (a dozen tags at
-// most), so re-measuring the whole container on every scroll/resize is
-// cheap.
-function ScrollableTagRow({ children }) {
+// does the same on desktop) — hidden entirely once there's nothing further
+// that way, so it never shows a dead-end arrow. A plain scroll-position
+// check rather than IntersectionObserver-per-chip: this row is small (a
+// dozen tags at most), so re-measuring the whole container on every
+// scroll/resize is cheap.
+//
+// `arrows` is off on mobile — a touch swipe is already the natural way to
+// scroll this row there, and a pair of tap targets floating over it would
+// just be redundant chrome competing with the pills themselves.
+function ScrollableTagRow({ children, arrows = true }) {
   const scrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -71,6 +80,7 @@ function ScrollableTagRow({ children }) {
   }
 
   useEffect(() => {
+    if (!arrows) return undefined;
     updateScrollState();
     const el = scrollRef.current;
     if (!el) return undefined;
@@ -81,7 +91,11 @@ function ScrollableTagRow({ children }) {
       window.removeEventListener('resize', updateScrollState);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [children]);
+  }, [children, arrows]);
+
+  if (!arrows) {
+    return <div className="tag-filter-row">{children}</div>;
+  }
 
   return (
     <div className="tag-filter-row-wrap">
@@ -112,6 +126,71 @@ function ScrollableTagRow({ children }) {
   );
 }
 
+// A draggable bottom sheet (mobile only) containing the quest list/detail —
+// collapsed to a small peeking sliver while "exploring the map" (search +
+// tag row floating above it are the focus then), or dragged/tapped open to
+// browse the list in full (search/tags hide then — see EventsMap's own
+// render). Opening a specific quest's detail (MapQuestOverlay.jsx, which
+// portals into this same sheet's list-pane content) doesn't need any
+// special-casing here: it's just whatever's currently inside `children`.
+//
+// Built on a plain framer-motion MotionValue + onPan/onPanEnd rather than
+// the `drag` prop directly: `drag` fights with an `animate` target on the
+// same value once a gesture ends, where this pattern — pan updates the
+// value live, onPanEnd decides the final open/closed boolean, `animate`
+// springs the rest of the way — is the standard way to get a clean snap.
+// onPan/onPanEnd are only wired to the handle, not the whole sheet, so the
+// list's own native scroll (once expanded) isn't hijacked by the same
+// gesture.
+function MobileSheet({ expanded, onExpandedChange, peekLabel, children }) {
+  const reduce = useReducedMotion();
+  const sheetRef = useRef(null);
+  const y = useMotionValue(0);
+  const [peekOffset, setPeekOffset] = useState(0);
+
+  useEffect(() => {
+    function measure() {
+      if (sheetRef.current) setPeekOffset(Math.max(0, sheetRef.current.offsetHeight - SHEET_PEEK_PX));
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  return (
+    <motion.div
+      ref={sheetRef}
+      className="events-map-sheet"
+      style={{ y }}
+      animate={{ y: expanded ? 0 : peekOffset }}
+      transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 34 }}
+    >
+      <motion.button
+        type="button"
+        className="events-map-sheet-handle"
+        onPan={(e, info) => {
+          const base = expanded ? 0 : peekOffset;
+          y.set(Math.max(0, Math.min(peekOffset, base + info.offset.y)));
+        }}
+        onPanEnd={(e, info) => {
+          const shouldExpand = info.velocity.y < -300 || y.get() < peekOffset / 2;
+          onExpandedChange(shouldExpand);
+        }}
+        onClick={() => onExpandedChange(!expanded)}
+        aria-expanded={expanded}
+        aria-label={expanded ? 'Collapse quest list' : 'Expand quest list'}
+      >
+        <span className="events-map-sheet-handle-bar" aria-hidden="true" />
+        <span className="events-map-sheet-peek-label">
+          {peekLabel}
+          <IconChevron style={{ transform: expanded ? 'rotate(180deg)' : undefined }} />
+        </span>
+      </motion.button>
+      {children}
+    </motion.div>
+  );
+}
+
 // A DoorDash-style "what's near me" view for quests, rather than the plain
 // feed (Quests.jsx) — the two are deliberately separate screens: this one
 // answers "where," the feed answers "what." Only quests with real
@@ -137,6 +216,10 @@ export function EventsMap() {
   const [dataError, setDataError] = useState(null);
   const [search, setSearch] = useState('');
   const [activeTag, setActiveTag] = useState(null);
+  // Mobile only (see MobileSheet) — collapsed means "exploring the map"
+  // (search/tags float over it instead), expanded means "browsing the
+  // quest list/detail" (the sheet itself is the focus, search/tags hide).
+  const [sheetExpanded, setSheetExpanded] = useState(false);
 
   const mapContainerRef = useRef(null);
   const mapObjRef = useRef(null);
@@ -276,6 +359,10 @@ export function EventsMap() {
 
   function focusSeries(seriesId) {
     setSelectedSeriesId(seriesId);
+    // A pin tap while the mobile sheet is still collapsed/peeking should
+    // still bring its detail into view, same as tapping it from an already-
+    // open list would — this is a no-op on desktop (no sheet there).
+    setSheetExpanded(true);
     const g = visibleSeries.find((s) => s.seriesId === seriesId);
     if (g && mapObjRef.current) {
       mapObjRef.current.panTo({ lat: g.primary.lat, lng: g.primary.lng });
@@ -415,7 +502,7 @@ export function EventsMap() {
   );
 
   const tagFilterRow = availableTags.length > 0 && (
-    <ScrollableTagRow>
+    <ScrollableTagRow arrows={isDesktop}>
       <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
         All
       </TagStamp>
@@ -492,32 +579,36 @@ export function EventsMap() {
 
   const hasListControls = seriesList !== null && withDistance.length > 0;
 
+  // MobileSheet's own peeking sliver, shown collapsed — a live count when
+  // there's one to give, otherwise whatever state actually applies (still
+  // loading / nothing to show / a real fetch error), so the sheet never
+  // just displays a stale-feeling number.
+  const sheetPeekLabel = dataError
+    ? 'Could not load nearby quests'
+    : seriesList === null
+      ? 'Loading nearby quests…'
+      : withDistance.length === 0
+        ? 'No mappable quests yet'
+        : `${withDistance.length} quest${withDistance.length === 1 ? '' : 's'} nearby`;
+
   return (
     <div className="events-map-page">
-      {/* Desktop drops the "Nearby" heading entirely (see the sidebar/map
-          layout below, which fills the whole page instead) — mobile keeps
-          it, along with the location banner and search/tags row, all in
-          their original normal-flow positions above the map. */}
-      {!isDesktop && <TopBar title="Nearby" />}
-      {!isDesktop && locationBanner}
-      {!isDesktop && hasListControls && (
-        <div className="events-map-list-controls">
-          {searchField}
-          {tagFilterRow}
-        </div>
-      )}
-
       <div className="events-map-layout">
-        <div className={isDesktop ? 'events-map-sidebar' : undefined}>
-          {isDesktop && hasListControls && <div className="events-map-search-row">{searchField}</div>}
-          {/* id is MapQuestOverlay.jsx's portal target — its detail view
-              renders straight into this node so opening a quest reads as a
-              view switch in place of the list, not a modal floating on top
-              of the page (see App.jsx's backgroundLocation routing). */}
-          <div className="events-map-list-pane" id="events-map-list-pane">
-            {listContent}
+        {/* Desktop: search + list share one continuous sidebar card on the
+            left; the "Nearby" heading is dropped entirely (no room
+            reserved for it in this full-bleed layout). */}
+        {isDesktop && (
+          <div className="events-map-sidebar">
+            {hasListControls && <div className="events-map-search-row">{searchField}</div>}
+            {/* id is MapQuestOverlay.jsx's portal target — its detail view
+                renders straight into this node so opening a quest reads as
+                a view switch in place of the list, not a modal floating on
+                top of the page (see App.jsx's backgroundLocation routing). */}
+            <div className="events-map-list-pane" id="events-map-list-pane">
+              {listContent}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="events-map-pane">
           <div className="events-map-container" ref={mapContainerRef}>
@@ -527,10 +618,12 @@ export function EventsMap() {
               </div>
             )}
           </div>
-          {/* Floating over the map itself, like Google Maps' own category-
-              shortcut row and any-warning banners — one wrapper so both
-              stack vertically instead of overlapping when both show at
-              once. */}
+          {/* Desktop only — floating over the map itself, like Google Maps'
+              own category-shortcut row and any-warning banners; one
+              wrapper so both stack vertically instead of overlapping when
+              both show at once. Mobile's equivalent floats over the full-
+              screen map directly, below, since there's no separate map pane
+              to nest it inside there. */}
           {isDesktop && (locationBanner || tagFilterRow) && (
             <div className="events-map-overlays">
               {locationBanner}
@@ -538,6 +631,28 @@ export function EventsMap() {
             </div>
           )}
         </div>
+
+        {/* Mobile: the map fills the whole screen behind everything else.
+            Search + tags float over it, but only while "exploring the
+            map" (the sheet below is still collapsed) — once it's dragged/
+            tapped open to browse the list (or a quest's detail), these
+            hide so the sheet itself is the focus, matching Google Maps'
+            own mobile behavior. */}
+        {!isDesktop && !sheetExpanded && (locationBanner || hasListControls) && (
+          <div className="events-map-mobile-overlays">
+            {locationBanner}
+            {hasListControls && searchField}
+            {tagFilterRow}
+          </div>
+        )}
+
+        {!isDesktop && (
+          <MobileSheet expanded={sheetExpanded} onExpandedChange={setSheetExpanded} peekLabel={sheetPeekLabel}>
+            <div className="events-map-list-pane" id="events-map-list-pane">
+              {listContent}
+            </div>
+          </MobileSheet>
+        )}
       </div>
     </div>
   );

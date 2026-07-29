@@ -3533,54 +3533,109 @@ button.data-row:active:not(:disabled) {
   margin-bottom: 14px;
 }
 
-/* Mobile: a genuine two-region split screen, not a scroll-position trick.
-   The whole page becomes a fixed-height flex shell filling the strip above
-   the bottom nav (negative margin cancels #root's own padding) — TopBar/
-   banner/map stay put at their natural height, and only
-   .events-map-list-pane (flex:1) scrolls.
-   This deliberately replaces an earlier position:sticky attempt: Framer
-   Motion's PageMotion wrapper (removed from this page) applies a
-   persistent inline transform after its mount animation settles, and any
-   transformed ancestor confines position:sticky to *its* box instead of
-   the viewport — the map never actually stuck. A fixed-height flex shell
-   sidesteps that class of bug entirely instead of fighting it. */
+/* Mobile: a true Google-Maps-style full-screen map — a fixed, viewport-
+   anchored layer (unlike every other page in the app, all normal document
+   flow within #root) so the map genuinely fills the whole screen behind
+   everything else. Search + the tag row float directly over it
+   (.events-map-mobile-overlays), visible only while MobileSheet.jsx's own
+   sheet is still collapsed/peeking (see EventsMap.jsx's sheetExpanded) —
+   "exploring the map." The sheet itself (.events-map-sheet) holds the
+   quest list/detail, dragged or tapped open to "browse the quests," which
+   is when the floating search/tags hide. */
 @media (max-width: 859px) {
   .events-map-page {
-    display: flex;
-    flex-direction: column;
+    position: fixed;
+    inset: 0;
     height: 100dvh;
-    margin: -24px -16px calc(-1 * (var(--nav-height) + 32px));
-    padding: 24px 16px 16px;
-    overflow: hidden;
-  }
-  .events-map-location-banner {
-    flex: none;
   }
   .events-map-layout {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    gap: 12px;
+    position: relative;
+    height: 100%;
   }
   .events-map-pane {
+    position: absolute;
+    inset: 0;
+  }
+  .events-map-mobile-overlays {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top));
+    left: 16px;
+    right: 16px;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .events-map-mobile-overlays .search-field {
+    max-width: none;
+    width: 100%;
+  }
+  .events-map-mobile-overlays .tag-filter-row {
+    max-width: none;
+  }
+  /* MobileSheet.jsx — a fixed-height sliver always instantiated at this
+     same height regardless of collapsed/expanded; MobileSheet's own
+     `animate`/pan-driven `y` transform is what actually moves it between
+     "just the handle peeking" and "fully open," not a resize. */
+  .events-map-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 82vh;
+    background: var(--paper-card);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+  }
+  .events-map-sheet-handle {
     flex: none;
+    width: 100%;
+    padding: 10px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    box-shadow: none;
+    cursor: grab;
+    /* Lets framer-motion's onPan/onPanEnd fully own touch here instead of
+       fighting the browser's own scroll/pull-to-refresh gesture — the
+       list content below (its own overflow-y:auto) is a different element,
+       so this doesn't block scrolling once the sheet is open. */
+    touch-action: none;
+  }
+  .events-map-sheet-handle-bar {
+    width: 40px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background: var(--border);
+  }
+  .events-map-sheet-peek-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-heading);
+    font-weight: 600;
+    color: var(--line-soft);
   }
   .events-map-list-pane {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 2px;
+    /* Extra bottom padding so the last row/action clears the fixed bottom
+       nav (.bottom-nav, position:fixed;bottom:0) rather than being
+       scrollable-but-hidden behind it. */
+    padding: 0 16px calc(16px + var(--nav-height));
   }
 }
 .events-map-container {
   width: 100%;
-  height: 38vh;
-  min-height: 220px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  height: 100%;
   overflow: hidden;
-  margin-bottom: 14px;
   background: var(--paper-well);
   position: relative;
 }
@@ -3595,22 +3650,6 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   padding: 16px;
-}
-.events-map-list-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-/* This row sits alone, full-bleed above the map+list split — the 320px/
-   640px caps that make sense when search/tags share a row with a page
-   title elsewhere just leave it looking stranded here. */
-.events-map-list-controls .search-field {
-  max-width: none;
-  width: 100%;
-}
-.events-map-list-controls .tag-filter-row {
-  max-width: none;
 }
 
 /* Desktop: a real Google-Maps-style layout — the whole page breaks out of
@@ -3688,12 +3727,6 @@ button.data-row:active:not(:disabled) {
   .events-map-pane {
     position: relative;
   }
-  .events-map-container {
-    height: 100%;
-    margin-bottom: 0;
-    border-radius: 0;
-    border: none;
-  }
   .events-map-overlays {
     position: absolute;
     top: 16px;
@@ -3754,14 +3787,6 @@ button.data-row:active:not(:disabled) {
   font: inherit;
   color: inherit;
   cursor: pointer;
-}
-.events-map-list-detail {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 .events-map-list-meta {
   flex: 1;
