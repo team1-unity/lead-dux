@@ -2343,10 +2343,19 @@ def request_quest_feedback(req: https_fn.CallableRequest) -> dict:
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=FEEDBACK_REQUEST_WINDOW_DAYS)
 
+    # Denormalized here (Admin SDK reads bypass firestore.rules) because
+    # the org reviewing this request can't read the leader's users/{uid}
+    # doc directly — that collection only allows a user to read their own
+    # doc (or an admin). Without this, the org-side UI has no way to show
+    # who a pending request is for.
+    requester_snap = db.collection("users").document(uid).get()
+    requester_name = requester_snap.to_dict().get("name") if requester_snap.exists else None
+
     batch = db.batch()
     batch.set(request_ref, {
         "questId": quest_id,
         "uid": uid,
+        "requesterName": requester_name,
         "orgId": quest.get("orgId"),
         "orgName": quest.get("orgName"),
         "questTitle": quest.get("title"),

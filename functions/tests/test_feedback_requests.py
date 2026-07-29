@@ -42,6 +42,7 @@ class TestRequestQuestFeedback:
         seed_quest(fake_firestore, "quest-1", orgId="org-1", orgName="Trail Org")
         seed_attendance(fake_firestore, "quest-1", "user-1")
         seed_journal_entry(fake_firestore, "user-1", "quest-1")
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
 
         result = call(main.request_quest_feedback, make_request(
             data={"questId": "quest-1"}, uid="user-1", role="user",
@@ -52,10 +53,28 @@ class TestRequestQuestFeedback:
         assert request["status"] == "pending"
         assert request["uid"] == "user-1"
         assert request["orgId"] == "org-1"
+        # Denormalized (Admin SDK bypasses firestore.rules) since the org
+        # reviewing this request can't read users/{uid} directly — that
+        # collection only lets a user read their own doc (or an admin).
+        assert request["requesterName"] == "Alex"
 
         entry = get_journal_entry(fake_firestore, "user-1", "quest-1")
         assert entry["requestStatus"] == "pending"
         assert entry["expiresAt"] == request["expiresAt"]
+
+    def test_creates_a_pending_request_with_no_name_if_the_user_doc_is_missing(
+        self, fake_firestore, make_request, call,
+    ):
+        seed_quest(fake_firestore, "quest-1", orgId="org-1", orgName="Trail Org")
+        seed_attendance(fake_firestore, "quest-1", "user-1")
+        seed_journal_entry(fake_firestore, "user-1", "quest-1")
+
+        call(main.request_quest_feedback, make_request(
+            data={"questId": "quest-1"}, uid="user-1", role="user",
+        ))
+
+        request = get_request(fake_firestore, "quest-1", "user-1")
+        assert request["requesterName"] is None
 
     def test_rejects_a_second_request_for_the_same_occurrence(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", orgId="org-1")

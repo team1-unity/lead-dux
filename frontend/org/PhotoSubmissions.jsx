@@ -1,22 +1,17 @@
-import { useAuth } from '@shared/AuthContext.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
-import { TopBar } from '@shared/TopBar.jsx';
-import { PendingPhotoSubmissions } from '@shared/PendingPhotoSubmissions.jsx';
+import { PendingPhotoReview } from './PendingPhotoReview.jsx';
 
 // Full-page version of the review queue that used to sit inlined at the top
-// of Dashboard.jsx — see PendingPhotoSubmissions.jsx for the actual
-// grouped-by-quest UI, this is just the page shell.
+// of Dashboard.jsx. This is now its own bento-grid/swipe-to-review
+// component (PendingPhotoReview.jsx) rather than the shared
+// PendingPhotoSubmissions.jsx — that one's still used as-is by the admin
+// dashboard's side-quest review, deliberately left untouched; this page
+// forked instead of parameterizing a second visual mode into the shared
+// component.
 export function PhotoSubmissions() {
-  const { user } = useAuth();
-
   return (
     <PageMotion>
-      {/* <TopBar title="Photo Submissions" /> */}
-      <PendingPhotoSubmissions
-        scopeField='orgId'
-        scopeValue={user.uid}
-        title='Pending photo submissions'
-      />
+      <PendingPhotoReview />
     </PageMotion>
   );
 }
