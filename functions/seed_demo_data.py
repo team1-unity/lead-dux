@@ -1117,6 +1117,32 @@ def seed_org_quest_photo_submissions(completed_quests, org_uids, admin_uid):
             ref.set({**base, "status": "rejected", "pointsAwarded": 0, "rejectionReason": "Photo doesn't clearly show participation at the event — could you resubmit with the event visible in frame?", "reviewedAt": firestore.SERVER_TIMESTAMP, "reviewedBy": cq["org_uid"]})
         print(f"  Org-quest bonus photo: {cq['title']} — {user_name}: {state}")
 
+    # A few more pending photos specifically for Jersey City Community
+    # Kitchen — the org most manual test/demo sessions log into — so
+    # PendingPhotoReview's bento grid + swipe stack has real volume to
+    # exercise instead of a single-tile queue. Drawn from each of that
+    # org's own completed quests' real attendees (skipping attendees[0],
+    # already used by the single "pending" pick above if that quest is
+    # completed_quests[0]).
+    jc_org_uid = org_uids.get("jc-community-kitchen")
+    jc_quests = [cq for cq in completed_quests if cq["org_uid"] == jc_org_uid]
+    extra_picks = [(cq, uid) for cq in jc_quests for uid in cq["attendees"][1:3]]
+    for i, (cq, uid) in enumerate(extra_picks):
+        user_snap = db.collection("users").document(uid).get()
+        user_name = user_snap.to_dict().get("name") if user_snap.exists else None
+        ref = main._photo_submission_ref(db, cq["quest_id"], uid)
+        photo_url_value = photo_url(f"org-bonus-extra-{cq['quest_id']}-{i}", 1)
+        ref.set({
+            "questId": cq["quest_id"], "userId": uid, "orgId": cq["org_uid"], "isDefault": False,
+            "questTitle": cq["title"], "userName": user_name,
+            "storagePath": photo_url_value, "contentType": "image/jpeg",
+            "reflection": None, "createdAt": cq["event_date"] + timedelta(hours=2 + i),
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "status": "pending", "pointsAwarded": 0, "rejectionReason": None,
+            "reviewedAt": None, "reviewedBy": None,
+        })
+    print(f"  Extra JC Community Kitchen pending photos: {len(extra_picks)}")
+
 
 def _ensure_attended(cq, uid):
     """Guarantees (quest, uid) really has an attendance doc + journal entry
@@ -1167,19 +1193,32 @@ def seed_feedback_and_journal(completed_quests, user_uids):
             "reflectionBody": text, "reflectionUpdatedAt": firestore.SERVER_TIMESTAMP,
         }, merge=True)
 
-    # One pending feedback request (leader asked, org hasn't answered yet).
-    pending_uid = name_to_uid["Grace Nguyen"]
-    _ensure_attended(cq_a, pending_uid)
-    expires_at = NOW + timedelta(days=main.FEEDBACK_REQUEST_WINDOW_DAYS)
-    main._feedback_request_ref(db, cq_a["quest_id"], pending_uid).set({
-        "questId": cq_a["quest_id"], "uid": pending_uid, "orgId": cq_a["org_uid"], "orgName": cq_a["org_name"],
-        "questTitle": cq_a["title"], "eventDate": cq_a["event_date"], "requestedAt": firestore.SERVER_TIMESTAMP,
-        "expiresAt": expires_at, "status": "pending", "answers": None, "extraThoughts": None,
-        "score": None, "pointsAwarded": 0, "completedAt": None,
-    })
-    main._journal_ref(db, pending_uid, cq_a["quest_id"]).set({
-        "requestStatus": "pending", "requestedAt": firestore.SERVER_TIMESTAMP, "expiresAt": expires_at,
-    }, merge=True)
+    # Pending feedback requests (leader asked, org hasn't answered yet) —
+    # Grace Nguyen plus two more, so PendingFeedbackList has more than a
+    # single row to expand/step through. requesterName is denormalized here
+    # by hand (see request_quest_feedback in main.py, which does the same
+    # via the Admin SDK) since this script writes the doc directly rather
+    # than calling that callable.
+    pending_feedback = [
+        ("Grace Nguyen", cq_a),
+        ("Amara Okafor", cq_b),
+        ("Camila Torres", cq_a),
+    ]
+    for name, cq in pending_feedback:
+        uid = name_to_uid[name]
+        _ensure_attended(cq, uid)
+        expires_at = NOW + timedelta(days=main.FEEDBACK_REQUEST_WINDOW_DAYS)
+        main._feedback_request_ref(db, cq["quest_id"], uid).set({
+            "questId": cq["quest_id"], "uid": uid, "requesterName": name,
+            "orgId": cq["org_uid"], "orgName": cq["org_name"],
+            "questTitle": cq["title"], "eventDate": cq["event_date"], "requestedAt": firestore.SERVER_TIMESTAMP,
+            "expiresAt": expires_at, "status": "pending", "answers": None, "extraThoughts": None,
+            "score": None, "pointsAwarded": 0, "completedAt": None,
+        })
+        main._journal_ref(db, uid, cq["quest_id"]).set({
+            "requestStatus": "pending", "requestedAt": firestore.SERVER_TIMESTAMP, "expiresAt": expires_at,
+        }, merge=True)
+    print(f"  Pending feedback requests: {', '.join(name for name, _ in pending_feedback)}")
 
     # Two completed feedback requests — Marcus Bell earned the bonus
     # (matches FEEDBACK_BONUS_RECIPIENTS' point bump in seed_users above),
@@ -1194,7 +1233,8 @@ def seed_feedback_and_journal(completed_quests, user_uids):
         score = round(sum(answers.values()) / len(answers), 1)
         points = main.FEEDBACK_BONUS_POINTS if earns_bonus else 0
         main._feedback_request_ref(db, cq["quest_id"], uid).set({
-            "questId": cq["quest_id"], "uid": uid, "orgId": cq["org_uid"], "orgName": cq["org_name"],
+            "questId": cq["quest_id"], "uid": uid, "requesterName": name,
+            "orgId": cq["org_uid"], "orgName": cq["org_name"],
             "questTitle": cq["title"], "eventDate": cq["event_date"], "requestedAt": NOW - timedelta(days=4),
             "expiresAt": NOW + timedelta(days=10), "status": "completed", "answers": answers,
             "extraThoughts": extra_thoughts, "score": score, "pointsAwarded": points,
@@ -1205,7 +1245,7 @@ def seed_feedback_and_journal(completed_quests, user_uids):
             "score": score, "pointsAwarded": points, "completedAt": NOW - timedelta(days=2),
             "notified": False, "read": False,
         }, merge=True)
-    print("  Feedback requests: 1 pending (Grace Nguyen), 2 completed (Marcus Bell earned the bonus, Omar Haddad did not)")
+    print("  Completed feedback requests: Marcus Bell earned the bonus, Omar Haddad did not")
 
 
 def seed_notifications(user_uids):

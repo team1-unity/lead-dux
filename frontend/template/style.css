@@ -2428,6 +2428,473 @@ a.org-home-stat-tile:hover {
   background: var(--paper-well);
   display: block;
 }
+
+/* ---------- PendingPhotoReview.jsx — org's own bento-grid + swipe-to-
+   review moderation screen (frontend/org/PhotoSubmissions.jsx). Separate
+   from .submission-grid above, which frontend/template/
+   PendingPhotoSubmissions.jsx (the admin dashboard's side-quest review)
+   still uses unchanged. ---------- */
+.pending-photo-grid {
+  display: grid;
+  /* 260px keeps this at 3 columns max even at the widest desktop content
+     area (#root's 1180px cap) — 150px was fitting 5-6 tiles per row there,
+     too small to make anything out. */
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-auto-rows: 180px;
+  gap: 12px;
+}
+.pending-photo-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: 0;
+  border: none;
+  cursor: pointer;
+}
+.pending-photo-tile--wide {
+  grid-column: span 2;
+}
+.pending-photo-tile--tall {
+  grid-row: span 2;
+}
+.pending-photo-tile--big {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+.pending-photo-tile-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--paper-well);
+}
+.pending-photo-tile-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
+  text-align: left;
+  pointer-events: none;
+}
+.pending-photo-tile-title {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pending-photo-tile-desc {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-review-backdrop {
+  background: rgba(0, 0, 0, 0.75);
+}
+.pending-review-modal {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 20px;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 30px var(--shadow);
+  scrollbar-width: none;
+}
+.pending-review-stack {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+}
+.pending-review-card {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  cursor: grab;
+  background: var(--paper-well);
+}
+.pending-review-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.pending-review-card-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: box-shadow 0.15s ease-out;
+}
+.pending-review-card-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 16px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
+  pointer-events: none;
+}
+.pending-review-card-title {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.pending-review-card-desc {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.85rem;
+}
+
+.pending-review-instructions {
+  margin: 0;
+  text-align: center;
+  color: var(--line-soft);
+  font-size: 0.85rem;
+}
+
+.pending-review-actions {
+  display: flex;
+  gap: 28px;
+}
+.pending-review-action {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-card);
+  border: 1.5px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.pending-review-action-reject {
+  color: var(--danger);
+}
+.pending-review-action-approve {
+  color: var(--accent);
+}
+
+/* Same fully-borderless treatment as .feedback-final-textarea (see
+   FeedbackRequestPanel.jsx) — no box/outline/shadow at any state. */
+.pending-reject-textarea,
+.pending-reject-textarea:hover,
+.pending-reject-textarea:focus-visible {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: none;
+  resize: none;
+  padding: 0;
+}
+
+.pending-review-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 20px;
+  color: var(--line-soft);
+  font-weight: 600;
+}
+
+/* See ReviewDock's own comment (PendingPhotoReview.jsx) for why centering
+   lives on this static wrapper instead of the draggable dock itself. */
+.pending-review-dock-wrap {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.pending-review-dock {
+  position: relative;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  border-radius: var(--radius-lg);
+  background: rgba(20, 18, 12, 0.55);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.pending-review-dock:active {
+  cursor: grabbing;
+}
+.pending-review-dock-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  /* Capped and internally scrollable — with enough pending photos the
+     thumbnail row was wider than the viewport, and since .pending-review-
+     dock is `position: fixed`, that overflow bled out as the *document's*
+     own horizontal scrollbar rather than staying contained in the dock.
+     Scoping the scroll (and hiding its scrollbar) to this inner row keeps
+     every thumbnail reachable without the page itself gaining a scrollbar.
+     Lives on the inner row, not the draggable .pending-review-dock panel
+     itself, so a native horizontal scroll gesture here doesn't compete
+     with framer-motion's own whole-panel drag on that outer element. */
+  max-width: calc(100vw - 64px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.pending-review-dock-inner::-webkit-scrollbar {
+  display: none;
+}
+.pending-review-dock-thumb {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  background: none;
+  box-shadow: none;
+}
+.pending-review-dock-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pending-review-dock-thumb[data-active='true'] {
+  box-shadow: 0 0 0 2px #fff;
+}
+.pending-review-dock-glow {
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  background: rgba(255, 255, 255, 0.25);
+  filter: blur(10px);
+}
+
+/* ---------- PendingFeedbackList.jsx / FeedbackRequestPanel.jsx — org's
+   list + inline step-through rating flow for pending feedback requests
+   ---------- */
+.feedback-row {
+  border-bottom: 1.5px solid var(--border);
+}
+.feedback-row:last-child {
+  border-bottom: none;
+}
+.feedback-row-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  text-align: left;
+}
+.feedback-row-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.feedback-row-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+.feedback-row-name {
+  font-size: 0.85rem;
+  color: var(--line-soft);
+}
+.feedback-row-chevron {
+  flex: none;
+  display: flex;
+  color: var(--line-soft);
+}
+.feedback-row-panel-wrap {
+  overflow: hidden;
+}
+.feedback-panel {
+  min-height: 40vh;
+  padding: 4px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Viewport window onto the question column below — overflow:hidden clips
+   everything outside it, and the mask fades the top edge so a
+   just-answered question (scrolled up out of the active slot) stays
+   faintly visible rather than hard-cutting off. Adapted from the
+   TextMarquee reference's two-sided fade mask; only the top edge fades
+   here since there's no continuously-looping content below the active
+   row to fade on the bottom edge. */
+.feedback-question-viewport {
+  position: relative;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgb(0, 0, 0) 42%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgb(0, 0, 0) 42%);
+}
+.feedback-question-column {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+.feedback-question-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 2px;
+}
+.feedback-question-text {
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+  color: var(--line-soft);
+}
+.feedback-question-text.is-active {
+  color: var(--line);
+}
+.feedback-rating-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 460px;
+  width: 100%;
+  margin: 0 auto;
+}
+.feedback-rating-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--paper-card);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.feedback-rating-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.feedback-rating-btn.is-checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.feedback-rating-btn:disabled {
+  cursor: default;
+}
+/* Navigation for revisiting an already-answered question (goBack/goNext in
+   FeedbackRequestPanel.jsx) — Back is always here; Next is swapped out for
+   Submit feedback once the final (Extra thoughts) slide is reached, so
+   submitting sits centered right alongside Back rather than off on its
+   own. */
+.feedback-nav-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+.feedback-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--line-soft);
+  cursor: pointer;
+}
+.feedback-nav-btn:hover:not(:disabled) {
+  color: var(--accent);
+  /* Overrides the generic button:hover:not(:disabled) rule (style.css,
+     "button, .stamp-btn"), which would otherwise put a shadow/border/lift
+     back onto this plain-text button on hover even though it's flush at
+     rest. */
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.feedback-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.feedback-nav-icon--up {
+  transform: rotate(180deg);
+}
+/* Sized to match .feedback-nav-btn's height so Submit feedback sits at the
+   same height as Back next to it, instead of towering over it at the
+   default .stamp-btn padding. */
+.feedback-submit-btn {
+  padding: 4px 16px;
+  font-size: 0.82rem;
+}
+/* The 6th slide (Extra thoughts) — Submit feedback now lives in
+   .feedback-nav-row below instead of inside this row, so it's just the
+   textarea, still sharing the same fixed row height as the rating
+   questions above it. */
+.feedback-final-row {
+  gap: 14px;
+}
+/* Fully borderless, like CreateQuestForm.jsx's .quest-form-description-input
+   — placeholder stands in for a visible label (the real label is
+   visually-hidden, kept for screen readers), no box/outline/shadow at any
+   state, blending into the card instead of reading as a bordered field.
+   A fixed height (rather than the app-wide textarea min-height, which is
+   only a floor) plus its own scrollbar keeps a long answer from growing
+   the box past what the row/viewport above has room for. */
+.feedback-final-textarea {
+  max-width: 460px;
+  width: 100%;
+  height: 64px;
+  margin: 0 auto;
+  overflow-y: auto;
+}
+.feedback-final-textarea,
+.feedback-final-textarea:hover,
+.feedback-final-textarea:focus-visible {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: none;
+  resize: none;
+  padding: 0;
+}
+
 .data-sublist {
   list-style: none;
   margin: 4px 0 0;
@@ -2515,7 +2982,8 @@ a.org-home-stat-tile:hover {
    it within the card instead. */
 .qr-modal-content > .photo-lightbox-close,
 .detail-modal-content > .photo-lightbox-close,
-.events-map-detail-slot > .photo-lightbox-close {
+.events-map-detail-slot > .photo-lightbox-close,
+.pending-review-modal > .photo-lightbox-close {
   top: 10px;
   right: 10px;
 }
