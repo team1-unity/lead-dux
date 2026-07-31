@@ -3236,12 +3236,16 @@ def _validate_social_links(value):
 # collection.
 _SIMPLE_PROFILE_FIELDS = (
     "logoUrl", "category", "missionStatement", "city", "state", "website", "contactEmail",
-    # `reason`/`phone` start out copied from the org's original ORGREQ at
-    # approval time (see approve_organization_request) — they used to be
-    # write-once-at-registration, but the org's own profile edit form treats
-    # `reason` as its public-facing "Description" and shows `phone` as an
-    # editable contact number, so both need to stay editable afterward too.
-    "reason", "phone",
+    # `phone` starts out copied from the org's original ORGREQ at approval
+    # time (see approve_organization_request), but the org's profile edit
+    # form shows it as an editable contact number, so it stays editable
+    # afterward too. `reason` (also copied from that same ORGREQ) is
+    # deliberately NOT here — it's the org's answer to "what do you hope to
+    # get out of this?" from registration, meant only for an admin
+    # reviewing that request (see approve_organization_request), not
+    # something the org edits or that renders on their public profile (see
+    # OrganizationProfile.jsx/MapQuestDetailBody.jsx's own note on this).
+    "phone",
 )
 
 @https_fn.on_call()

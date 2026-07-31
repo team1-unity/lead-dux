@@ -211,7 +211,6 @@ function AboutTab({ org }) {
   return (
     <div>
       {org.missionStatement && <p style={{ margin: '0 0 10px' }}>{org.missionStatement}</p>}
-      {org.reason && <p style={{ margin: '0 0 10px' }}>{org.reason}</p>}
       {(org.city || org.state) && (
         <p className="data-stat">
           <IconPin /> {[org.city, org.state].filter(Boolean).join(', ')}

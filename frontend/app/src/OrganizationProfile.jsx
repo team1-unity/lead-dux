@@ -67,20 +67,25 @@ const SOCIAL_LINK_FIELDS = [
 const OPTIONAL_FIELD_ITEMS = [{ key: 'logoUrl', label: 'Logo URL' }, ...SOCIAL_LINK_FIELDS];
 
 // One combined edit form for everything in the About section that has a
-// writer — description (org.reason — the org's own public-facing blurb,
-// distinct from the mission statement), phone, mission statement, category,
-// logo, city/state, website, contact email, social links
-// (callUpdateOrganizationProfile), and location/activity tags
-// (callUpdateOrganizationTags, a separate call since it's a separate
-// backend function, but presented as one save here to match the
-// wireframe's single pencil icon on one About box).
+// writer — phone, mission statement, category, logo, city/state, website,
+// contact email, social links (callUpdateOrganizationProfile), and
+// location/activity tags (callUpdateOrganizationTags, a separate call
+// since it's a separate backend function, but presented as one save here
+// to match the wireframe's single pencil icon on one About box).
+//
+// org.reason is deliberately NOT one of these fields — it's the org's
+// answer to "what do you hope to get out of this?" from their original
+// registration request (see Register.jsx), copied over at approval time
+// purely so an admin can see it when reviewing that request. It was
+// briefly reused as a public-facing "Description" here, but that mixed up
+// an internal approval detail with the org's own public bio — reverted to
+// admin-only; see functions/main.py's _SIMPLE_PROFILE_FIELDS.
 function AboutEditForm({ org, onSaved, onCancel }) {
   const reduce = useReducedMotion();
   const [fields, setFields] = useState({
     logoUrl: org.logoUrl || '',
     category: org.category || '',
     missionStatement: org.missionStatement || '',
-    reason: org.reason || '',
     phone: org.phone || '',
     city: org.city || '',
     state: org.state || '',
@@ -143,17 +148,6 @@ function AboutEditForm({ org, onSaved, onCancel }) {
           field (see CreateQuestForm.jsx/style.css) — a textarea and an
           invisible ::after sharing one grid cell, kept in sync via
           data-replicated-value, rather than JS scrollHeight measuring. */}
-      <label className="visually-hidden" htmlFor="org-reason">Description</label>
-      <div className="quest-form-description-wrap" data-replicated-value={fields.reason}>
-        <textarea
-          id="org-reason"
-          className="quest-form-description-input"
-          placeholder="Tell visitors about your organization."
-          value={fields.reason}
-          onChange={(e) => setFields((f) => ({ ...f, reason: e.target.value }))}
-        />
-      </div>
-
       <label className="visually-hidden" htmlFor="org-mission">Mission statement</label>
       <div className="quest-form-description-wrap" data-replicated-value={fields.missionStatement}>
         <textarea
@@ -585,7 +579,6 @@ export function OrganizationProfile() {
           ) : (
             <>
               {org.missionStatement && <p style={{ margin: '10px 0 0' }}>{org.missionStatement}</p>}
-              {org.reason && <p style={{ margin: '10px 0 0' }}>{org.reason}</p>}
               {(org.city || org.state) && (
                 <p className="data-stat" style={{ marginTop: 10 }}>
                   <IconPin /> {[org.city, org.state].filter(Boolean).join(', ')}
