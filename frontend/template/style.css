@@ -4123,10 +4123,10 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-well);
   position: relative;
 }
-/* Shown only if loadMapsLibrary/loadMarkerLibrary actually rejects (see
-   EventsMap.jsx's mapError state) — Google Maps never got a chance to
-   render its own error UI onto this container in that case, since it's
-   never constructed at all. */
+/* Shown only if the MapLibre map's own 'error' event fires (see
+   EventsMap.jsx's mapError state) — a bad/missing MapTiler key or a
+   blocked tile request, with no built-in on-map error UI of its own to
+   fall back to the way Google Maps had. */
 .events-map-error {
   position: absolute;
   inset: 0;

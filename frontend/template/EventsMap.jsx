@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
+import { Map as MapLibreMap, Marker } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
 import { useAuth } from './AuthContext.jsx';
 import { groupBySeries, attachSeriesRatings, attachOrgLogos, isUpcoming, toDate } from './questSeries.js';
-import { loadMapsLibrary, loadMarkerLibrary } from './googleMaps.js';
-import { MAP_STYLE, questPinIcon } from './mapStyle.js';
+import { MAP_STYLE_URL, createQuestPinElement, createUserPositionElement, paintQuestPin } from './mapStyle.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
@@ -36,6 +37,16 @@ const EARTH_RADIUS_KM = 6371;
 // listener registered by an earlier effect run (see the markers effect
 // below). See App.jsx's AppRoutes for how this state is actually consumed.
 const MAP_BACKGROUND_LOCATION = { pathname: '/map', search: '', hash: '', state: null, key: 'map-bg' };
+
+// Read imperatively at click time (not derived from any prop/state) — this
+// component matches routes against the fixed MAP_BACKGROUND_LOCATION above,
+// not the real browser location, so it never re-renders when the actual
+// /map/:seriesId URL changes underneath the still-mounted overlay. The real
+// window.location is the only place "is a detail already open" is visible
+// from here.
+function isMapDetailOpen() {
+  return /^\/map\/[^/]+\/?$/.test(window.location.pathname);
+}
 
 function haversineKm(a, b) {
   const toRad = (deg) => (deg * Math.PI) / 180;
@@ -198,6 +209,7 @@ function MobileSheet({ expanded, onExpandedChange, children }) {
 export function EventsMap() {
   const { user, loading } = useAuth();
   const isDesktop = useIsDesktop();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const hasFocusedFromParamRef = useRef(false);
   const [seriesList, setSeriesList] = useState(null);
@@ -216,7 +228,6 @@ export function EventsMap() {
 
   const mapContainerRef = useRef(null);
   const mapObjRef = useRef(null);
-  const markerCtorRef = useRef(null);
   const markersRef = useRef(new Map());
   const userMarkerRef = useRef(null);
   const hasCenteredOnUserRef = useRef(false);
@@ -315,40 +326,49 @@ export function EventsMap() {
 
   // Create the map exactly once, as soon as the container div exists — not
   // gated on quests/location being ready yet, so the map itself appears
-  // immediately and markers just populate a moment later.
+  // immediately and markers just populate a moment later. Unlike the old
+  // Google loader (an async script-injection dance), maplibre-gl is a
+  // regular import — the constructor runs synchronously, so there's no
+  // "wait for the library to load" step; we still wait for the map's own
+  // 'load' event (its style/tiles finishing their first fetch) before
+  // flipping mapReady, so markers aren't added before there's a map to
+  // add them to.
+  //
+  // Depends on `loading`, not []: this component returns <LoadingSpinner/>
+  // (no .events-map-container in the tree at all) for as long as useAuth()
+  // is still resolving, and a []-deps effect only ever gets ONE chance to
+  // run, tied to the very first commit — if that first commit happens to
+  // be the loading-spinner render (a real race on a fresh login → navigate
+  // flow, not just theoretical), mapContainerRef.current is null forever
+  // after and the map silently never gets created. Re-running once loading
+  // flips to false catches the container that actually exists by then;
+  // the mapObjRef.current guard above still prevents creating it twice.
   useEffect(() => {
-    if (!mapContainerRef.current || mapObjRef.current) return;
-    let cancelled = false;
-    Promise.all([loadMapsLibrary(), loadMarkerLibrary()])
-      .then(([{ Map }, { Marker }]) => {
-        if (cancelled || !mapContainerRef.current) return;
-        // The classic Marker, not AdvancedMarkerElement — the latter silently
-        // refuses to render at all without a Map ID (a specific resource
-        // created in the Cloud Console's Map Management page, not an
-        // arbitrary string), confirmed via the runtime's own console warning.
-        // Marker needs no such setup and is still fully supported.
-        markerCtorRef.current = Marker;
-        mapObjRef.current = new Map(mapContainerRef.current, {
-          center: FALLBACK_CENTER,
-          zoom: 4,
-          styles: MAP_STYLE,
-          disableDefaultUI: true,
-          zoomControl: true,
-        });
-        setMapReady(true);
-      })
-      .catch((err) => {
-        // Without this, a rejected loadMapsLibrary/loadMarkerLibrary (bad or
-        // missing API key, quota, a blocked script) left mapReady false
-        // forever with zero indication why — just this app's own plain
-        // --paper-well background sitting there silently, since Google's own
-        // usual on-map error overlay never has a map to attach to yet.
-        if (!cancelled) setMapError(err.message || 'Could not load the map.');
-      });
+    if (!mapContainerRef.current || mapObjRef.current) return undefined;
+    const map = new MapLibreMap({
+      container: mapContainerRef.current,
+      style: MAP_STYLE_URL,
+      center: [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
+      zoom: 4,
+    });
+    // No NavigationControl (MapLibre's zoom +/- buttons) — pinch/scroll/
+    // double-click zoom still all work, this just removes the on-screen
+    // button pair. MapLibre has no "default UI" to disable the way Google
+    // Maps did (disableDefaultUI:true); every control is opt-in, so this is
+    // simply not opting in, not disabling anything.
+    mapObjRef.current = map;
+    map.on('load', () => setMapReady(true));
+    map.on('error', (e) => {
+      // Without this, a bad/missing MapTiler key or a blocked tile request
+      // left mapReady false forever with zero indication why — just this
+      // app's own plain --paper-well background sitting there silently.
+      setMapError(e.error?.message || 'Could not load the map.');
+    });
     return () => {
-      cancelled = true;
+      map.remove();
+      mapObjRef.current = null;
     };
-  }, []);
+  }, [loading]);
 
   function focusSeries(seriesId) {
     setSelectedSeriesId(seriesId);
@@ -358,8 +378,19 @@ export function EventsMap() {
     setSheetExpanded(true);
     const g = visibleSeries.find((s) => s.seriesId === seriesId);
     if (g && mapObjRef.current) {
-      mapObjRef.current.panTo({ lat: g.primary.lat, lng: g.primary.lng });
-      mapObjRef.current.setZoom(14);
+      // MapLibre (like most non-Google map libraries) takes coordinates as
+      // [lng, lat] — the opposite order from Google's {lat, lng} object.
+      // Easy to get backwards; every coordinate pair below is deliberately
+      // written as [lng, lat] for that reason.
+      //
+      // One combined easeTo({center, zoom}), not separate panTo()+setZoom()
+      // calls — panTo() is an *animated* transition, and calling setZoom()
+      // on the very next line interrupts/cancels that in-flight animation
+      // before it ever reaches the new center (setZoom itself is instant,
+      // so it wins the race — zoom changes, but the pan silently never
+      // completes). easeTo animates both center and zoom together as one
+      // transition, so there's nothing to interrupt it.
+      mapObjRef.current.easeTo({ center: [g.primary.lng, g.primary.lat], zoom: 14 });
     }
   }
 
@@ -370,38 +401,76 @@ export function EventsMap() {
   // focusSeries, navigation happens right alongside it.
   useEffect(() => {
     if (!mapReady) return;
+    // marker.remove() — MapLibre's teardown method, in place of Google's
+    // marker.setMap(null).
     markersRef.current.forEach((marker) => {
-      marker.setMap(null);
+      marker.remove();
     });
     markersRef.current = new Map();
 
     visibleSeries.forEach((g) => {
-      const marker = new markerCtorRef.current({
-        map: mapObjRef.current,
-        position: { lat: g.primary.lat, lng: g.primary.lng },
-        title: g.primary.title,
-        icon: questPinIcon(g.primary.orgId || g.seriesId),
+      const el = createQuestPinElement(g.primary.orgId || g.seriesId);
+      // A plain HTML title attribute stands in for Google Marker's own
+      // `title` (a native hover tooltip) — MapLibre's Marker has no
+      // built-in equivalent option, but the underlying DOM element is ours
+      // to set attributes on directly.
+      el.title = g.primary.title;
+      // Same destination a list row's own <Link> navigates to (see the
+      // Link below) — clicking a pin now opens that quest's detail overlay
+      // directly, not just pan+select. Clicking a second, different marker
+      // while one detail is already open *replaces* that history entry
+      // instead of pushing a new one on top — otherwise each marker→marker
+      // click stacks another entry, and the overlay's own close button
+      // (a single navigate(-1)) would have to unwind that whole stack one
+      // quest at a time instead of going straight back to the list.
+      el.addEventListener('click', () => {
+        focusSeries(g.seriesId);
+        navigate(`/map/${g.seriesId}`, {
+          state: { backgroundLocation: MAP_BACKGROUND_LOCATION },
+          replace: isMapDetailOpen(),
+        });
       });
-      marker.addListener('click', () => focusSeries(g.seriesId));
+      // anchor: 'bottom' — the pin's pointed tip (not its visual center)
+      // lands exactly on the coordinate, matching the old Google icon's
+      // own bottom-center anchor point.
+      const marker = new Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([g.primary.lng, g.primary.lat])
+        .addTo(mapObjRef.current);
       markersRef.current.set(g.seriesId, marker);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, visibleSeries]);
 
   // Whichever pin/row is currently selected gets a visibly bigger icon (see
-  // questPinIcon's own `selected` param), and its list row scrolls into
+  // paintQuestPin's own `selected` param), and its list row scrolls into
   // view — covers "clicking a pin highlights + scrolls to the matching
   // card," the other direction (a row's own click) is already in view by
   // construction. Runs after the marker-rebuild effect above on the same
   // render, so it's always reapplying against the freshly built markers,
   // never a stale set.
+  //
+  // MapLibre's Marker has no marker.setIcon() the way Google's did — a
+  // Marker keeps one DOM element for its whole life, so "selected" is a
+  // style repaint on that same element (marker.getElement()) rather than
+  // swapping in a new icon.
   useEffect(() => {
     markersRef.current.forEach((marker, seriesId) => {
       const g = visibleSeries.find((v) => v.seriesId === seriesId);
       if (!g) return;
-      marker.setIcon(questPinIcon(g.primary.orgId || g.seriesId, seriesId === selectedSeriesId));
+      paintQuestPin(marker.getElement(), g.primary.orgId || g.seriesId, seriesId === selectedSeriesId);
     });
-    if (selectedSeriesId) {
+    // Skipped while a quest's detail overlay is open (isMapDetailOpen) —
+    // the list row being scrolled to is completely covered by
+    // MapQuestOverlay's portal at that point, so this had no visible
+    // purpose, but scrollIntoView() still programmatically moved the
+    // pane's real scrollTop regardless of its `overflow: hidden` (that
+    // CSS only blocks *user*-driven scroll, not a script setting
+    // scrollTop/calling scrollIntoView directly). Since the detail slot
+    // is `position: absolute; inset: 0` *inside* that same pane, every
+    // one of those scrolls dragged the open detail card up and out of
+    // view along with it — worse with each successive marker click, since
+    // scrollTop kept climbing to whichever row was clicked next.
+    if (selectedSeriesId && !isMapDetailOpen()) {
       rowRefs.current.get(selectedSeriesId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedSeriesId, visibleSeries]);
@@ -412,27 +481,22 @@ export function EventsMap() {
   // to watchPosition) wouldn't keep yanking the view back.
   useEffect(() => {
     if (!mapReady || !userPos) return;
-    if (userMarkerRef.current) userMarkerRef.current.setMap(null);
-    userMarkerRef.current = new markerCtorRef.current({
-      map: mapObjRef.current,
-      position: userPos,
-      zIndex: 999,
-      title: 'You are here',
-      // A plain filled circle icon rather than a quest-pin-shaped default
-      // marker — "you" should read as visually distinct from "a quest is
-      // here" at a glance. window.google is guaranteed loaded by this
-      // point (this effect only runs once mapReady is true).
-      icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: '#4285F4',
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 3,
-      },
-    });
+    if (userMarkerRef.current) userMarkerRef.current.remove();
+    // A plain filled circle element rather than a quest-pin-shaped
+    // marker — "you" should read as visually distinct from "a quest is
+    // here" at a glance.
+    const el = createUserPositionElement();
+    el.title = 'You are here';
+    // No zIndex option on MapLibre's Marker (unlike Google's) — a marker
+    // element is just an absolutely-positioned DOM node, so a plain CSS
+    // z-index on it works the same way and keeps this one on top of quest
+    // pins even after the marker-rebuild effect above re-runs later.
+    el.style.zIndex = '999';
+    userMarkerRef.current = new Marker({ element: el })
+      .setLngLat([userPos.lng, userPos.lat])
+      .addTo(mapObjRef.current);
     if (!hasCenteredOnUserRef.current) {
-      mapObjRef.current.setCenter(userPos);
+      mapObjRef.current.setCenter([userPos.lng, userPos.lat]);
       mapObjRef.current.setZoom(12);
       hasCenteredOnUserRef.current = true;
     }
@@ -441,19 +505,35 @@ export function EventsMap() {
   // Absent a live position, center on the nearest thing to "somewhere
   // useful" once quests actually load — the first upcoming quest with
   // coordinates beats the continental-US default.
+  //
+  // Bug fixed here (pre-existing, not introduced by the MapLibre
+  // migration — the old Google Maps version had the identical race):
+  // hasCenteredOnUserRef only ever got set from the *real geolocation*
+  // effect above, so without location permission granted, this effect
+  // could fire again on any later change to `withDistance` (e.g. a
+  // Firestore read settling a moment after mount) and silently override
+  // wherever the org had just manually panned to by clicking a pin/row —
+  // it looked like clicking a pin "did nothing" or centered on the wrong
+  // quest. Marking the ref here too means *any* one-time initial
+  // auto-center (real position or this fallback, whichever fires first)
+  // permanently disables both — only an explicit focusSeries() pan moves
+  // the view after that.
   useEffect(() => {
     if (!mapReady || hasCenteredOnUserRef.current || withDistance.length === 0) return;
-    mapObjRef.current.setCenter({ lat: withDistance[0].primary.lat, lng: withDistance[0].primary.lng });
+    mapObjRef.current.setCenter([withDistance[0].primary.lng, withDistance[0].primary.lat]);
     mapObjRef.current.setZoom(11);
+    hasCenteredOnUserRef.current = true;
   }, [mapReady, withDistance]);
 
   // The map/list swap from stacked to side-by-side (see .events-map-layout,
   // style.css) resizes the map's container without the window itself
-  // resizing — Google Maps doesn't notice that on its own and leaves tiles
-  // laid out for the old size until nudged.
+  // resizing — the map doesn't notice that on its own and leaves tiles
+  // laid out for the old size until nudged. MapLibre has this as a plain
+  // method directly on the map instance — no event-trigger workaround
+  // needed the way Google's API required.
   useEffect(() => {
     if (!mapReady) return;
-    window.google.maps.event.trigger(mapObjRef.current, 'resize');
+    mapObjRef.current.resize();
   }, [mapReady, isDesktop]);
 
   // Deep-linked from a quest's location row (e.g. org/Quests.jsx's detail
@@ -552,7 +632,20 @@ export function EventsMap() {
               to={`/map/${g.seriesId}`}
               state={{ backgroundLocation: MAP_BACKGROUND_LOCATION }}
               className="events-map-list-row-head"
-              onClick={() => focusSeries(g.seriesId)}
+              onClick={(e) => {
+                focusSeries(g.seriesId);
+                // Same replace-instead-of-push guard as the pin click above,
+                // for a plain click — a modifier/middle click (open in a new
+                // tab) is left to the browser's own default <Link> handling,
+                // since that's a fresh tab with its own history anyway.
+                if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+                  e.preventDefault();
+                  navigate(`/map/${g.seriesId}`, {
+                    state: { backgroundLocation: MAP_BACKGROUND_LOCATION },
+                    replace: isMapDetailOpen(),
+                  });
+                }
+              }}
             >
               <div className="quest-thumb">
                 <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} logoUrl={g.orgLogoUrl} />

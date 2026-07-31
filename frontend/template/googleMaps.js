@@ -40,21 +40,17 @@ function loadLibrary(name) {
   return libraryPromises[name];
 }
 
+// Map rendering (EventsMap.jsx/SinglePinMap.jsx) has migrated to
+// MapLibre GL + MapTiler (see mapStyle.js) — this file's loadMapsLibrary/
+// loadMarkerLibrary are gone. Places Autocomplete (PlaceAutocompleteInput.
+// jsx/PlaceCombobox.jsx) hasn't migrated yet, so this loader — and the
+// Google Maps API key it depends on — is still needed for that, until a
+// follow-up swaps those forms to Geoapify.
+//
 // Uses google.maps.places.PlaceAutocompleteElement (the current Places
 // Autocomplete widget), not the older google.maps.places.Autocomplete
 // class — that one hasn't been available to API keys created after March
 // 2025, so it was never actually an option here.
 export function loadPlacesLibrary() {
   return loadLibrary('places');
-}
-
-// The core map renderer (google.maps.Map) — see EventsMap.jsx.
-export function loadMapsLibrary() {
-  return loadLibrary('maps');
-}
-
-// google.maps.marker.AdvancedMarkerElement — see EventsMap.jsx. A separate
-// library from 'maps' itself in the current Maps JS API.
-export function loadMarkerLibrary() {
-  return loadLibrary('marker');
 }
