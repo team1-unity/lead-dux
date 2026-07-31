@@ -121,23 +121,23 @@
 }
 
 /* =========================================================================
-   LEAD-DUX visual identity — warm, flat, community-driven. Duck-on-water
-   brand mark; Crushed (display-only) / Cuprum (headings & labels) / DM Sans
-   (body & UI copy). Replaces the earlier rough.js "stamped ink" pass — see
+   LEAD-DUX visual identity — warm cream/butter-yellow palette, brown ink
+   text, Source Serif 4 headlines over Inter body/UI copy ("theme 9a").
+   Replaces the earlier green-accented Bricolage Grotesque/Mulish pass — see
    git history for that version. The .box/.box-primary/etc and .flex/.gap-*
-   utilities above predate both passes and are kept as-is.
+   utilities above predate every visual pass and are kept as-is.
    ========================================================================= */
 
 @font-face {
-  font-family: 'Bricolage Grotesque';
-  src: url('/fonts/bricolage-grotesque-v9-latin-variable.woff2') format('woff2');
-  font-weight: 600 800;
+  font-family: 'Source Serif 4';
+  src: url('/fonts/source-serif-4-v14-latin-variable.woff2') format('woff2');
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Mulish';
-  src: url('/fonts/mulish-v18-latin-variable.woff2') format('woff2');
+  font-family: 'Inter';
+  src: url('/fonts/inter-v20-latin-variable.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
@@ -178,234 +178,272 @@
 }
 
 :root {
-  /* brand hues — rarely used raw; almost everything below derives from these.
-     Matches the app-wireframe-alignment design handoff exactly (green/yellow/
-     blue + Bricolage Grotesque/Mulish), not the earlier sketchy-vibe pass. */
-  --brand-green: #2f8a4e;
-  --brand-green-deep: #2f7d45;
-  --brand-mustard: #f2c94c;
-  --brand-blue: #3457c4;
-  --brand-orange: #ee9b43;
+  /* brand hues — rarely used raw; almost everything below derives from
+     these. "Theme 9a": warm cream page, butter-yellow primary-action fill,
+     brown ink text — no green/blue/black in structural chrome, ever.
+     Names kept from the previous green-accented pass (avoids renaming
+     every one of their call sites below) but every value here is new. */
+  --brand-green: #f0e4a8;
+  --brand-green-deep: #f0e4a8;
+  --brand-mustard: #c99a2e;
+  --brand-blue: #3d6fa8;
+  --brand-orange: #d68f3a;
+
+  /* Theme-aware duck mark (DuckMark in Logo.jsx) — a brown-outline PNG
+     for light mode, a pale-yellow-outline one for dark mode (a plain
+     brown line is nearly invisible against a dark surface). Swapping the
+     url() itself via this token means DuckMark never needs to know which
+     theme is active — same mechanism as every other themed value in this
+     file, just holding a url() instead of a color. */
+  --duck-mark-url: url('/brand/duck-brown.png');
 
   /* surfaces */
-  --paper: #efe9df;
+  --paper: #faf6e8;
   --paper-card: #ffffff;
-  --paper-well: #f3eee3;
-  --line: #223018;
-  --line-soft: #6b6b63;
-  --border: rgba(0, 0, 0, 0.08);
-  --shadow: rgba(34, 48, 24, 0.1);
+  --paper-well: #f2ecdd;
+  --line: #57491f;
+  --line-soft: #6b5a2a;
+  --border: rgba(107, 90, 42, 0.12);
+  --shadow: rgba(87, 73, 31, 0.12);
 
-  /* pastel tag rack — one per quest interest tag, all rooted in the brand hues */
-  --tag-environment: #dcefdc;
-  --tag-environment-ink: #3f7a49;
-  --tag-community: #f2edc7;
-  --tag-community-ink: #8f7f1e;
-  --tag-youth: #d7e4f7;
-  --tag-youth-ink: #1e3a73;
-  --tag-education: #d6ecf7;
-  --tag-education-ink: #1b4e66;
-  --tag-outdoors: #f7e4cf;
-  --tag-outdoors-ink: #b06d26;
-  --tag-technology: #cfe9e6;
-  --tag-technology-ink: #15574f;
-  --tag-fitness: #f6d6d0;
-  --tag-fitness-ink: #7a2c22;
-  --tag-food-security: #e7e4b0;
-  --tag-food-security-ink: #52480a;
-  --tag-arts: #e3d6f0;
-  --tag-arts-ink: #48276e;
-  --tag-verified: #dcefdc;
-  --tag-verified-ink: #3f7a49;
-  --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c0402f;
+  /* pastel tag rack — one per quest interest tag. The 9 named here match
+     the handoff doc's own accent examples 1:1; the rest are extended in
+     the same recipe (low-chroma pastel fill matched to the cream base's
+     lightness + a darker matching ink) since the doc didn't cover every
+     tag this app actually has. */
+  --tag-environment: #d9e8c9;
+  --tag-environment-ink: #3e6b3e;
+  --tag-community: #ede6c7;
+  --tag-community-ink: #8a7a2e;
+  --tag-youth: #cdd6ee;
+  --tag-youth-ink: #2e4e8a;
+  --tag-education: #c9d9e8;
+  --tag-education-ink: #3d6fa8;
+  --tag-outdoors: #f3dcc9;
+  --tag-outdoors-ink: #a0602e;
+  --tag-technology: #cbe0e0;
+  --tag-technology-ink: #3c7a7a;
+  --tag-fitness: #efcfcf;
+  --tag-fitness-ink: #b0403a;
+  --tag-food-security: #ead0c9;
+  --tag-food-security-ink: #9a5340;
+  --tag-arts: #e3d6ee;
+  --tag-arts-ink: #6b4fa0;
+  --tag-verified: #d9e8c9;
+  --tag-verified-ink: #3e6b3e;
+  --tag-rejected: #f3dcd9;
+  --tag-rejected-ink: #b0403a;
 
-  /* rank ladder — one pair per side-quest tier / leadership rank name */
-  --rank-iron: #dfe3e6;
-  --rank-iron-ink: #454c52;
-  --rank-bronze: #ecd2b3;
-  --rank-bronze-ink: #6b3d10;
-  --rank-silver: #e6e9ec;
-  --rank-silver-ink: #454c52;
-  --rank-gold: #f7e8a8;
-  --rank-gold-ink: #6b4e05;
-  --rank-diamond: #d3ecf5;
-  --rank-diamond-ink: #144a63;
+  /* rank ladder — one pair per side-quest tier / leadership rank name.
+     Not covered by the handoff doc at all; extended in the same pastel
+     formula. Gold leans into the theme's own butter-yellow on purpose —
+     "gold rank" and the brand accent are a natural fit. */
+  --rank-iron: #e3e0d9;
+  --rank-iron-ink: #5c5a50;
+  --rank-bronze: #ead9be;
+  --rank-bronze-ink: #7a4b1e;
+  --rank-silver: #eaeae2;
+  --rank-silver-ink: #55544c;
+  --rank-gold: #f3e7b8;
+  --rank-gold-ink: #7a5c05;
+  --rank-diamond: #d9e9ec;
+  --rank-diamond-ink: #1f6b7a;
 
   /* semantic */
-  --accent: var(--brand-green-deep);
-  --accent-contrast: #ffffff;
-  --accent-soft: #d4e7d0;
-  --secondary: var(--brand-mustard);
-  --secondary-ink: #6b4e05;
-  --info: var(--brand-blue);
-  --success: #2f8a53;
-  --warning: #a35d16;
-  --danger: #c0402f;
-  --danger-soft: #fbe3df;
-  --link: var(--brand-blue);
-  --focus-ring: var(--brand-blue);
+  --accent: #f0e4a8;
+  --accent-contrast: #57491f;
+  --accent-soft: #f7f0d2;
+  --secondary: #cdd6ee;
+  --secondary-ink: #2e4e8a;
+  --info: #3d6fa8;
+  --success: #3e6b3e;
+  --warning: #a0602e;
+  --danger: #b0403a;
+  --danger-soft: #f3dcd9;
+  --link: var(--line);
+  --focus-ring: #3d6fa8;
 
-  --font-display: 'Bricolage Grotesque', 'Arial Narrow', sans-serif;
-  --font-heading: 'Bricolage Grotesque', 'Arial Narrow', sans-serif;
-  --font-body: 'Mulish', system-ui, -apple-system, sans-serif;
+  --font-display: 'Source Serif 4', Georgia, serif;
+  --font-heading: 'Source Serif 4', Georgia, serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
 
   --radius: 14px;
   --radius-lg: 18px;
   --radius-xl: 28px;
-  --radius-full: 999px;
+  --radius-full: 20px;
   --nav-height: 64px;
   --nav-height-desktop: 76px;
   --bp-wide: 860px;
 }
 
+/* Dark mode isn't covered by the "theme 9a" handoff doc at all — it only
+   ever shows one cream palette. Extended in the same spirit rather than
+   reusing the old neutral-gray dark mode: warm dark brown/charcoal
+   surfaces (an inverted echo of the light theme's cream), cream-ish ink
+   text, same low-chroma pastel accent families just re-lit for a dark
+   background (dark muted fill + a brighter version of the same ink).
+   --accent/--brand-green (the butter-yellow) is deliberately left
+   unchanged in both dark blocks below — a bright accent staying vivid
+   against a dark surface is the point, not something to also darken. */
 @media (prefers-color-scheme: dark) {
   :root {
-    /* flat neutral gray, not a green tint — classic app-dark-mode surface */
-    --paper: #1a1a1a;
-    --paper-card: #242424;
-    --paper-well: #2e2e2e;
-    --line: #f2f2ef;
-    --line-soft: #a8a8a4;
-    --border: #3a3a3a;
-    --shadow: rgba(0, 0, 0, 0.5);
+    --duck-mark-url: url('/brand/duck-yellow.png');
+    --paper: #211c12;
+    --paper-card: #2b2418;
+    --paper-well: #332b1c;
+    --line: #f2ecd9;
+    --line-soft: #c9bd9e;
+    --border: rgba(240, 228, 168, 0.14);
+    --shadow: rgba(0, 0, 0, 0.4);
 
-    --tag-environment: #23422f;
-    --tag-environment-ink: #a9e0bc;
-    --tag-community: #4a3d10;
-    --tag-community-ink: #f3d873;
-    --tag-youth: #223651;
-    --tag-youth-ink: #aecbf2;
-    --tag-education: #1f3c46;
-    --tag-education-ink: #a7dcee;
-    --tag-outdoors: #4a3319;
-    --tag-outdoors-ink: #f0c290;
-    --tag-technology: #1e3c38;
-    --tag-technology-ink: #9fe0d6;
-    --tag-fitness: #452420;
-    --tag-fitness-ink: #f2b3a7;
-    --tag-food-security: #3c3a14;
-    --tag-food-security-ink: #e3dd8e;
-    --tag-arts: #362949;
-    --tag-arts-ink: #dcc4f0;
-    --tag-verified: #23422f;
-    --tag-verified-ink: #a9e0bc;
-    --tag-rejected: #3a2420;
-    --tag-rejected-ink: #e08a78;
+    --tag-environment: #2e3d24;
+    --tag-environment-ink: #b9d9a0;
+    --tag-community: #3d3620;
+    --tag-community-ink: #e0d089;
+    --tag-youth: #232d47;
+    --tag-youth-ink: #a8bce8;
+    --tag-education: #1f3245;
+    --tag-education-ink: #9dc0e0;
+    --tag-outdoors: #453322;
+    --tag-outdoors-ink: #e8b787;
+    --tag-technology: #1e3838;
+    --tag-technology-ink: #9ad6d6;
+    --tag-fitness: #452724;
+    --tag-fitness-ink: #e8a29c;
+    --tag-food-security: #402c24;
+    --tag-food-security-ink: #dba996;
+    --tag-arts: #332a45;
+    --tag-arts-ink: #c3aee0;
+    --tag-verified: #2e3d24;
+    --tag-verified-ink: #b9d9a0;
+    --tag-rejected: #452824;
+    --tag-rejected-ink: #e8a29c;
 
-    --rank-iron: #3a4147;
-    --rank-iron-ink: #cdd3d6;
-    --rank-bronze: #4a3319;
-    --rank-bronze-ink: #edc79c;
-    --rank-silver: #3d4348;
-    --rank-silver-ink: #d6dadd;
-    --rank-gold: #4a3d10;
-    --rank-gold-ink: #f3d873;
-    --rank-diamond: #1c3c48;
-    --rank-diamond-ink: #a6dcef;
+    --rank-iron: #3a3830;
+    --rank-iron-ink: #c9c6ba;
+    --rank-bronze: #402f1c;
+    --rank-bronze-ink: #e0bd8e;
+    --rank-silver: #3d3d36;
+    --rank-silver-ink: #d4d3c9;
+    --rank-gold: #403619;
+    --rank-gold-ink: #f0d98a;
+    --rank-diamond: #1e3438;
+    --rank-diamond-ink: #9adde8;
 
-    --accent-soft: #2a332c;
-    --secondary-ink: #f3d873;
-    --success: #6fce93;
-    --warning: #e0ab5c;
-    --danger: #e08a78;
-    --danger-soft: #3a2420;
-    --link: #8fb4ec;
-    --focus-ring: #8fb4ec;
+    --accent-soft: #3d3520;
+    --secondary-ink: #a8bce8;
+    --success: #b9d9a0;
+    --warning: #e8b787;
+    --danger: #e8a29c;
+    --danger-soft: #452724;
+    --focus-ring: #6fa8d9;
   }
 }
 :root[data-theme='dark'] {
-  --paper: #1a1a1a;
-  --paper-card: #242424;
-  --paper-well: #2e2e2e;
-  --line: #f2f2ef;
-  --line-soft: #a8a8a4;
-  --border: #3a3a3a;
-  --shadow: rgba(0, 0, 0, 0.5);
+  --duck-mark-url: url('/brand/duck-yellow.png');
+  --paper: #211c12;
+  --paper-card: #2b2418;
+  --paper-well: #332b1c;
+  --line: #f2ecd9;
+  --line-soft: #c9bd9e;
+  --border: rgba(240, 228, 168, 0.14);
+  --shadow: rgba(0, 0, 0, 0.4);
 
-  --tag-environment: #23422f;
-  --tag-environment-ink: #a9e0bc;
-  --tag-community: #4a3d10;
-  --tag-community-ink: #f3d873;
-  --tag-youth: #223651;
-  --tag-youth-ink: #aecbf2;
-  --tag-education: #1f3c46;
-  --tag-education-ink: #a7dcee;
-  --tag-outdoors: #4a3319;
-  --tag-outdoors-ink: #f0c290;
-  --tag-technology: #1e3c38;
-  --tag-technology-ink: #9fe0d6;
-  --tag-fitness: #452420;
-  --tag-fitness-ink: #f2b3a7;
-  --tag-food-security: #3c3a14;
-  --tag-food-security-ink: #e3dd8e;
-  --tag-arts: #362949;
-  --tag-arts-ink: #dcc4f0;
-  --tag-rejected: #3a2420;
-  --tag-rejected-ink: #e08a78;
+  --tag-environment: #2e3d24;
+  --tag-environment-ink: #b9d9a0;
+  --tag-community: #3d3620;
+  --tag-community-ink: #e0d089;
+  --tag-youth: #232d47;
+  --tag-youth-ink: #a8bce8;
+  --tag-education: #1f3245;
+  --tag-education-ink: #9dc0e0;
+  --tag-outdoors: #453322;
+  --tag-outdoors-ink: #e8b787;
+  --tag-technology: #1e3838;
+  --tag-technology-ink: #9ad6d6;
+  --tag-fitness: #452724;
+  --tag-fitness-ink: #e8a29c;
+  --tag-food-security: #402c24;
+  --tag-food-security-ink: #dba996;
+  --tag-arts: #332a45;
+  --tag-arts-ink: #c3aee0;
+  --tag-verified: #2e3d24;
+  --tag-verified-ink: #b9d9a0;
+  --tag-rejected: #452824;
+  --tag-rejected-ink: #e8a29c;
 
-  --accent-soft: #2a332c;
-  --secondary-ink: #f3d873;
-  --success: #6fce93;
-  --warning: #e0ab5c;
-  --danger: #e08a78;
-  --danger-soft: #3a2420;
-  --link: #8fb4ec;
-  --focus-ring: #8fb4ec;
+  --rank-iron: #3a3830;
+  --rank-iron-ink: #c9c6ba;
+  --rank-bronze: #402f1c;
+  --rank-bronze-ink: #e0bd8e;
+  --rank-silver: #3d3d36;
+  --rank-silver-ink: #d4d3c9;
+  --rank-gold: #403619;
+  --rank-gold-ink: #f0d98a;
+  --rank-diamond: #1e3438;
+  --rank-diamond-ink: #9adde8;
+
+  --accent-soft: #3d3520;
+  --secondary-ink: #a8bce8;
+  --success: #b9d9a0;
+  --warning: #e8b787;
+  --danger: #e8a29c;
+  --danger-soft: #452724;
+  --focus-ring: #6fa8d9;
 }
 :root[data-theme='light'] {
-  --paper: #efe9df;
+  --duck-mark-url: url('/brand/duck-brown.png');
+  --paper: #faf6e8;
   --paper-card: #ffffff;
-  --paper-well: #f3eee3;
-  --line: #223018;
-  --line-soft: #6b6b63;
-  --border: rgba(0, 0, 0, 0.08);
-  --shadow: rgba(34, 48, 24, 0.1);
+  --paper-well: #f2ecdd;
+  --line: #57491f;
+  --line-soft: #6b5a2a;
+  --border: rgba(107, 90, 42, 0.12);
+  --shadow: rgba(87, 73, 31, 0.12);
 
-  --tag-environment: #dcefdc;
-  --tag-environment-ink: #3f7a49;
-  --tag-community: #f2edc7;
-  --tag-community-ink: #8f7f1e;
-  --tag-youth: #d7e4f7;
-  --tag-youth-ink: #1e3a73;
-  --tag-education: #d6ecf7;
-  --tag-education-ink: #1b4e66;
-  --tag-outdoors: #f7e4cf;
-  --tag-outdoors-ink: #b06d26;
-  --tag-technology: #cfe9e6;
-  --tag-technology-ink: #15574f;
-  --tag-fitness: #f6d6d0;
-  --tag-fitness-ink: #7a2c22;
-  --tag-food-security: #e7e4b0;
-  --tag-food-security-ink: #52480a;
-  --tag-arts: #e3d6f0;
-  --tag-arts-ink: #48276e;
-  --tag-verified: #dcefdc;
-  --tag-verified-ink: #3f7a49;
-  --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c0402f;
+  --tag-environment: #d9e8c9;
+  --tag-environment-ink: #3e6b3e;
+  --tag-community: #ede6c7;
+  --tag-community-ink: #8a7a2e;
+  --tag-youth: #cdd6ee;
+  --tag-youth-ink: #2e4e8a;
+  --tag-education: #c9d9e8;
+  --tag-education-ink: #3d6fa8;
+  --tag-outdoors: #f3dcc9;
+  --tag-outdoors-ink: #a0602e;
+  --tag-technology: #cbe0e0;
+  --tag-technology-ink: #3c7a7a;
+  --tag-fitness: #efcfcf;
+  --tag-fitness-ink: #b0403a;
+  --tag-food-security: #ead0c9;
+  --tag-food-security-ink: #9a5340;
+  --tag-arts: #e3d6ee;
+  --tag-arts-ink: #6b4fa0;
+  --tag-verified: #d9e8c9;
+  --tag-verified-ink: #3e6b3e;
+  --tag-rejected: #f3dcd9;
+  --tag-rejected-ink: #b0403a;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
-  --rank-iron: #dfe3e6;
-  --rank-iron-ink: #454c52;
-  --rank-bronze: #ecd2b3;
-  --rank-bronze-ink: #6b3d10;
-  --rank-silver: #e6e9ec;
-  --rank-silver-ink: #454c52;
-  --rank-gold: #f7e8a8;
-  --rank-gold-ink: #6b4e05;
-  --rank-diamond: #d3ecf5;
-  --rank-diamond-ink: #144a63;
+  --rank-iron: #e3e0d9;
+  --rank-iron-ink: #5c5a50;
+  --rank-bronze: #ead9be;
+  --rank-bronze-ink: #7a4b1e;
+  --rank-silver: #eaeae2;
+  --rank-silver-ink: #55544c;
+  --rank-gold: #f3e7b8;
+  --rank-gold-ink: #7a5c05;
+  --rank-diamond: #d9e9ec;
+  --rank-diamond-ink: #1f6b7a;
 
-  --accent-soft: #d4e7d0;
-  --secondary-ink: #6b4e05;
-  --success: #2f8a53;
-  --warning: #a35d16;
-  --danger: #c0402f;
-  --danger-soft: #fbe3df;
-  --link: var(--brand-blue);
-  --focus-ring: var(--brand-blue);
+  --accent-soft: #f7f0d2;
+  --secondary-ink: #2e4e8a;
+  --success: #3e6b3e;
+  --warning: #a0602e;
+  --danger: #b0403a;
+  --danger-soft: #f3dcd9;
+  --focus-ring: #3d6fa8;
 }
 
 *,
@@ -656,6 +694,11 @@ fieldset label {
 /* button, plus .stamp-btn — StampButton.jsx's `as` prop can render this as
    an <a> (e.g. a Link-powered nav CTA) instead of a real <button>, and the
    tag selector alone wouldn't reach that. */
+/* Flat per the "theme 9a" handoff (no shadows anywhere) — the old
+   hover-lift + shadow tactile press effect is gone; a border-color change
+   is the only hover feedback now, and StampButton.jsx's own Framer Motion
+   whileTap scale (a squish, not a shadow) still provides press feedback
+   on top of this without reintroducing depth chrome. */
 button,
 .stamp-btn {
   font: inherit;
@@ -669,10 +712,7 @@ button,
   text-decoration: none;
   display: inline-block;
   cursor: pointer;
-  box-shadow: 0 1px 2px var(--shadow);
   transition:
-    transform 0.1s ease,
-    box-shadow 0.15s ease,
     background-color 0.15s ease,
     border-color 0.15s ease;
 }
@@ -680,34 +720,11 @@ button,
 button:hover:not(:disabled),
 .stamp-btn:hover {
   border-color: var(--line-soft);
-  box-shadow: 0 4px 12px var(--shadow);
-  transform: translateY(-1px);
-}
-
-button:active:not(:disabled),
-.stamp-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 2px var(--shadow);
 }
 
 button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-  box-shadow: none;
-  transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  button,
-  .stamp-btn {
-    transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease;
-  }
-  button:hover:not(:disabled),
-  .stamp-btn:hover {
-    transform: none;
-  }
 }
 
 /* the settings/admin-data/logout nav bar shown above each dashboard */
@@ -729,11 +746,8 @@ nav {
   background: var(--paper-card);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 1px 3px var(--shadow);
   padding: 18px 20px;
-  transition:
-    box-shadow 0.15s ease,
-    border-color 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 .ink-card[data-danger='true'] {
   border-color: var(--danger);
@@ -824,6 +838,25 @@ nav {
   border: 1.5px solid var(--border);
 }
 
+/* Sizing lives in CSS (via --duck-size), not an inline width/height style,
+   so a caller's own className (e.g. .auth-hero-duck below) can still
+   override the size with a plain CSS rule — an inline style would always
+   win over an external stylesheet rule for the same element/property
+   regardless of source order, silently defeating that override. Declared
+   here, before every place that overrides it (.auth-hero-duck immediately
+   below included), since two same-specificity single-class selectors
+   resolve by source order — a later override would otherwise lose to this
+   base rule if this sat any lower in the file (e.g. next to .lq-logo). */
+.duck-mark {
+  display: inline-block;
+  width: var(--duck-size, 32px);
+  height: var(--duck-size, 32px);
+  background-image: var(--duck-mark-url);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
 /* ---------- auth screens (Login, Register, Forgot/Reset password) ----------
    Mobile-first here is a deliberate card-less layout — icon + wordmark
    stacked above the form, everything floating directly on the page
@@ -857,8 +890,12 @@ nav {
   gap: 4px;
 }
 .auth-hero-duck {
+  /* Fixed height, not height:auto — DuckMark now renders a background-image
+     span (see .duck-mark), not a real <img>, so there's no intrinsic
+     aspect ratio for height:auto to derive from; it'd just collapse to
+     zero. Explicit and square (the duck PNGs are 1:1) instead. */
   width: 120px;
-  height: auto;
+  height: 120px;
 }
 .auth-hero-word {
   font-family: var(--font-display);
@@ -915,10 +952,16 @@ nav {
   }
   .auth-hero-duck {
     width: 48px;
+    /* This panel's butter-yellow background (--brand-green below) never
+       changes with the app's light/dark theme, so its foreground can't
+       either — var(--line)/the theme-aware --duck-mark-url would go
+       pale-on-pale the moment dark mode flips --line to a light color.
+       Force the fixed dark-ink duck variant regardless of theme. */
+    --duck-mark-url: url('/brand/duck-brown.png');
   }
   .auth-hero-word {
     font-size: 1.3rem;
-    color: var(--brand-mustard);
+    color: var(--accent-contrast);
   }
   .auth-card-hero {
     background: var(--brand-green);
@@ -929,9 +972,13 @@ nav {
   .auth-card-hero p {
     display: block;
     margin: 0;
-    color: #ffffff;
+    /* Same fixed-ink reasoning as .auth-hero-word/.auth-hero-duck above —
+       --accent-contrast is never redefined in dark mode (same as --accent
+       itself), so it stays fixed dark ink on this always-butter-yellow
+       panel regardless of app theme. */
+    color: var(--accent-contrast);
     font-size: 1rem;
-    opacity: 0.92;
+    opacity: 0.78;
     max-width: 260px;
   }
   .auth-card-form {
@@ -995,7 +1042,10 @@ nav {
   color: inherit;
 }
 .lq-logo[data-tone='brand'] {
-  color: var(--brand-mustard);
+  /* Meant for placement on the fixed butter-yellow brand surface (see
+     .auth-card-hero) — --accent-contrast, not --line, since that surface
+     doesn't change with the app's light/dark theme either. */
+  color: var(--accent-contrast);
 }
 
 /* ---------- Onboarding's step progress (Onboarding.jsx) ---------- */
@@ -1167,14 +1217,16 @@ nav {
   border: none;
   border-radius: var(--radius-full);
   background: var(--brand-green);
-  color: #ffffff;
+  /* --accent-contrast, not --line — --brand-green is a fixed butter-yellow
+     that doesn't change with the app's light/dark theme, so --line
+     flipping to a light color in dark mode would go pale-on-pale here. */
+  color: var(--accent-contrast);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.6rem;
   font-weight: 300;
   line-height: 1;
-  box-shadow: 0 4px 12px rgba(49, 158, 95, 0.4);
 }
 .bottom-nav-fab:hover {
   transform: none;
@@ -1195,7 +1247,7 @@ nav {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 10px var(--shadow);
+  box-shadow: none;
   z-index: 11;
 }
 .bottom-nav-fab-circle:hover {
@@ -1270,7 +1322,7 @@ nav {
   background: var(--paper-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 20px var(--shadow);
+  box-shadow: none;
 }
 .bottom-nav-avatar-menu a {
   display: flex;
@@ -2049,20 +2101,14 @@ button.quest-card-head:hover:not(:disabled) {
 .stat-hero-tile {
   border: none;
   border-radius: var(--radius-lg);
-  box-shadow: 0 2px 6px var(--shadow);
   padding: 16px 18px;
-  color: #ffffff;
+  color: var(--line);
   display: flex;
   flex-direction: column;
   gap: 2px;
   text-decoration: none;
-  transition:
-    transform 0.1s ease,
-    box-shadow 0.15s ease;
 }
 a.stat-hero-tile:hover {
-  box-shadow: 0 4px 12px var(--shadow);
-  transform: translateY(-1px);
   opacity: 1;
 }
 
@@ -2105,13 +2151,8 @@ a.stat-hero-tile:hover {
   flex-direction: column;
   gap: 2px;
   text-decoration: none;
-  transition:
-    transform 0.1s ease,
-    box-shadow 0.15s ease;
 }
 a.org-home-stat-tile:hover {
-  box-shadow: 0 4px 12px var(--shadow);
-  transform: translateY(-1px);
   opacity: 1;
 }
 .stat-hero-number {
@@ -2258,7 +2299,7 @@ a.org-home-stat-tile:hover {
   justify-content: center;
   background: var(--paper-card);
   border: 1.5px solid var(--border);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
   color: var(--line);
 }
 .tag-filter-row-arrow-left {
@@ -2267,16 +2308,6 @@ a.org-home-stat-tile:hover {
 .tag-filter-row-arrow-right {
   right: -6px;
 }
-/* The global button:hover/:active lift (transform: translateY(-1px/0), see
-   the base button rule) would otherwise clobber this button's own
-   translateY(-50%) centering, snapping it up/down on hover/press — pin the
-   transform back to just the centering offset so it stays still. */
-.tag-filter-row-arrow:hover:not(:disabled),
-.tag-filter-row-arrow:active:not(:disabled) {
-  transform: translateY(-50%);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-}
-
 .quest-sort-select {
   flex: none;
   padding: 6px 10px;
@@ -2513,7 +2544,7 @@ a.org-home-stat-tile:hover {
   padding: 24px 20px;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 30px var(--shadow);
+  box-shadow: none;
   scrollbar-width: none;
 }
 .pending-review-stack {
@@ -2526,7 +2557,7 @@ a.org-home-stat-tile:hover {
   inset: 0;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
   cursor: grab;
   background: var(--paper-well);
 }
@@ -2586,7 +2617,7 @@ a.org-home-stat-tile:hover {
   justify-content: center;
   background: var(--paper-card);
   border: 1.5px solid var(--border);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 .pending-review-action-reject {
   color: var(--danger);
@@ -2637,7 +2668,7 @@ a.org-home-stat-tile:hover {
   background: rgba(20, 18, 12, 0.55);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 .pending-review-dock:active {
   cursor: grabbing;
@@ -3006,7 +3037,7 @@ a.org-home-stat-tile:hover {
   background: var(--paper-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 20px var(--shadow);
+  box-shadow: none;
 }
 .delete-dropdown-menu button {
   display: block;
@@ -3600,10 +3631,9 @@ button.data-row:active:not(:disabled) {
   padding: 1px 6px;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--accent-contrast);
   background: var(--accent);
   border-radius: var(--radius-full);
-  box-shadow: var(--shadow);
 }
 .badge-ring[data-state='in-progress'] {
   background: var(--paper-card);
@@ -3699,6 +3729,18 @@ button.data-row:active:not(:disabled) {
   flex-direction: column;
   justify-content: center;
   min-height: calc(100vh - var(--nav-height) - 56px);
+}
+/* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
+   1180px cap (see #root above), the greeting/rank-card/CTA buttons were
+   stretching to fill nearly the whole content column. Capped to 40vw and
+   centered instead, matching the same 860px breakpoint used everywhere
+   else in this file for desktop-only treatments. */
+@media (min-width: 860px) {
+  .home-page {
+    max-width: 40vw;
+    width: 100%;
+    margin: 0 auto;
+  }
 }
 
 /* A must-dismiss popup notice (NotificationBanner.jsx) — a quest RSVP'd to
@@ -3816,7 +3858,7 @@ button.data-row:active:not(:disabled) {
   max-width: 100%;
   height: auto;
   border-radius: var(--radius);
-  box-shadow: 0 6px 20px var(--shadow);
+  box-shadow: none;
 }
 
 /* ---------- Landing page (the signed-out root, see Landing.jsx) ---------- */
@@ -3856,7 +3898,7 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-card);
   border: 2.4px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: 4px 4px 0 var(--shadow);
+  box-shadow: none;
   padding: 14px 18px 16px;
   display: flex;
   flex-direction: column;
@@ -4052,7 +4094,7 @@ button.data-row:active:not(:disabled) {
     background: var(--paper-card);
   }
   .events-map-mobile-overlays .tag-stamp {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    box-shadow: none;
   }
   /* MobileSheet.jsx — a fixed-height sliver always instantiated at this
      same height regardless of collapsed/expanded; MobileSheet's own
@@ -4066,7 +4108,7 @@ button.data-row:active:not(:disabled) {
     height: 95vh;
     background: var(--paper-card);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: none;
     z-index: 5;
     display: flex;
     flex-direction: column;
@@ -4238,7 +4280,7 @@ button.data-row:active:not(:disabled) {
      .tag-stamp use in the app) — grounding for a row that's floating
      directly over the map, not sitting on a page's plain background. */
   .events-map-overlays .tag-stamp {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    box-shadow: none;
   }
   /* An unselected selectable tag is normally `background: transparent` (see
      .tag-stamp[data-selectable='true']) — just a colored outline, meant to
@@ -4573,7 +4615,7 @@ button.data-row:active:not(:disabled) {
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1.5px solid var(--border);
-  box-shadow: 0 1px 3px var(--shadow);
+  box-shadow: none;
   aspect-ratio: 4 / 5;
   cursor: pointer;
   background: var(--paper-well);
@@ -4689,7 +4731,7 @@ button.data-row:active:not(:disabled) {
   position: relative;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 30px var(--shadow);
+  box-shadow: none;
   width: min(560px, 100%);
   max-height: 85vh;
   overflow-y: auto;

@@ -1183,11 +1183,11 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
 
         {role === 'admin' && (
           <div className='stat-hero-row'>
-            <div className='stat-hero-tile' style={{ background: 'var(--brand-green)' }}>
+            <div className='stat-hero-tile' style={{ background: 'var(--brand-green)', color: 'var(--line)' }}>
               <span className='stat-hero-number'>{seriesList.length}</span>
               <span className='stat-hero-label'>Quests Open</span>
             </div>
-            <div className='stat-hero-tile' style={{ background: 'var(--brand-blue)' }}>
+            <div className='stat-hero-tile' style={{ background: 'var(--brand-blue)', color: '#ffffff' }}>
               <span className='stat-hero-number'>{orgCount}</span>
               <span className='stat-hero-label'>Organizations</span>
             </div>
