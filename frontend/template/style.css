@@ -1190,7 +1190,7 @@ nav {
 }
 .bottom-nav-item[aria-current='page'] {
   background: var(--accent-soft);
-  color: var(--accent);
+  /* color: var(--accent); */
 }
 .bottom-nav-item[aria-current='page']:hover:not(:disabled) {
   background: var(--accent-soft);
