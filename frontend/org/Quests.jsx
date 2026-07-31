@@ -4,7 +4,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { ConfirmBox, ShareButton, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
@@ -46,9 +46,18 @@ const itemVariants = {
 function QuestSeriesListItem({ series, isOpen, isActive, onSelect, children }) {
   const { primary } = series;
   const eventDate = formatEventDate(primary.eventDate);
+  // Dimmed rather than hidden or removed — same treatment sideQuestGate's
+  // own gated rows get (see .quest-content-col[data-gated] in style.css):
+  // still fully clickable/expandable so reviews/attendance for a finished
+  // series stay reachable, just visually pushed behind what's still active.
+  const isPast = !nextOccurrence(series);
   return (
     <motion.li className='quest-row' variants={itemVariants}>
-      <div className='ink-card quest-content-col' data-active={isActive ? 'true' : undefined}>
+      <div
+        className='ink-card quest-content-col'
+        data-active={isActive ? 'true' : undefined}
+        data-past={isPast ? 'true' : undefined}
+      >
         <button
           type='button'
           className='quest-card-head'
@@ -416,6 +425,34 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   );
 }
 
+// The soonest occurrence in a series that hasn't happened yet, or null if
+// every occurrence has already passed — `series.occurrences` is already
+// sorted ascending by eventDate (see groupBySeries), so the first upcoming
+// one found is the soonest. A recurring series can have some occurrences
+// past and others still upcoming; this is what "is this series still
+// active" actually means for one, not just checking its `primary` (the
+// earliest occurrence), which could be long past for an ongoing series.
+function nextOccurrence(series) {
+  return series.occurrences.find(isUpcoming) || null;
+}
+
+// Active/upcoming series first (soonest next occurrence first — what the
+// org needs to act on next), then past series after them, most recently
+// finished first — a past series someone might still want to check in on
+// (reviews, attendance) stays reachable rather than disappearing, just
+// pushed to the end and (see QuestSeriesListItem's data-past) rendered
+// de-emphasized like sideQuestGate's own dimmed-but-still-clickable rows.
+function compareSeriesForOrgList(a, b) {
+  const aNext = nextOccurrence(a);
+  const bNext = nextOccurrence(b);
+  if (aNext && bNext) return toDate(aNext.eventDate) - toDate(bNext.eventDate);
+  if (aNext) return -1;
+  if (bNext) return 1;
+  const aLast = a.occurrences[a.occurrences.length - 1];
+  const bLast = b.occurrences[b.occurrences.length - 1];
+  return toDate(bLast.eventDate) - toDate(aLast.eventDate);
+}
+
 function OrgQuests({ creating, setCreating }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
@@ -437,7 +474,9 @@ function OrgQuests({ creating, setCreating }) {
   }, [user]);
 
   const seriesList = useMemo(
-    () => (quests ? attachSeriesRatings(groupBySeries(quests), seriesAggregates) : []),
+    () => (quests
+      ? attachSeriesRatings(groupBySeries(quests), seriesAggregates).sort(compareSeriesForOrgList)
+      : []),
     [quests, seriesAggregates],
   );
 

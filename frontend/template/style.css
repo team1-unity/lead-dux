@@ -1574,8 +1574,13 @@ button.quest-card-head:hover:not(:disabled) {
    sideQuestGate in Quests.jsx. Dimmed rather than hidden: the row stays
    fully clickable/expandable so the explanatory message and CTA
    (.side-quest-gate below) are still reachable, just visually
-   de-emphasized against quests the user can actually act on. */
-.quest-content-col[data-gated] {
+   de-emphasized against quests the user can actually act on.
+   data-past (org/Quests.jsx's own quest dashboard — every occurrence of
+   that series has already happened) gets the identical treatment, for the
+   same reason: still fully reachable for reviews/attendance, just visually
+   pushed behind quests that are still upcoming. */
+.quest-content-col[data-gated],
+.quest-content-col[data-past] {
   opacity: 0.6;
 }
 .side-quest-gate {
