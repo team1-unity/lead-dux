@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
+import { buildDirectionsUrl } from '@shared/mapLinks.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { ConfirmBox, ShareButton, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
@@ -260,9 +260,19 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         <AddToCalendar quest={selected} style={{ padding: '4px 10px', fontSize: '0.8rem' }} />
       </div>
       {selected.location && (
-        <Link to={`/map?seriesId=${primary.seriesId}`} className='quest-meta-row quest-meta-link'>
+        // External Google Maps directions link, same as the quest's own
+        // map detail (MapQuestDetailBody.jsx) — this used to link to this
+        // app's own /map view instead, but an org checking their own
+        // quest's location wants driving directions there, not a re-pan of
+        // the in-app map.
+        <a
+          href={buildDirectionsUrl(selected.lat, selected.lng)}
+          target='_blank'
+          rel='noopener noreferrer'
+          className='quest-meta-row quest-meta-link'
+        >
           <IconPin /> {selected.location}
-        </Link>
+        </a>
       )}
       <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
         <p className='quest-meta-row' style={{ margin: 0 }}>

@@ -34,6 +34,7 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { ShareButton } from '@shared/QuestSeriesRow.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
+import { buildDirectionsUrl } from '@shared/mapLinks.js';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 import {
   IconCalendar,
@@ -704,9 +705,19 @@ export function QuestDetailBody({
           ))}
       </div>
       {selected.location && (
-        <Link to={`/map?seriesId=${primary.seriesId}`} className='quest-meta-row quest-meta-link'>
+        // External Google Maps directions link, same as the quest's own
+        // map detail (MapQuestDetailBody.jsx) — this used to link to this
+        // app's own /map view instead, but from a quest someone's already
+        // RSVP'd to, what they want is directions there, not a re-pan of
+        // the in-app map.
+        <a
+          href={buildDirectionsUrl(selected.lat, selected.lng)}
+          target='_blank'
+          rel='noopener noreferrer'
+          className='quest-meta-row quest-meta-link'
+        >
           <IconPin /> {selected.location}
-        </Link>
+        </a>
       )}
       {/* Side quests are a personal challenge, not an event with capacity —
           there's no one else's attendance to count, so this stays an
