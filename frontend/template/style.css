@@ -588,25 +588,13 @@ fieldset label {
   font-weight: 400;
 }
 
-/* PlaceAutocompleteInput.jsx's container — the google.maps.places.
-   PlaceAutocompleteElement it holds is a custom element with its own
-   shadow-DOM input, so normal descendant selectors can't reach in and
-   restyle it the way input/textarea/select above are. This just gives it
-   a matching outer frame rather than attempting deep shadow-DOM overrides.
-   Deliberately NOT overflow: hidden — the widget's own suggestions
-   dropdown renders positioned against this container, and clipping it
-   here hid every suggestion while still letting the rest of the widget
-   look and work fine (easy to miss without actually typing a query). */
-.place-autocomplete-container {
-  border-radius: var(--radius);
-  border: 1.5px solid var(--border);
-  background: var(--paper-card);
-}
-
-/* PlaceCombobox.jsx's own dropdown — real markup we fully control (unlike
-   PlaceAutocompleteInput.jsx's Google widget above), so it's plain
-   .ink-card + this app's usual list-item hover treatment, no shadow-DOM
-   workarounds needed. The <input> itself needs no dedicated CSS at all —
+/* PlaceCombobox.jsx's own dropdown — real markup we fully control (a
+   plain <input> + this app's usual list-item hover treatment), so unlike
+   the old Google widget this used to wrap for some callers (a closed
+   shadow-DOM element with no reachable inner input to restyle), no
+   special container framing is needed at all — the <input> itself
+   inherits whatever ambient input styling its caller's other fields
+   already have. The <input> itself needs no dedicated CSS at all —
    it's a real <input type="text">, so it already picks up the same
    borderless styling every other row's input gets from
    .quest-form-row-value input[type='text'] (see below). */
@@ -4123,10 +4111,10 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-well);
   position: relative;
 }
-/* Shown only if loadMapsLibrary/loadMarkerLibrary actually rejects (see
-   EventsMap.jsx's mapError state) — Google Maps never got a chance to
-   render its own error UI onto this container in that case, since it's
-   never constructed at all. */
+/* Shown only if the MapLibre map's own 'error' event fires (see
+   EventsMap.jsx's mapError state) — a bad/missing MapTiler key or a
+   blocked tile request, with no built-in on-map error UI of its own to
+   fall back to the way Google Maps had. */
 .events-map-error {
   position: absolute;
   inset: 0;
