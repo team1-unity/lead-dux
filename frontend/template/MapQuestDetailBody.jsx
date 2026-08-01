@@ -4,14 +4,12 @@ import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { storage } from './firebaseapp.jsx';
 import { StampButton } from './StampButton.jsx';
 import { ShareButton } from './QuestSeriesRow.jsx';
-import { OrgAvatar } from './OrgAvatar.jsx';
 import { TrustTag } from './TrustTag.jsx';
 import { DuckMark } from './Logo.jsx';
-import { LoadingSpinner } from './LoadingSpinner.jsx';
+import { QuestReviewsList } from './QuestReviewsList.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
 import { toDate, getTrustStatus } from './questSeries.js';
 import { buildDirectionsUrl } from './mapLinks.js';
-import { callListQuestReviews } from './fetch.jsx';
 import {
   IconPin,
   IconCalendar,
@@ -44,26 +42,6 @@ function formatEventDate(value) {
 function formatStars(rating) {
   const whole = Math.round(rating);
   return '★'.repeat(whole) + '☆'.repeat(5 - whole);
-}
-
-// A row of 5 individually-colored stars (filled = brand mustard, empty =
-// muted border color) rather than formatStars' plain ★/☆ text glyphs —
-// this is the one spot in the app rendering a single review's own rating,
-// where a Google-Maps-style two-tone star row reads more like a real
-// rating widget than a line of text. formatStars itself stays as-is for
-// the compact "★★★★☆ (12 reviews)" aggregate line elsewhere in this file
-// and the couple of other places in the app that already use it.
-function StarRow({ rating }) {
-  const whole = Math.round(rating);
-  return (
-    <span className="map-review-stars" aria-label={`${rating} out of 5 stars`}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <span key={n} aria-hidden="true" className={n <= whole ? 'map-review-star-filled' : 'map-review-star-empty'}>
-          ★
-        </span>
-      ))}
-    </span>
-  );
 }
 
 // Organizations' Community Photos gallery (org.photos, an array of Storage
@@ -126,71 +104,6 @@ function HeroCarousel({ photoPaths, orgLogoUrl }) {
           <img key={i} src={url} alt="" className="map-quest-hero-img" />
         ))}
       </div>
-    </div>
-  );
-}
-
-// This quest's reviews (list_quest_reviews has no ownership gate — any
-// signed-in user can call it, same as mobile/Quests.jsx's own
-// QuestReviewsList, which this mirrors). `questId` can be any occurrence in
-// the series (the callable resolves the series itself server-side), so the
-// earliest one (primary.id) always works regardless of which date someone
-// last had selected elsewhere.
-function ReviewsTab({ questId }) {
-  const [loading, setLoading] = useState(true);
-  const [reviews, setReviews] = useState(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError('');
-    callListQuestReviews(questId)
-      .then((data) => {
-        if (!cancelled) {
-          setReviews(data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err.message || 'Could not load reviews.');
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [questId]);
-
-  if (loading) return <LoadingSpinner label="Loading reviews..." />;
-  if (error) return <p className="box-danger">{error}</p>;
-  if (reviews.length === 0) return <p className="field-optional">No reviews yet.</p>;
-
-  return (
-    <div className="map-reviews-list">
-      {reviews.map((r) => (
-        <div key={`${r.uid}-${r.eventDate}`} className="map-review-row">
-          <div className="map-review-header">
-            {/* No reviewer photo in this data (list_quest_reviews only
-                returns uid/name/rating/body/dates) — the same colored-
-                initial-tile OrgAvatar already renders elsewhere for
-                organizations works just as well keyed to a reviewer's own
-                name/uid instead. */}
-            <div className="map-review-avatar">
-              <OrgAvatar name={r.name || 'Unnamed'} seed={r.uid} />
-            </div>
-            <div className="map-review-header-text">
-              <p className="map-review-name">{r.name || 'Unnamed'}</p>
-              <div className="map-review-meta">
-                <StarRow rating={r.rating} />
-                {r.eventDate && <span className="map-review-date">{formatEventDate(r.eventDate)}</span>}
-              </div>
-            </div>
-          </div>
-          <p className="map-review-body">{r.body}</p>
-        </div>
-      ))}
     </div>
   );
 }
@@ -363,7 +276,9 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
 
       {tab === 'overview' && primary.description && <p className="quest-description">{primary.description}</p>}
 
-      {tab === 'reviews' && hasReviews && <ReviewsTab questId={primary.id} />}
+      {tab === 'reviews' && hasReviews && (
+        <QuestReviewsList questId={primary.id} reviewCount={series.reviewCount} />
+      )}
 
       {tab === 'about' && <AboutTab org={org} />}
 

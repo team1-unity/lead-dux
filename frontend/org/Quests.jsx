@@ -13,6 +13,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
+import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
@@ -407,29 +408,14 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         </LightboxBackdrop>
       )}
 
-      <div className='quest-expand-section'>
-        <button
-          type='button'
-          className='quest-card-head'
-          style={{ padding: '10px 0' }}
-          onClick={a.toggleReviews}
-          disabled={a.busy}
-          aria-expanded={a.reviewsOpen}
-        >
-          <span className='quest-card-titles'>View Reviews</span>
-          <IconChevron className='quest-chevron' data-open={a.reviewsOpen ? 'true' : 'false'} />
-        </button>
-        {a.reviewsOpen && a.reviews && (
-          <ul className='data-sublist'>
-            {a.reviews.length === 0 && <li>No reviews yet.</li>}
-            {a.reviews.map((r) => (
-              <li key={`${r.uid}-${r.eventDate}`}>
-                {formatStars(r.rating)} — {r.name || 'Unnamed'}
-                {r.eventDate ? ` (${formatEventDate(r.eventDate)})` : ''}: {r.body}
-              </li>
-            ))}
-          </ul>
-        )}
+      {/* Always shown inline, no expand/collapse toggle — matches the
+          quest's own map detail (MapQuestDetailBody.jsx) and the
+          volunteer-facing detail (mobile/Quests.jsx), all three sharing
+          QuestReviewsList. Real Google Maps doesn't hide reviews behind a
+          click either, and the fetch itself is cheap. */}
+      <div className='quest-expand-section' style={{ paddingTop: 12 }}>
+        <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
+        <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
       </div>
     </div>
   );

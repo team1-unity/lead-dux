@@ -4428,10 +4428,13 @@ button.data-row:active:not(:disabled) {
   margin-bottom: 10px;
 }
 
-/* Reviews tab (MapQuestDetailBody.jsx) — one row per review, no enclosing
-   card/box (unlike .data-sublist elsewhere in the app), separated by a
-   thin divider instead, matching a real Google Maps review list rather
-   than the old flat bulleted-text version this replaced. */
+/* QuestReviewsList.jsx — shared by the map quest detail's Reviews tab,
+   the org's own quest dashboard, and the volunteer quest detail, all three
+   showing the same reviews for the same quest/series. One row per review,
+   no enclosing card/box (unlike .data-sublist elsewhere in the app),
+   separated by a thin divider instead, matching a real Google Maps review
+   list rather than the old flat bulleted-text/expand-toggle versions this
+   replaced. */
 .map-reviews-list {
   display: flex;
   flex-direction: column;

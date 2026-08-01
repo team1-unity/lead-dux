@@ -10,7 +10,6 @@ import {
   callCancelRsvp,
   callGetMyReview,
   callSubmitReview,
-  callListQuestReviews,
   callGetSideQuestStatus,
   callSubmitQuestPhoto,
   callListOrganizationTrustTags,
@@ -33,6 +32,7 @@ import { TrustTag } from '@shared/TrustTag.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { ShareButton } from '@shared/QuestSeriesRow.jsx';
+import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
 import { buildDirectionsUrl } from '@shared/mapLinks.js';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
@@ -44,7 +44,6 @@ import {
   IconAlert,
   IconSearch,
   IconLock,
-  IconChevron,
   IconX,
 } from '@shared/icons.jsx';
 
@@ -476,52 +475,6 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
   );
 }
 
-// Every reviewer's rating/body for this quest's series — same list an org
-// or admin sees on their own dashboard (list_quest_reviews has no
-// ownership gate; reviews are meant to help anyone deciding whether to
-// attend), fetched lazily since most cards on the list never get opened.
-function QuestReviewsList({ questId }) {
-  const [loading, setLoading] = useState(true);
-  const [reviews, setReviews] = useState(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    callListQuestReviews(questId)
-      .then((data) => {
-        if (!cancelled) {
-          setReviews(data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err.message || 'Could not load reviews.');
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [questId]);
-
-  if (loading) return <LoadingSpinner label='Loading reviews...' />;
-  if (error) return <p className='box-danger'>{error}</p>;
-
-  return (
-    <ul className='data-sublist' style={{ marginTop: 12 }}>
-      {reviews.length === 0 && <li>No reviews yet.</li>}
-      {reviews.map((r) => (
-        <li key={`${r.uid}-${r.eventDate}`}>
-          {formatStars(r.rating)} — {r.name || 'Unnamed'}
-          {r.eventDate ? ` (${formatEventDate(r.eventDate)})` : ''}: {r.body}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 // The full body of a quest's detail: date/location/capacity, description,
 // tags, and the RSVP/QR/review actions. Rendered exactly once at a time —
 // inline under its row on mobile, or in the side panel on desktop — so its
@@ -542,7 +495,6 @@ export function QuestDetailBody({
   const { primary, occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [showReviewsList, setShowReviewsList] = useState(false);
   const [checkedIn, setCheckedIn] = useState(false);
   // Side quests only — reported up from QuestPhotoSubmission's own
   // photoSubmissions listener (see its onStatusChange prop) so "Leave
@@ -557,7 +509,6 @@ export function QuestDetailBody({
   useEffect(() => {
     setSelectedId(occurrences[0].id);
     setReviewModalOpen(false);
-    setShowReviewsList(false);
     setSidePhotoStatus(null);
   }, [series.seriesId]);
 
@@ -857,23 +808,15 @@ export function QuestDetailBody({
           onStatusChange={setSidePhotoStatus}
         />
       )}
-      {/* Same inline-accordion treatment as org/Quests.jsx's own "View
-          Reviews" section (chevron toggle + .quest-expand-section border) —
-          unlike View Attendees there, this one was never converted to a
-          modal, so this matches it as-is. */}
+      {/* Always shown inline, no expand/collapse toggle — matches the
+          quest's own map detail (MapQuestDetailBody.jsx) and the org's own
+          quest dashboard (org/Quests.jsx), all three sharing
+          QuestReviewsList. Real Google Maps doesn't hide reviews behind a
+          click either, and the fetch itself is cheap. */}
       {!primary.isDefault && (
-        <div className='quest-expand-section'>
-          <button
-            type='button'
-            className='quest-card-head'
-            style={{ padding: '10px 0' }}
-            onClick={() => setShowReviewsList((v) => !v)}
-            aria-expanded={showReviewsList}
-          >
-            <span className='quest-card-titles'>View Reviews</span>
-            <IconChevron className='quest-chevron' data-open={showReviewsList ? 'true' : 'false'} />
-          </button>
-          {showReviewsList && <QuestReviewsList questId={selected.id} />}
+        <div className='quest-expand-section' style={{ paddingTop: 12 }}>
+          <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
+          <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
         </div>
       )}
     </div>
