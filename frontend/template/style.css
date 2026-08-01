@@ -2978,6 +2978,56 @@ a.org-home-stat-tile:hover {
   scrollbar-width: none;
 }
 
+/* Wider than the shared .detail-modal-content default (org/Quests.jsx's
+   Attendees modal) — a multi-column card grid (.attendee-grid below) wants
+   more room than the single-column QR/photo-review modals sharing that
+   base class were designed around. */
+.quest-attendees-modal {
+  max-width: 560px;
+}
+
+/* org/Quests.jsx's Attendees modal — a centered card per attendee (avatar
+   on top, name/email/status pill stacked below, all center-aligned)
+   rather than QuestReviewsList's own left-aligned rows (see .map-review-*
+   above): there's no long body text under a name here the way a review
+   has, so a compact grid reads faster at a glance and actually fills the
+   wider modal instead of leaving one narrow left-aligned column with dead
+   space beside it. auto-fill/minmax means this reflows on its own from 3
+   columns down to 1 as the modal narrows, no breakpoint needed. */
+.attendee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 20px 12px;
+}
+.attendee-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+.attendee-card-avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.attendee-card-name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--line);
+}
+.attendee-card-email {
+  margin: 0 0 2px;
+  font-size: 0.75rem;
+  color: var(--line-soft);
+  word-break: break-word;
+}
+
 /* .photo-lightbox-close normally floats half outside its content (a bare
    photo, in PhotoGallery.jsx/PendingPhotoSubmissions.jsx — negative offsets
    look intentional against a borderless image). These containers wrap a

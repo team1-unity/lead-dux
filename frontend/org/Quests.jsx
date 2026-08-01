@@ -14,6 +14,8 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
+import { OrgAvatar } from '@shared/OrgAvatar.jsx';
+import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
@@ -384,18 +386,38 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
 
       {a.attendeesOpen && a.attendees && (
         <LightboxBackdrop onClose={a.toggleAttendees} label='Attendees'>
-          <div className='ink-card detail-modal-content' onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Attendees</h3>
-            <ul className='data-sublist'>
-              {a.attendees.length === 0 && <li>No RSVPs yet.</li>}
-              {a.attendees.map((att) => (
-                <li key={att.uid}>
-                  {att.name || 'Unnamed'} — {att.email}
-                  {' — '}
-                  {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
-                </li>
-              ))}
-            </ul>
+          <div
+            className='ink-card detail-modal-content quest-attendees-modal'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 18px' }}>Attendees</h3>
+            {a.attendees.length === 0 ? (
+              <p className='field-optional'>No RSVPs yet.</p>
+            ) : (
+              // A grid of centered cards rather than QuestReviewsList's own
+              // left-aligned rows (see .map-review-* in style.css) — that
+              // row layout left a lot of dead space once this modal grew
+              // wider than the shared .detail-modal-content default (see
+              // .quest-attendees-modal); a name/email/status pill has no
+              // long body text underneath it the way a review does, so a
+              // compact centered card reads faster at a glance and actually
+              // uses the extra width instead of just padding a single
+              // column out.
+              <div className='attendee-grid'>
+                {a.attendees.map((att) => (
+                  <div key={att.uid} className='attendee-card'>
+                    <div className='attendee-card-avatar'>
+                      <OrgAvatar name={att.name || 'Unnamed'} seed={att.uid} />
+                    </div>
+                    <p className='attendee-card-name'>{att.name || 'Unnamed'}</p>
+                    {att.email && <p className='attendee-card-email'>{att.email}</p>}
+                    <StatusStamp tone='environment' muted={att.status !== 'checked_in'}>
+                      {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
+                    </StatusStamp>
+                  </div>
+                ))}
+              </div>
+            )}
             <button
               type='button'
               className='photo-lightbox-close'
