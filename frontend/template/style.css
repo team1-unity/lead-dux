@@ -2180,28 +2180,21 @@ a.org-home-stat-tile:hover {
   text-overflow: ellipsis;
 }
 
-/* Search + the org/side-quests toggle button share one row (see
-   Quests.jsx) — the search field grows to fill the remaining space next to
-   the fixed-width toggle pill. */
+/* Search + the Filters button share one row (see Quests.jsx) — the search
+   field grows to fill the remaining space next to the fixed-size button.
+   .vanish-search-field itself already carries flex:1/min-width:0 (see
+   below), so there's no row-scoped override needed here the way the
+   plain shared .search-field class would need in a row like this.
+   position:relative so the desktop popover (see .quest-filter-popover)
+   can span this row's full width — same width as .quest-list/.quest-
+   feed-main beside/below it, since they share the same parent column —
+   rather than being anchored to just the button's own narrow box. */
 .quest-search-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
-}
-.quest-search-row .search-field {
-  flex: 1;
-  max-width: none;
-  /* Flex items default to a min-width based on their content, not 0 — the
-     search icon alone would otherwise set a floor wide enough to push the
-     fixed-width toggle pill off a narrow phone screen. This lets the field
-     shrink as far as it has to (even past that floor) so the pill next to
-     it never gets cut off. */
-  min-width: 0;
-  overflow: hidden;
-}
-.quest-search-row .stamp-btn {
-  flex: none;
 }
 
 .tag-filter-row {
@@ -2302,10 +2295,169 @@ a.org-home-stat-tile:hover {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
-.quest-sort-select {
+/* ---------- quest filters (Explore Quests) ---------- */
+/* Replaces the old standalone Side Quest toggle + sort <select> + always-
+   visible tag row with one Filters icon button opening a panel (desktop:
+   anchored popover; mobile: bottom sheet) — see FilterPanelContent,
+   DesktopFilterPopover, MobileFilterSheet in mobile/Quests.jsx. Pills
+   inside reuse StampButton's existing primary/default variants, so only
+   the button/panel chrome itself needs new CSS here. Styled as the same
+   rounded-square button every other control in the app already uses (see
+   button/.stamp-btn's own var(--radius)/border/paper-card base), not a
+   bold filled circle — a muted icon button that only picks up the accent
+   color once a filter is actually active or the panel is open, same
+   selected-state language as every pill inside it, rather than a separate
+   numeric badge floating off its corner. */
+.quest-filter-wrap {
   flex: none;
-  padding: 6px 10px;
-  font-size: 0.85rem;
+}
+.quest-filter-btn {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--paper-card);
+  color: var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.quest-filter-btn:hover {
+  color: var(--line);
+  background: var(--paper-well);
+}
+.quest-filter-btn[data-filters-active='true'],
+.quest-filter-btn[aria-expanded='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Desktop: spans the full width of .quest-search-row (its positioned
+   ancestor — see there) rather than a fixed width hanging off just the
+   button's own narrow box, so it lines up with .quest-list/.quest-feed-
+   main beside/below it instead of looking like a disconnected floating
+   card. Own drop shadow, no backdrop (see DesktopFilterPopover's own
+   comment on why). */
+.quest-filter-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 18px;
+}
+
+/* Mobile: a proper centered modal card, on the same full-viewport backdrop
+   every other modal in the app uses (LightboxBackdrop, its default
+   centered/padded layout — no override needed here) — same rounded-on-
+   every-side, floating-with-margin treatment as .detail-modal-content
+   (Attendees/QR/EditProfile), not a bottom sheet flush against the screen
+   edges. A bottom sheet's flush bottom edge turned out to read as a
+   clipped/cut-off box rather than an intentional edge-to-edge surface;
+   floating with margin on every side reads as a deliberate modal instead,
+   and matches what every other modal in this app already looks like. */
+.quest-filter-sheet {
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Shared internal structure both surfaces render (see FilterPanelContent). */
+.quest-filter-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.quest-filter-panel-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.quest-filter-clear {
+  flex: none;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  /* Plain <button> inherits the base button rule's resting shadow/lift
+     (see button, .stamp-btn above) — reset here since this reads as a
+     plain text link action, not a bordered button. */
+  box-shadow: none;
+}
+.quest-filter-clear:hover {
+  text-decoration: underline;
+  box-shadow: none;
+  transform: none;
+}
+.quest-filter-group {
+  margin-bottom: 16px;
+}
+.quest-filter-group:last-child {
+  margin-bottom: 0;
+}
+.quest-filter-group-label {
+  margin: 0 0 8px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--accent);
+}
+/* Type/Activity/Sort — the label sits beside its pill row, not stacked
+   above it, so each group reads as one line rather than a heading-plus-
+   row pair (was jumbled into one unlabeled Sort & Activity group before;
+   this scans faster). A fixed label column keeps every row's pills
+   starting at the same left edge regardless of label length ("Sort" vs.
+   "Activity"). */
+.quest-filter-group-inline {
+  display: flex;
+  /* flex-start, not center — when a row's pills wrap onto a second line
+     (e.g. Sort's three options at a narrow width), center would vertically
+     center the label against the whole two-line block, leaving it
+     floating between the lines instead of level with the first one
+     (Recommended). flex-start keeps the label pinned to the top, level
+     with the first pill row regardless of how many lines wrap below it. */
+  align-items: flex-start;
+  gap: 14px;
+  /* A bit more breathing room between Type/Activity/Sort than the base
+     .quest-filter-group's 16px — each row already reads as a single dense
+     line (label + pills together), so it needs more separation from its
+     neighbors than a stacked label-above-pills group would. */
+  margin-bottom: 22px;
+}
+.quest-filter-group-inline:last-child {
+  margin-bottom: 0;
+}
+.quest-filter-group-inline .quest-filter-group-label {
+  margin: 0;
+  flex: none;
+  width: 68px;
+  /* Nudges the label's text down to sit level with the first pill row's
+     own text, rather than its top edge lining up with the pills' top
+     edge (the pills have their own vertical padding the label doesn't). */
+  padding-top: 9px;
+}
+.quest-filter-group-inline .quest-filter-pill-row {
+  flex: 1;
+}
+.quest-filter-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* ---------- desktop split view: list + detail panel ---------- */
@@ -3248,6 +3400,78 @@ button.data-row:active:not(:disabled) {
   outline: none;
   box-shadow: none;
 }
+
+/* VanishSearchInput (Explore Quests) — same bordered paper pill as
+   .search-field above, just with a canvas + an animated placeholder layer
+   stacked on top of the real input instead of a plain input alone. See
+   frontend/template/VanishSearchInput.jsx. */
+.vanish-search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 11px 16px;
+  overflow: hidden;
+}
+.vanish-search-icon {
+  flex: none;
+  color: var(--line-soft);
+}
+.vanish-search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.vanish-search-input {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  border: none;
+  padding: 0;
+  background: none;
+  font-family: var(--font-body);
+  color: var(--line);
+}
+.vanish-search-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.vanish-search-input.is-animating {
+  color: transparent;
+}
+.vanish-search-canvas {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scale(0.5);
+  transform-origin: top left;
+  opacity: 0;
+}
+.vanish-search-canvas.is-animating {
+  opacity: 1;
+}
+.vanish-search-placeholder-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.vanish-search-placeholder-layer p {
+  margin: 0;
+  color: var(--line-soft);
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 .quest-detail-edit-btn {
   position: absolute;
   top: 0;
@@ -3295,23 +3519,20 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
 }
 
-.profile-identity {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.profile-identity-info {
-  flex: 1;
-  min-width: 160px;
-}
-.profile-identity-info h1 {
-  margin-bottom: 2px;
-}
 .profile-meta {
   margin: 0;
   color: var(--line-soft);
+}
+
+/* The last 3 earned badges, next to the name (see Profile.jsx) — a plain
+   horizontal row, same BadgeRing tiles the Badges page itself uses, just
+   small. The whole row is one link (not one per badge): tapping any of
+   them goes to /badges, the same single destination regardless of which
+   icon was tapped. */
+.profile-name-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .back-link {
@@ -3350,16 +3571,47 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-well);
 }
 
-.profile-preview-badges {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+}
+
+/* The identity card — avatar/name+badges/email/Log out/Edit Profile, one
+   card at every width (used to split into a different desktop-only grid
+   with settings inline in a second column; that's reverted — a gear icon
+   here is simpler and consistent with OrganizationProfile.jsx's own). The
+   gear icon is positioned absolutely off this card's own top-right corner
+   (overriding .profile-settings-link's plain margin-left:auto flow-row
+   position above, which OrganizationProfile.jsx's own header still uses
+   as-is), not stacked in the centered column with everything else. */
+.profile-identity-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 55vh;
+  text-align: center;
+}
+.profile-identity-card .profile-settings-link {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  margin-left: 0;
+}
+.profile-identity-card .profile-name-badges {
+  justify-content: center;
+}
+/* Narrower on desktop and centered — full page width read as too wide
+   for a card this sparse (an avatar, a couple lines of text, two
+   buttons). */
+@media (min-width: 860px) {
+  .profile-identity-card {
+    max-width: 35vw;
+    margin: 0 auto;
+  }
 }
 
 /* ---------- Organization Profile page (see OrganizationProfile.jsx) ---------- */

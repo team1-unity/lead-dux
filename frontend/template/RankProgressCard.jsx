@@ -5,15 +5,13 @@ import { db } from './firebaseapp.jsx';
 import { pointsToNextRank, progressPercent, rankForPoints } from './rank.js';
 
 // Rank name, points, and the progress bar toward the next rank — the
-// glanceable core of Profile.jsx's ProgressCard (which also shows the
-// full milestone ladder and a Diamond-certificate banner), pulled out
-// here so mobile/Quests.jsx can show the same numbers right on the home
-// screen without duplicating the rank-derivation JSX in two files.
+// glanceable core of @shared/ProgressCard.jsx (which also shows the full
+// milestone ladder and a Diamond-certificate banner; that one lives on
+// Home.jsx now, see its own comment there), pulled out here for
+// mobile/Quests.jsx's pending_org banner, which just wants the quick
+// numbers without duplicating the rank-derivation JSX in two files.
 //
-// `points` is optional — pass it when the caller already has it on hand
-// (Profile.jsx's ProgressCard fetches points itself anyway, for the
-// milestone ladder's current-rank highlighting, so it passes that same
-// value down instead of triggering a second read of the same doc).
+// `points` is optional — pass it when the caller already has it on hand.
 // Callers with no reason to load it themselves (mobile/Quests.jsx) can
 // omit the prop and this fetches users/{uid} on its own.
 export function RankProgressCard({ points: pointsProp }) {

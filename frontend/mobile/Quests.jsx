@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -18,7 +18,6 @@ import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
-import { TagStamp } from '@shared/TagStamp.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
@@ -31,12 +30,13 @@ import { ShareButton } from '@shared/QuestSeriesRow.jsx';
 import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
+import { VanishSearchInput } from '@shared/VanishSearchInput.jsx';
 import {
   IconCalendar,
   IconUsers,
   IconCheck,
   IconAlert,
-  IconSearch,
+  IconFilter,
   IconLock,
   IconX,
 } from '@shared/icons.jsx';
@@ -1060,11 +1060,11 @@ export function sideQuestGate(primary, status) {
   return null;
 }
 
-// Sort priority for the side-quests list (there's no Sort-by picker for
-// this segment — see the tag-filter-row's segment !== 'side-quests'
-// guard): the caller's own current tier first (the ones actually worth
-// doing at this rank), then other already-unlocked lower tiers, then
-// locked ones last. unlockedTiers is cumulative and rank-ordered (see
+// Sort priority for the side-quests list (there's no Sort/My Activity/Tags
+// picker for this segment — see FilterPanelContent's showOrgGroups guard):
+// the caller's own current tier first (the ones actually worth doing at
+// this rank), then other already-unlocked lower tiers, then locked ones
+// last. unlockedTiers is cumulative and rank-ordered (see
 // _unlocked_tiers in functions/main.py) — its last entry is always the
 // caller's own tier. Doesn't change what's gated, only the display order;
 // sideQuestGate above is still what decides locked vs joinable.
@@ -1073,6 +1073,186 @@ function sideQuestPriority(tier, status) {
   const unlocked = status.unlockedTiers;
   if (!unlocked.includes(tier)) return 2;
   return tier === unlocked[unlocked.length - 1] ? 0 : 1;
+}
+
+const SORT_OPTIONS = [
+  { value: 'recommended', label: 'Recommended' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'soonest', label: 'Soonest' },
+];
+
+// Tags used to have their own picker in the filter panel — now they're
+// searched straight from the search bar instead (see VanishSearchInput),
+// as one fewer group to juggle. A #token (e.g. "#wellness volunteer")
+// pulls tag(s) out of the raw search text; whatever's left over is still
+// matched against title/orgName/location the same as before (see
+// visibleSeries below). Multiple #tokens OR together, same as the old
+// picker's multi-select behavior.
+function parseSearch(raw) {
+  const tags = [];
+  const text = raw
+    .replace(/#([a-z0-9-]+)/gi, (_match, tag) => {
+      tags.push(tag.toLowerCase());
+      return '';
+    })
+    .trim();
+  return { tags, text };
+}
+
+// One selected/unselected pill look, reused for TYPE/SORT & ACTIVITY
+// below — just StampButton's own existing primary-vs-default variant, so
+// "selected" is the same accent-filled look every other pill toggle in
+// the app already has (see ThemePicker's theme-option row), not a new
+// style invented just for this panel. `disabled` is only ever used for
+// Soonest while Past Attended is active (see the Sort & Activity group
+// below) — a real <button disabled>, not just a color/opacity change, so
+// it's actually unclickable, not merely styled to look that way.
+function FilterPill({ selected, disabled, onClick, children }) {
+  return (
+    <StampButton
+      type='button'
+      variant={selected ? 'primary' : 'default'}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </StampButton>
+  );
+}
+
+// The actual filter controls, identical on both surfaces (desktop popover
+// and mobile sheet — see DesktopFilterPopover/MobileFilterSheet below);
+// only the surrounding chrome differs. Activity (Past Attended/RSVP'd)
+// applies to side quests too now — attendance/RSVP records don't care
+// whether a quest is isDefault, so there's no real reason a side-quest-
+// only view shouldn't filter by them the same way org quests do (see
+// pastAttendedSeriesList/visibleSeries below). Sort is the one still
+// disabled (greyed out, not removed — see sideQuests below) for side
+// quests: there's no AI-recommended ordering for them, and their own
+// tier-priority order (or, once Past Attended, the same recency order org
+// quests use — see visibleSeries) already decides how they're arranged,
+// with nothing left for Recommended/Newest/Soonest to control.
+//
+// Type, then Activity, then Sort — each its own labeled row (label beside
+// the pills, not stacked above them), rather than jumbling Sort and
+// Activity into one unlabeled group; that read faster to build but proved
+// harder to scan than three plain rows. Tags used to be a group here too
+// — they're searched via a #tag token in the search bar instead now (see
+// VanishSearchInput/parseSearch below), not a picker in this panel.
+//
+// One more disabled case, independent of Side Quests: Soonest doesn't
+// make sense once Past Attended is active — a past quest's date is
+// already behind it, so "soonest" (nearest upcoming first) has nothing
+// real left to rank — so it's disabled the same way, rather than silently
+// producing a backwards-reading order (see Quests()'s own
+// handleSelectActivity, which also switches away from Soonest
+// automatically if it was already selected).
+function FilterPanelContent({
+  segment,
+  onSelectSegment,
+  sort,
+  onSelectSort,
+  activity,
+  onSelectActivity,
+  activeFilterCount,
+  onClearAll,
+}) {
+  const sideQuests = segment === 'side-quests';
+  return (
+    <div className='quest-filter-panel'>
+      <div className='quest-filter-panel-header'>
+        <h2>Filters</h2>
+        {activeFilterCount > 0 && (
+          <button type='button' className='quest-filter-clear' onClick={onClearAll}>
+            Clear all
+          </button>
+        )}
+      </div>
+
+      <div className='quest-filter-group quest-filter-group-inline'>
+        <p className='quest-filter-group-label'>Type</p>
+        <div className='quest-filter-pill-row'>
+          <FilterPill selected={segment === 'org'} onClick={() => onSelectSegment('org')}>
+            Quests
+          </FilterPill>
+          <FilterPill selected={sideQuests} onClick={() => onSelectSegment('side-quests')}>
+            Side Quests
+          </FilterPill>
+        </div>
+      </div>
+
+      <div className='quest-filter-group quest-filter-group-inline'>
+        <p className='quest-filter-group-label'>Activity</p>
+        <div className='quest-filter-pill-row'>
+          <FilterPill
+            selected={activity === 'past'}
+            onClick={() => onSelectActivity(activity === 'past' ? null : 'past')}
+          >
+            Past Attended
+          </FilterPill>
+          <FilterPill
+            selected={activity === 'mine'}
+            onClick={() => onSelectActivity(activity === 'mine' ? null : 'mine')}
+          >
+            RSVP&rsquo;d
+          </FilterPill>
+        </div>
+      </div>
+
+      <div className='quest-filter-group quest-filter-group-inline'>
+        <p className='quest-filter-group-label'>Sort</p>
+        <div className='quest-filter-pill-row'>
+          {SORT_OPTIONS.map((opt) => (
+            <FilterPill
+              key={opt.value}
+              selected={sort === opt.value}
+              disabled={sideQuests || (opt.value === 'soonest' && activity === 'past')}
+              onClick={() => onSelectSort(opt.value)}
+            >
+              {opt.label}
+            </FilterPill>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Desktop presentation: an anchored popover, not a full-screen modal — it
+// covers a corner of the page, not all of it, so (unlike
+// LightboxBackdrop's full-viewport dim) there's no backdrop at all here.
+// Closing on outside click/Escape is handled by the caller (see Quests()'s
+// own effect, which watches the whole wrapping .quest-filter-wrap element
+// this renders inside of — no ref of its own needed here).
+function DesktopFilterPopover({ children }) {
+  return (
+    <div className='quest-filter-popover' role='dialog' aria-label='Filters'>
+      {children}
+    </div>
+  );
+}
+
+// Mobile presentation: a centered modal card, the same full-viewport
+// backdrop every other modal in this app already uses (see
+// LightboxBackdrop — backdrop tap/Escape-to-close, and its default
+// centered layout, come for free from there, no override needed), same
+// treatment as Attendees/QR/EditProfile's own modals rather than a bottom
+// sheet (a sheet flush against the screen edges read as a clipped/cut-off
+// box, not a deliberate surface). Filtering itself is already live/instant
+// (all client-side, no network re-query), so "Done" is only a dismiss
+// action, not a gate on when selections take effect.
+function MobileFilterSheet({ onClose, children }) {
+  return (
+    <LightboxBackdrop onClose={onClose} label='Filters'>
+      <div className='quest-filter-sheet' onClick={(e) => e.stopPropagation()}>
+        {children}
+        <StampButton type='button' variant='primary' style={{ width: '100%' }} onClick={onClose}>
+          Done
+        </StampButton>
+      </div>
+    </LightboxBackdrop>
+  );
 }
 
 export function Quests({ interests, name, recommendedQuestOrder }) {
@@ -1097,7 +1277,6 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   const [seriesRatingsById, setSeriesRatingsById] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
-  const [activeTag, setActiveTag] = useState(null);
   const [openSeriesId, setOpenSeriesId] = useState(null);
   // Admin-created quests are always side/neighborhood quests (isDefault,
   // never orgId) — landing an admin on the "org" segment by default means
@@ -1116,13 +1295,21 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   const [search, setSearch] = useState('');
   // 'recommended'/'soonest'/'newest' apply different orderings to the same
   // upcoming org-quest list ('recommended' leaves load()'s own relevance/
-  // AI-ranked sort untouched). 'mine' and 'past' are filters, not sorts —
-  // folded into this same dropdown rather than a separate segmented control
-  // (see the tag-filter-row below), since both only ever apply within the
-  // org-quests segment anyway.
-  const [sortBy, setSortBy] = useState(
-    initialView === 'past' || initialView === 'mine' ? initialView : 'recommended',
+  // AI-ranked sort untouched) — a true sort, always exactly one active.
+  const [sort, setSort] = useState('recommended');
+  // 'mine'/'past' are filters, not sorts, and now their own group (My
+  // Activity) in the filter panel rather than folded into the sort
+  // control — null means neither is active. They're mutually exclusive
+  // (picking one clears the other) since the underlying lists can't
+  // overlap: an occurrence is either upcoming-and-possibly-RSVP'd or
+  // already-past-and-attended, never both. Combined with `sort` (not
+  // overridden by it) — see visibleSeries below.
+  const [activity, setActivity] = useState(
+    initialView === 'past' || initialView === 'mine' ? initialView : null,
   );
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const filterWrapRef = useRef(null);
+  const filterBtnRef = useRef(null);
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
 
@@ -1205,39 +1392,55 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   }
   useEffect(loadSideQuestStatus, [role]);
 
-  // Lets a plain vertical mouse wheel scroll the tag row horizontally —
-  // there's no scrollbar (see .tag-filter-row's scrollbar-width: none) and
-  // a touchpad's native horizontal swipe already works, but a normal mouse
-  // has no horizontal wheel axis at all otherwise. Attached manually
-  // (rather than a JSX onWheel prop) because preventDefault is required to
-  // stop the page itself from also scrolling vertically, and React
-  // registers onWheel as a passive listener, which silently ignores
-  // preventDefault.
-  //
-  // A callback ref rather than useRef+useEffect(fn, []): this row doesn't
-  // exist yet on the very first render (seriesList starts null, so the
-  // component briefly returns just <LoadingSpinner/> below before the tag
-  // row itself ever mounts) — an effect with an empty dependency array
-  // would fire once against that still-null ref and never run again once
-  // the real row showed up. A callback ref instead re-fires any time this
-  // exact DOM node mounts or unmounts, whenever that happens to be.
-  const tagRowCleanupRef = useRef(null);
-  const tagRowRef = useCallback((el) => {
-    if (tagRowCleanupRef.current) {
-      tagRowCleanupRef.current();
-      tagRowCleanupRef.current = null;
+  // Closes the filter popover on an outside click or Escape — only wired
+  // up on desktop; the mobile sheet gets the same behavior for free from
+  // LightboxBackdrop (backdrop tap / Escape), which also handles its own
+  // scroll lock, so it doesn't need this effect at all.
+  useEffect(() => {
+    if (!filterPanelOpen || !isDesktop) return undefined;
+    function onPointerDown(e) {
+      if (filterWrapRef.current && !filterWrapRef.current.contains(e.target)) {
+        setFilterPanelOpen(false);
+      }
     }
-    if (!el) return;
-    function onWheel(e) {
-      // A trackpad's own horizontal swipe already reports deltaX — leave
-      // that alone and only take over for a plain vertical wheel.
-      if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
-      e.preventDefault();
-      el.scrollLeft += e.deltaY;
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setFilterPanelOpen(false);
     }
-    el.addEventListener('wheel', onWheel, { passive: false });
-    tagRowCleanupRef.current = () => el.removeEventListener('wheel', onWheel);
-  }, []);
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [filterPanelOpen, isDesktop]);
+
+  // Restores focus to the trigger button whenever the panel closes, by
+  // whichever path closed it (its own button, outside click, Escape, the
+  // mobile sheet's Done/backdrop) — not just the ones triggered directly
+  // by that button.
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !filterPanelOpen) filterBtnRef.current?.focus();
+    wasOpenRef.current = filterPanelOpen;
+  }, [filterPanelOpen]);
+
+  function clearAllFilters() {
+    setSort('recommended');
+    setActivity(null);
+    setSearch((prev) => parseSearch(prev).text);
+  }
+
+  // Soonest ("nearest upcoming first") has nothing real to rank once
+  // looking at already-past quests, so switching Activity to Past
+  // Attended while Soonest is the active sort backs off to Recommended
+  // instead of leaving a sort selected that reads backwards against a
+  // past list. FilterPanelContent also disables the Soonest pill outright
+  // while Past Attended is active, so this only ever fires for
+  // whatever was already selected coming in.
+  function handleSelectActivity(next) {
+    setActivity(next);
+    if (next === 'past' && sort === 'soonest') setSort('recommended');
+  }
 
   async function toggleRsvp(quest) {
     setBusyId(quest.id);
@@ -1271,48 +1474,83 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
     );
   }, [seriesList, segment]);
 
-  // Past Attended (see the sortBy==='past' option below) — organization
-  // quests only (no side-quests equivalent), built from allQuests (the one
-  // list load() doesn't pre-filter to upcoming) crossed against
-  // attendedAtByEventId, so a quest only shows here once actually checked
-  // into, not just RSVP'd and never attended.
+  // Past Attended (see the activity==='past' filter below) — org quests
+  // AND side quests both (attendance doesn't care whether a quest was
+  // isDefault), built from allQuests (the one list load() doesn't pre-
+  // filter to upcoming) crossed against attendedAtByEventId, so a quest
+  // only shows here once actually checked into, not just RSVP'd and never
+  // attended. Segment-filtered same as segmentedList below, at the point
+  // it's actually used (visibleSeries) — not here, so this one list can
+  // still serve either segment without rebuilding it per-segment.
   const pastAttendedSeriesList = useMemo(() => {
     if (!allQuests || !attendedAtByEventId) return [];
-    const attended = allQuests.filter(
-      (q) => !q.isDefault && !isUpcoming(q) && attendedAtByEventId.has(q.id),
-    );
+    const attended = allQuests.filter((q) => !isUpcoming(q) && attendedAtByEventId.has(q.id));
     return attachSeriesRatings(groupBySeries(attended), seriesRatingsById || new Map());
   }, [allQuests, attendedAtByEventId, seriesRatingsById]);
 
+  // No longer a picker in the filter panel (see FilterPanelContent) — just
+  // the pool of real tag values #-search can match against, and the
+  // source for the search bar's rotating "Try #___" placeholder hints.
   const availableTags = useMemo(() => {
     const seen = new Set();
     segmentedList.forEach((s) => (s.primary.tags || []).forEach((t) => seen.add(t)));
     return [...seen];
   }, [segmentedList]);
 
+  // What VanishSearchInput's placeholder cycles through — a plain "Search"
+  // first, then a few real tags as "Try #___" hints, teaching the #tag
+  // syntax without a dedicated help string. Capped at 4 so it doesn't take
+  // forever to cycle back around on a heavily-tagged segment.
+  const searchPlaceholders = useMemo(
+    () => ['Search', ...availableTags.slice(0, 4).map((tag) => `Try #${tag}`)],
+    [availableTags],
+  );
+
+  // Sort now always controls ordering (see FilterPanelContent's Sort
+  // group) — Activity (Past Attended/RSVP'd) is a pure filter on top of
+  // it, not its own ordering override the way the old single dropdown's
+  // 'mine'/'past' options were. The one exception: Recommended has no
+  // real meaning for a past-attended list (there's no relevance ranking
+  // to fall back on — pastAttendedSeriesList isn't built through the same
+  // AI-ranked load() path segmentedList is), so Recommended + Past
+  // Attended falls back to the same "most recently attended first" order
+  // the old dedicated 'past' sort used, rather than an arbitrary one.
+  const { tags: searchTags, text: searchText } = useMemo(() => parseSearch(search), [search]);
+
+  const activeFilterCount =
+    (sort !== 'recommended' ? 1 : 0) + (activity ? 1 : 0) + (searchTags.length > 0 ? 1 : 0);
+
   const visibleSeries = useMemo(() => {
     let list;
-    if (sortBy === 'past') {
-      list = pastAttendedSeriesList;
-    } else if (sortBy === 'mine') {
+    if (activity === 'past') {
+      list = pastAttendedSeriesList.filter((s) =>
+        segment === 'side-quests' ? s.primary.isDefault : !s.primary.isDefault,
+      );
+    } else if (activity === 'mine') {
       list = segmentedList.filter((s) => s.occurrences.some((o) => (o.rsvpd || []).includes(user?.uid)));
     } else {
       list = segmentedList;
     }
 
-    if (activeTag) list = list.filter((s) => (s.primary.tags || []).includes(activeTag));
-    const q = search.trim().toLowerCase();
+    if (searchTags.length > 0) {
+      list = list.filter((s) => (s.primary.tags || []).some((t) => searchTags.includes(t.toLowerCase())));
+    }
+    const q = searchText.toLowerCase();
     if (q) {
       list = list.filter((s) => {
         const { title, orgName, location } = s.primary;
         return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
       });
     }
-    if (segment === 'side-quests') {
+    if (segment === 'side-quests' && activity !== 'past') {
+      // Tier priority always wins for side quests — except once looking at
+      // already-attended ones, where "worth doing at this rank" has
+      // nothing left to rank; that case falls through to the same
+      // recency order org quests' Past Attended uses (see below).
       list = [...list].sort(
         (a, b) => sideQuestPriority(a.primary.tier, sideQuestStatus) - sideQuestPriority(b.primary.tier, sideQuestStatus),
       );
-    } else if (sortBy === 'soonest') {
+    } else if (sort === 'soonest') {
       // No date (a dateless side quest) sorts last, not first — there's no
       // "soonest" to compare it against.
       list = [...list].sort((a, b) => {
@@ -1320,19 +1558,20 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         const bTime = b.primary.eventDate ? toDate(b.primary.eventDate).getTime() : Infinity;
         return aTime - bTime;
       });
-    } else if (sortBy === 'newest') {
+    } else if (sort === 'newest') {
       list = [...list].sort((a, b) => {
         const aTime = a.primary.createdAt ? toDate(a.primary.createdAt).getTime() : 0;
         const bTime = b.primary.createdAt ? toDate(b.primary.createdAt).getTime() : 0;
         return bTime - aTime;
       });
-    } else if (sortBy === 'past') {
-      // Most recently attended first — by each series' own most recent
-      // checkedInAt (not primary.eventDate, the series' EARLIEST
-      // occurrence — see groupBySeries). A recurring series someone's
-      // attended more than once would otherwise sort by its oldest visit
-      // instead of its most recent one, disagreeing with mobile/Home.jsx's
-      // own "last attended quest" link, which goes by checkedInAt too.
+    } else if (activity === 'past') {
+      // Recommended's fallback for Past Attended — most recently attended
+      // first, by each series' own most recent checkedInAt (not
+      // primary.eventDate, the series' EARLIEST occurrence — see
+      // groupBySeries). A recurring series someone's attended more than
+      // once would otherwise sort by its oldest visit instead of its most
+      // recent one, disagreeing with mobile/Home.jsx's own "last attended
+      // quest" link, which goes by checkedInAt too.
       const mostRecentCheckIn = (series) =>
         Math.max(
           ...series.occurrences.map((o) => {
@@ -1346,9 +1585,10 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   }, [
     segmentedList,
     pastAttendedSeriesList,
-    activeTag,
-    search,
-    sortBy,
+    searchTags,
+    searchText,
+    sort,
+    activity,
     segment,
     sideQuestStatus,
     user,
@@ -1390,9 +1630,9 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
       <div className='quest-feed-main'>
         <div className='quest-feed-greeting'>
           <h1>
-            {sortBy === 'mine'
+            {activity === 'mine'
               ? "Your RSVP'd quests"
-              : sortBy === 'past'
+              : activity === 'past'
                 ? 'Past attended quests'
                 : 'Explore Quests'}
           </h1>
@@ -1426,86 +1666,84 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         )}
 
         <div className='quest-search-row'>
-          <div className='search-field'>
-            <IconSearch />
-            <input
-              type='search'
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder='Search'
-              aria-label='Search quests'
-            />
-          </div>
-          {/* The org/side-quests switch (previously a two-option segmented
-              tab) is now a single toggle pill whose label names the OTHER
-              view, matching the wireframe's one "Side Quest" button. */}
-          <StampButton
-            type='button'
-            onClick={() => {
-              setSegment((s) => (s === 'org' ? 'side-quests' : 'org'));
-              setActiveTag(null);
-            }}
-          >
-            {segment === 'org' ? 'Side Quest' : 'Quests'}
-          </StampButton>
-        </div>
-
-        {/* "Recommended"/Soonest/Newest are orderings of the same upcoming
-            org-quest list ('recommended' is load()'s own relevance/AI-
-            ranked sort, left untouched). "My RSVPs" and "Past Attended"
-            are filters folded into this same dropdown instead of a
-            separate segmented control — both only ever apply within the
-            org-quests segment, so there was no need for a third/fourth
-            toggle pill next to Side Quest. Shares a row with the tag
-            chips, matching the wireframe's single filter-pill line.
-            Hidden for side quests — there are only ever a handful of them
-            (the admin-created neighborhood quests), so sorting/tagging/
-            RSVP-filtering a short list like that adds controls nobody
-            needs. */}
-        {segment !== 'side-quests' && (
-          <div className='tag-filter-row' ref={tagRowRef}>
-            <label className='visually-hidden' htmlFor='quest-sort-by'>
-              Sort by
-            </label>
-            <select
-              id='quest-sort-by'
-              className='quest-sort-select'
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
+          <VanishSearchInput
+            value={search}
+            onChange={setSearch}
+            placeholders={searchPlaceholders}
+            ariaLabel='Search quests'
+          />
+          {/* Replaces the old standalone Side Quest toggle pill and the
+              sort dropdown + tag row below it with one consolidated
+              Filters button — Type/Sort/My Activity live in one panel now
+              (see FilterPanelContent), opened here. Tags moved into the
+              search bar itself instead (see #tag in VanishSearchInput's
+              placeholder hints and parseSearch above). */}
+          <div className='quest-filter-wrap' ref={filterWrapRef}>
+            <button
+              ref={filterBtnRef}
+              type='button'
+              className='quest-filter-btn'
+              aria-haspopup='dialog'
+              aria-expanded={filterPanelOpen}
+              aria-label={`Filters, ${activeFilterCount} active`}
+              data-filters-active={activeFilterCount > 0 ? 'true' : undefined}
+              onClick={() => setFilterPanelOpen((o) => !o)}
             >
-              <option value='recommended'>Recommended</option>
-              <option value='soonest'>Soonest</option>
-              <option value='newest'>Newest</option>
-              <option value='mine'>My RSVPs</option>
-              <option value='past'>Past Attended</option>
-            </select>
-            {availableTags.length > 0 && (
-              <>
-                <TagStamp
-                  selectable
-                  selected={activeTag === null}
-                  onClick={() => setActiveTag(null)}
-                >
-                  All
-                </TagStamp>
-                {availableTags.map((tag) => (
-                  <TagStamp
-                    key={tag}
-                    tone={tag}
-                    selectable
-                    selected={activeTag === tag}
-                    onClick={() => setActiveTag(tag)}
-                  >
-                    {tag}
-                  </TagStamp>
-                ))}
-              </>
+              <IconFilter width={22} height={22} />
+            </button>
+            {filterPanelOpen && isDesktop && (
+              <DesktopFilterPopover>
+                <FilterPanelContent
+                  segment={segment}
+                  onSelectSegment={(next) => {
+                    setSegment(next);
+                    setSearch((prev) => parseSearch(prev).text);
+                  }}
+                  sort={sort}
+                  onSelectSort={setSort}
+                  activity={activity}
+                  onSelectActivity={handleSelectActivity}
+                  activeFilterCount={activeFilterCount}
+                  onClearAll={clearAllFilters}
+                />
+              </DesktopFilterPopover>
             )}
           </div>
+        </div>
+
+        {filterPanelOpen && !isDesktop && (
+          <MobileFilterSheet onClose={() => setFilterPanelOpen(false)}>
+            <FilterPanelContent
+              segment={segment}
+              onSelectSegment={(next) => {
+                setSegment(next);
+                setSearch((prev) => parseSearch(prev).text);
+              }}
+              sort={sort}
+              onSelectSort={setSort}
+              activity={activity}
+              onSelectActivity={handleSelectActivity}
+              activeFilterCount={activeFilterCount}
+              onClearAll={clearAllFilters}
+            />
+          </MobileFilterSheet>
         )}
 
         {visibleSeries.length === 0 ? (
-          <p>No quests match that filter.</p>
+          <div className='quest-empty'>
+            <p>No quests match that filter.</p>
+            {(activeFilterCount > 0 || search.trim()) && (
+              <StampButton
+                type='button'
+                onClick={() => {
+                  clearAllFilters();
+                  setSearch('');
+                }}
+              >
+                Clear filters
+              </StampButton>
+            )}
+          </div>
         ) : (
           <motion.ul
             className='quest-list'

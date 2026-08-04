@@ -6,7 +6,7 @@ import { db } from '@shared/firebaseapp.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
-import { RankProgressCard } from '@shared/RankProgressCard.jsx';
+import { ProgressCard } from '@shared/ProgressCard.jsx';
 import { NotificationBanner } from '@shared/NotificationBanner.jsx';
 
 function toMillis(value) {
@@ -60,14 +60,12 @@ function useLastAttendedQuest(user) {
 // links into two of Explore Quests' own filters (your RSVP'd quests
 // always; revisit past quests only once there's actually a past quest to
 // revisit) rather than dropping someone straight into the quest feed.
-// Rank progress
-// is RankProgressCard (shared with mobile/Quests.jsx on main) — this used
-// to be its own one-line "X to next rank" teaser here, but the full card
-// (rank name, points, and the same progress bar) reads better than a
-// teaser when it's already the first thing on the page, and it's one
-// less rank-derivation implementation to keep in sync. Profile's own
-// ProgressCard is unaffected (full milestone ladder + certificate banner,
-// out of scope here).
+// Rank progress is ProgressCard (@shared/ProgressCard.jsx — moved here
+// from Profile.jsx, its original home) — the full rank card (name,
+// points, progress bar, milestone ladder, certificate banner), not the
+// lighter RankProgressCard teaser mobile/Quests.jsx's pending_org banner
+// still uses. It's the first thing a "user" role sees now, rather than
+// tucked away on their Profile page.
 export function Home() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
@@ -95,7 +93,7 @@ export function Home() {
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <RankProgressCard />
+        <ProgressCard />
       </div>
 
       <div className='home-actions flex flex-col gap-md'>
