@@ -1,56 +1,69 @@
 import { hashTone, TONE_HEX } from './tagTones.js';
 
-// Extracted from EventsMap.jsx so anything else that embeds a Google Map
-// (SinglePinMap.jsx, used by the map-quest-detail standalone/public pages)
-// can reuse the exact same recolored style and pin icon instead of
-// duplicating either.
+// Extracted so anything that embeds a MapLibre map (EventsMap.jsx,
+// SinglePinMap.jsx) can reuse the exact same style URL and pin-marker
+// look instead of duplicating either.
 
-// A custom JSON style (the classic per-feature stylers array) rather than a
-// Cloud Console Map ID — this works on the plain raster map with zero
-// extra setup, and gets the same "doesn't look like default Google Maps"
-// result: recolored to the app's own paper/ink palette (see style.css's
-// --paper/--line/--accent tokens) and stripped of the business/POI icon
-// clutter that would otherwise compete with our own quest pins.
-export const MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#efe9df' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#4a4a42' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
-  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#efe9df' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cfe0da' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0d9c9' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e0d9c9' }] },
-  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a42' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#c9c0a9' }] },
-  { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
-];
+// MapTiler-hosted vector style (a full "style.json" — the vector-tile
+// equivalent of the old Google stylers array, but authored/hosted by
+// MapTiler rather than hand-written here). Swap the style id here if you
+// want a different look — browse options at https://cloud.maptiler.com/maps/
+// (each has its own id shown in the "Use vector style" tab).
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY;
+export const MAP_STYLE_URL = `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`;
 
-// A bold colored pin per quest, echoing the same tone (via the same
-// hashTone(orgId) seed) as that quest's OrgAvatar tile elsewhere on this
-// page — the marker and the list row it corresponds to visibly match.
-// Google's stock red teardrop reads as "generic map," not "a quest is
-// here"; this is a chunkier, ink-bordered pin with a solid center dot
-// matching the app's own neobrutalist ink-card look, built as an SVG data
-// URI since Marker icons can't reference our CSS custom properties directly.
-// `selected` renders it ~35% larger — EventsMap's own highlight for
-// whichever pin's list row/overlay is currently open, rather than a second,
-// visually distinct icon shape (a bigger version of the same pin reads as
-// "this one" without looking like a different kind of marker).
-export function questPinIcon(seed, selected = false) {
+function pinSvg(seed, selected) {
   const tone = TONE_HEX[hashTone(seed)];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 30">
+  const width = selected ? 40 : 30;
+  const height = selected ? 50 : 37;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 24 30">
     <path d="M12 1C5.925 1 1 5.925 1 12c0 8.5 11 16.5 11 16.5S23 20.5 23 12C23 5.925 18.075 1 12 1z"
       fill="${tone.fill}" stroke="${tone.ink}" stroke-width="2"/>
     <circle cx="12" cy="12" r="4.5" fill="${tone.ink}"/>
   </svg>`;
-  const width = selected ? 40 : 30;
-  const height = selected ? 50 : 37;
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: new window.google.maps.Size(width, height),
-    anchor: new window.google.maps.Point(width / 2, height),
-  };
+  return { svg, width, height };
+}
+
+// Paints (or repaints, for the selected-size toggle) a quest pin's look
+// directly onto an existing marker DOM element, rather than replacing the
+// element/marker outright — a MapLibre Marker keeps one DOM element for
+// its whole lifetime (there's no `marker.setIcon()` the way Google's
+// Marker had), so "this pin is now selected" is a style mutation on the
+// same node, not a new marker.
+export function paintQuestPin(el, seed, selected = false) {
+  const { svg, width, height } = pinSvg(seed, selected);
+  el.style.width = `${width}px`;
+  el.style.height = `${height}px`;
+  el.style.backgroundImage = `url("data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}")`;
+  el.style.backgroundSize = 'contain';
+  el.style.backgroundRepeat = 'no-repeat';
+  el.style.cursor = 'pointer';
+}
+
+// A bold colored pin per quest, echoing the same tone (via the same
+// hashTone(orgId) seed) as that quest's OrgAvatar tile elsewhere on this
+// page — the marker and the list row it corresponds to visibly match.
+// Built as a plain <div> painted with an SVG data-URI background rather
+// than an <img> or a Google-style icon descriptor object — MapLibre's
+// Marker takes any real DOM element directly (new maplibregl.Marker({
+// element })), so there's no separate icon-shape API to satisfy the way
+// Google's {url, scaledSize, anchor} was.
+export function createQuestPinElement(seed) {
+  const el = document.createElement('div');
+  paintQuestPin(el, seed, false);
+  return el;
+}
+
+// The user's-own-position marker — a plain filled circle (distinct from a
+// quest pin at a glance), same visual as the old
+// google.maps.SymbolPath.CIRCLE icon.
+export function createUserPositionElement() {
+  const el = document.createElement('div');
+  el.style.width = '16px';
+  el.style.height = '16px';
+  el.style.borderRadius = '50%';
+  el.style.background = '#4285f4';
+  el.style.border = '3px solid #ffffff';
+  el.style.boxShadow = '0 0 0 1px rgba(0, 0, 0, 0.15)';
+  return el;
 }

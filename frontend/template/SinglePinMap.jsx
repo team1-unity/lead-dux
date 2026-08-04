@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { loadMapsLibrary, loadMarkerLibrary } from './googleMaps.js';
-import { MAP_STYLE, questPinIcon } from './mapStyle.js';
+import { Map as MapLibreMap, Marker } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { MAP_STYLE_URL, createQuestPinElement } from './mapStyle.js';
 
 // A small, single-pin embedded map for the standalone/public quest-detail
 // pages (MapQuestPage.jsx, MapQuestShare.jsx) — those don't sit next to
@@ -14,23 +15,22 @@ export function SinglePinMap({ lat, lng, seed }) {
 
   useEffect(() => {
     if (!containerRef.current || lat == null || lng == null) return undefined;
-    let cancelled = false;
-    Promise.all([loadMapsLibrary(), loadMarkerLibrary()]).then(([{ Map }, { Marker }]) => {
-      if (cancelled || !containerRef.current) return;
-      const map = new Map(containerRef.current, {
-        center: { lat, lng },
-        zoom: 15,
-        styles: MAP_STYLE,
-        disableDefaultUI: true,
-        zoomControl: true,
-        gestureHandling: 'cooperative',
-      });
-      // eslint-disable-next-line no-new
-      new Marker({ map, position: { lat, lng }, icon: questPinIcon(seed) });
+    const map = new MapLibreMap({
+      container: containerRef.current,
+      style: MAP_STYLE_URL,
+      center: [lng, lat],
+      zoom: 15,
+      // cooperativeGestures — a two-finger/ctrl+scroll is required to zoom
+      // this small embedded map, same as Google's gestureHandling:
+      // 'cooperative' — otherwise scrolling the page while the cursor
+      // happens to pass over this little map would hijack the scroll into
+      // a map zoom instead.
+      cooperativeGestures: true,
     });
-    return () => {
-      cancelled = true;
-    };
+    new Marker({ element: createQuestPinElement(seed), anchor: 'bottom' })
+      .setLngLat([lng, lat])
+      .addTo(map);
+    return () => map.remove();
   }, [lat, lng, seed]);
 
   if (lat == null || lng == null) return null;
