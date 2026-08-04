@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
@@ -13,6 +13,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
+import { Collapse } from '@shared/Collapse.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
@@ -27,15 +28,6 @@ import {
   IconX,
 } from '@shared/icons.jsx';
 
-// One entrance per row, staggered from the parent's transition — same
-// values as mobile/Quests.jsx's own copy (not exported from there, so
-// duplicated here rather than shared).
-const listVariants = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
-};
-
 // The compact collapsed row — title, star rating, and date (same flat,
 // avatar-free card style as the redesigned member-facing mobile/Quests.jsx,
 // minus the org avatar since every quest here already belongs to this same
@@ -43,11 +35,18 @@ const itemVariants = {
 // view, this one still expands in place rather than navigating away —
 // management actions live in the detail body, not a separate page — so the
 // chevron (rather than a tap hint) is still the right affordance here.
-function QuestSeriesListItem({ series, isOpen, isActive, onSelect, children }) {
+function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, children }) {
   const { primary } = series;
   const eventDate = formatEventDate(primary.eventDate);
+  const reduce = useReducedMotion();
   return (
-    <motion.li className='quest-row' variants={itemVariants}>
+    <motion.li
+      className='quest-row'
+      initial={reduce ? false : { opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1], delay: Math.min(index, 5) * 0.04 }}
+    >
       <div className='ink-card quest-content-col' data-active={isActive ? 'true' : undefined}>
         <button
           type='button'
@@ -66,7 +65,7 @@ function QuestSeriesListItem({ series, isOpen, isActive, onSelect, children }) {
           </div>
           <IconChevron className='quest-chevron' data-open={isOpen ? 'true' : 'false'} />
         </button>
-        {isOpen && children}
+        <Collapse open={isOpen}>{children}</Collapse>
       </div>
     </motion.li>
   );
@@ -306,7 +305,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
             shows for quests that predate that change. */}
         {!selected.qrToken ? (
           <StampButton type='button' onClick={a.generateQr} disabled={a.qrBusy}>
-            {a.qrBusy ? 'Generating...' : 'Generate QR Code'}
+            {a.qrBusy ? 'Generating…' : 'Generate QR Code'}
           </StampButton>
         ) : (
           <StampButton type='button' onClick={a.viewQr} disabled={a.qrBusy}>
@@ -350,7 +349,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           <div className='qr-modal-content' onClick={(e) => e.stopPropagation()}>
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
-              confirmLabel={a.qrBusy ? 'Working...' : 'Yes, regenerate'}
+              confirmLabel={a.qrBusy ? 'Working…' : 'Yes, regenerate'}
               submitting={a.qrBusy}
               onConfirm={() => {
                 a.refreshQr();
@@ -400,17 +399,17 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           <span className='quest-card-titles'>View Reviews</span>
           <IconChevron className='quest-chevron' data-open={a.reviewsOpen ? 'true' : 'false'} />
         </button>
-        {a.reviewsOpen && a.reviews && (
+        <Collapse open={Boolean(a.reviewsOpen && a.reviews)}>
           <ul className='data-sublist'>
-            {a.reviews.length === 0 && <li>No reviews yet.</li>}
-            {a.reviews.map((r) => (
+            {a.reviews?.length === 0 && <li>No reviews yet.</li>}
+            {a.reviews?.map((r) => (
               <li key={`${r.uid}-${r.eventDate}`}>
                 {formatStars(r.rating)} — {r.name || 'Unnamed'}
                 {r.eventDate ? ` (${formatEventDate(r.eventDate)})` : ''}: {r.body}
               </li>
             ))}
           </ul>
-        )}
+        </Collapse>
       </div>
     </div>
   );
@@ -441,7 +440,7 @@ function OrgQuests({ creating, setCreating }) {
     [quests, seriesAggregates],
   );
 
-  if (!quests) return <LoadingSpinner label='Loading your quests...' />;
+  if (!quests) return <LoadingSpinner label='Loading your quests…' />;
 
   const activeSeriesId = isDesktop
     ? (openSeriesId ?? seriesList[0]?.seriesId ?? null)
@@ -481,11 +480,12 @@ function OrgQuests({ creating, setCreating }) {
         {seriesList.length === 0 ? (
           <p>You haven't created any quests yet.</p>
         ) : (
-          <motion.ul className='quest-list' variants={listVariants} initial='hidden' animate='show'>
-            {seriesList.map((series) => (
+          <ul className='quest-list'>
+            {seriesList.map((series, index) => (
               <QuestSeriesListItem
                 key={series.seriesId}
                 series={series}
+                index={index}
                 isOpen={!isDesktop && openSeriesId === series.seriesId}
                 isActive={isDesktop && activeSeriesId === series.seriesId}
                 onSelect={() => {
@@ -505,7 +505,7 @@ function OrgQuests({ creating, setCreating }) {
                 )}
               </QuestSeriesListItem>
             ))}
-          </motion.ul>
+          </ul>
         )}
       </div>
 

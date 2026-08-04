@@ -163,7 +163,7 @@ function ReviewsTab({ questId }) {
     };
   }, [questId]);
 
-  if (loading) return <LoadingSpinner label="Loading reviews..." />;
+  if (loading) return <LoadingSpinner label="Loading reviews…" />;
   if (error) return <p className="box-danger">{error}</p>;
   if (reviews.length === 0) return <p className="field-optional">No reviews yet.</p>;
 

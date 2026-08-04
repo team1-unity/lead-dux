@@ -10,6 +10,7 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { FeedbackToast } from '@shared/FeedbackToast.jsx';
 import { WelcomeTour } from '@shared/WelcomeTour.jsx';
 import { RouteErrorBoundary } from '@shared/RouteErrorBoundary.jsx';
+import { SmoothScroll } from '@shared/SmoothScroll.jsx';
 import { EventsMap } from '@shared/EventsMap.jsx';
 import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
@@ -301,6 +302,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <SmoothScroll />
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

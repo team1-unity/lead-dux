@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import rough from 'roughjs';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { DuckMark } from '@shared/Logo.jsx';
 
 const WIDTH = 1200;
 const HEIGHT = 840;
@@ -24,10 +24,12 @@ function loadImage(src) {
 // Drawn straight onto a <canvas> rather than a styled DOM node — the point
 // is a single self-contained downloadable artifact (see the "Download
 // Certificate" button below), so there's nothing to serialize afterward.
-// Uses roughjs (already a dependency, see RoughFrame.jsx) for the
-// hand-drawn border, matching the app's ink-stamp aesthetic instead of a
-// crisp corporate rectangle.
-async function drawCertificate(canvas, { name, issuedAt, ink, paper, accent, duckUrl }) {
+// A single crisp inset rule, not a hand-drawn frame — this is the one
+// artifact that leaves the app and lands in front of people who've never
+// seen its playful in-app voice (a resume, an employer), so it borrows the
+// app's own Source Serif 4 / Inter pairing instead of the ink-stamp
+// aesthetic used elsewhere.
+async function drawCertificate(canvas, { name, issuedAt, ink, paper, duckUrl }) {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = WIDTH * dpr;
   canvas.height = HEIGHT * dpr;
@@ -37,41 +39,40 @@ async function drawCertificate(canvas, { name, issuedAt, ink, paper, accent, duc
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-  const rc = rough.canvas(canvas);
-  rc.rectangle(28, 28, WIDTH - 56, HEIGHT - 56, { stroke: ink, strokeWidth: 3, roughness: 1.6 });
-  rc.rectangle(44, 44, WIDTH - 88, HEIGHT - 88, { stroke: accent, strokeWidth: 1.5, roughness: 1.2 });
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(32, 32, WIDTH - 64, HEIGHT - 64);
 
   await document.fonts.ready;
 
   ctx.textAlign = 'center';
   ctx.fillStyle = ink;
 
-  ctx.font = "400 22px 'DM Sans', sans-serif";
-  ctx.fillText('LEADERSHIP QUEST', WIDTH / 2, 150);
+  ctx.font = "600 22px 'Inter', system-ui, sans-serif";
+  ctx.fillText('LEAD-DUX', WIDTH / 2, 150);
 
-  ctx.font = "700 64px 'Crushed', 'Arial Narrow', sans-serif";
+  ctx.font = "700 60px 'Source Serif 4', Georgia, serif";
   ctx.fillText('Certificate of Leadership', WIDTH / 2, 240);
 
-  ctx.font = "400 22px 'DM Sans', sans-serif";
+  ctx.font = "400 22px 'Inter', system-ui, sans-serif";
   ctx.fillText('This certifies that', WIDTH / 2, 340);
 
-  ctx.font = "700 52px 'Cuprum', 'Arial Narrow', sans-serif";
-  ctx.fillStyle = accent;
+  ctx.font = "700 48px 'Source Serif 4', Georgia, serif";
   ctx.fillText(name, WIDTH / 2, 410);
 
-  ctx.font = "400 22px 'DM Sans', sans-serif";
-  ctx.fillStyle = ink;
-  ctx.fillText('has achieved Diamond Rank in Leadership Quest,', WIDTH / 2, 470);
+  ctx.font = "400 22px 'Inter', system-ui, sans-serif";
+  ctx.fillText('has achieved Diamond Rank in Lead-Dux,', WIDTH / 2, 470);
   ctx.fillText('completing the full leadership journey from Iron to Diamond.', WIDTH / 2, 500);
 
-  ctx.font = "400 18px 'DM Sans', sans-serif";
+  ctx.font = "400 18px 'Inter', system-ui, sans-serif";
   ctx.fillText(`Awarded ${issuedAt}`, WIDTH / 2, 600);
 
   try {
     const duck = await loadImage(duckUrl);
-    const duckWidth = 110;
+    const duckWidth = 48;
     const duckHeight = (duckWidth * duck.height) / duck.width;
-    ctx.drawImage(duck, WIDTH / 2 - duckWidth / 2, HEIGHT - 210, duckWidth, duckHeight);
+    const margin = 56;
+    ctx.drawImage(duck, WIDTH - margin - duckWidth, HEIGHT - margin - duckHeight, duckWidth, duckHeight);
   } catch {
     // Missing asset shouldn't block the rest of the certificate from rendering.
   }
@@ -87,7 +88,7 @@ export function Certificate() {
     getDoc(doc(db, 'users', user.uid)).then((snap) => {
       const data = snap.exists() ? snap.data() : {};
       setProfile({
-        name: data.name || 'Leadership Quest Member',
+        name: data.name || 'Lead-Dux Member',
         certificateIssued: Boolean(data.certificateIssued),
         certificateIssuedAt: data.certificateIssuedAt || null,
       });
@@ -110,7 +111,6 @@ export function Certificate() {
       issuedAt: issuedAt.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }),
       ink: style.getPropertyValue('--line').trim(),
       paper: style.getPropertyValue('--paper-card').trim(),
-      accent: style.getPropertyValue('--accent').trim(),
       duckUrl: duckUrlMatch ? duckUrlMatch[1] : '/brand/duck-brown.png',
     });
   }, [profile]);
@@ -121,7 +121,7 @@ export function Certificate() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `leadership-quest-certificate-${(profile?.name || 'member').replace(/\s+/g, '-').toLowerCase()}.png`;
+      a.download = `lead-dux-certificate-${(profile?.name || 'member').replace(/\s+/g, '-').toLowerCase()}.png`;
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -134,6 +134,13 @@ export function Certificate() {
     <PageMotion>
       <BackLink to="/profile" label="Profile" />
       <div className="certificate-page">
+        {/* This is app-only chrome, not part of the certificate image
+            itself — the canvas below (and whatever gets downloaded from
+            it) stays deliberately restrained since it's the one artifact
+            that leaves the app and lands in front of a stranger. The
+            personality lives here instead, where it can't undercut that. */}
+        <DuckMark size={56} />
+        <p className="duck-caption">You did the thing. Iron to Diamond, the whole way.</p>
         <h1>Your Diamond Certificate</h1>
         <div className="certificate-canvas-wrap">
           <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} />

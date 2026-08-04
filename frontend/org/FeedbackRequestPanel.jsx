@@ -127,7 +127,7 @@ export function FeedbackRequestPanel({ request, onSubmitted }) {
       clearDraft(request.id);
       onSubmitted();
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setSubmitting(false);
     }
@@ -236,7 +236,7 @@ export function FeedbackRequestPanel({ request, onSubmitted }) {
             onClick={submit}
             disabled={submitting}
           >
-            {submitting ? 'Submitting...' : 'Submit'}
+            {submitting ? 'Submitting…' : 'Submit'}
           </StampButton>
         ) : (
           <button type='button' className='feedback-nav-btn' onClick={goNext} disabled={!canGoNext}>

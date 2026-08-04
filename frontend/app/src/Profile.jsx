@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { EmailAuthProvider, reauthenticateWithCredential, updateEmail, updatePassword } from 'firebase/auth';
@@ -11,7 +12,7 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
-import { DuckMark } from '@shared/Logo.jsx';
+import { UserAvatar } from '@shared/UserAvatar.jsx';
 import { groupBySeries, isUpcoming } from '@shared/questSeries.js';
 import { IconCheck, IconChevron, IconLock, IconGear, IconX } from '@shared/icons.jsx';
 import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from '@shared/rank.js';
@@ -25,13 +26,14 @@ import { BadgeRing } from '@mobile/Badges.jsx';
 // server-side (kept in sync by functions/main.py's _award_points) so it can
 // be queried across users (see list_diamond_users) — see rank.js for why
 // it's still recomputed here too rather than trusted blindly.
-// Collapsed by default (matching the wireframe's chevron) — showing just
-// the rank name so Profile doesn't open with a full page of milestones;
-// expanding reveals the exact same detail this card always rendered.
+// Always fully shown, not collapsed behind a tap — Profile is exactly the
+// place someone comes to check "where am I," so the milestone ladder (and
+// the certificate banner, once earned) is part of the first glance rather
+// than something an expand toggle hid.
 function ProgressCard() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
-  const [open, setOpen] = useState(false);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     if (!user) return;
@@ -51,64 +53,61 @@ function ProgressCard() {
   const currentIndex = rankOrder.indexOf(rank);
 
   return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <button
-        type="button"
-        className="quest-card-head"
-        style={{ padding: 0 }}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <div className="quest-card-titles">
-          <h2 style={{ marginBottom: 0 }}>Leadership Rank</h2>
-          <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.4rem', textTransform: 'uppercase' }}>
-            {rank}
-          </p>
-        </div>
-        <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
-      </button>
+    // Mounts once this card's own fetch resolves — well after Profile's own
+    // PageMotion shell has already finished animating in — so without its
+    // own transition here, rank/points/milestones would just snap into
+    // view with no arrival of their own.
+    <motion.section
+      className="ink-card"
+      style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+      initial={reduce ? false : { opacity: 0, y: 8, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+    >
+      <div className="quest-card-titles">
+        <h2 style={{ marginBottom: 0 }}>Leadership Rank</h2>
+        <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.4rem', textTransform: 'uppercase' }}>
+          {rank}
+        </p>
+      </div>
 
-      {open && (
-        <>
-          <p className="data-stat" style={{ marginTop: 4 }}>
-            {points} point{points === 1 ? '' : 's'}
-            {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
-          </p>
+      <p className="data-stat" style={{ marginTop: 4 }}>
+        {points} point{points === 1 ? '' : 's'}
+        {toNext !== null ? ` — ${toNext} to ${rankForPoints(points + toNext)}` : ' — top rank reached'}
+      </p>
 
-          <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
-            <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
-          </div>
+      <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
+        <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
+      </div>
 
-          <div className="rank-milestones">
-            {rankOrder.map((name, i) => {
-              const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
-              const tone = name.toLowerCase();
-              return (
-                <div className="rank-milestone" key={name} data-state={state}>
-                  <span
-                    className="rank-milestone-dot"
-                    style={{ '--rank-color': `var(--rank-${tone})`, '--rank-ink': `var(--rank-${tone}-ink)` }}
-                  >
-                    {state === 'done' && <IconCheck width={14} height={14} />}
-                    {state === 'locked' && <IconLock width={14} height={12} />}
-                  </span>
-                  <span className="rank-milestone-label">{name}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          {certificateIssued && (
-            <div className="rank-certificate-banner">
-              <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
-              <Link to="/certificate">
-                <StampButton type="button" variant="primary">View certificate</StampButton>
-              </Link>
+      <div className="rank-milestones">
+        {rankOrder.map((name, i) => {
+          const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
+          const tone = name.toLowerCase();
+          return (
+            <div className="rank-milestone" key={name} data-state={state}>
+              <span
+                className="rank-milestone-dot"
+                style={{ '--rank-color': `var(--rank-${tone})`, '--rank-ink': `var(--rank-${tone}-ink)` }}
+              >
+                {state === 'done' && <IconCheck width={14} height={14} />}
+                {state === 'locked' && <IconLock width={14} height={12} />}
+              </span>
+              <span className="rank-milestone-label">{name}</span>
             </div>
-          )}
-        </>
+          );
+        })}
+      </div>
+
+      {certificateIssued && (
+        <div className="rank-certificate-banner">
+          <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
+          <Link to="/certificate">
+            <StampButton type="button" variant="primary">View certificate</StampButton>
+          </Link>
+        </div>
       )}
-    </section>
+    </motion.section>
   );
 }
 
@@ -119,6 +118,7 @@ function ProgressCard() {
 function RsvpdQuestsPreview() {
   const { user } = useAuth();
   const [series, setSeries] = useState(null);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     if (!user) return;
@@ -136,12 +136,17 @@ function RsvpdQuestsPreview() {
   if (series === null) return null;
 
   return (
-    <section className="ink-card">
+    <motion.section
+      className="ink-card"
+      initial={reduce ? false : { opacity: 0, y: 8, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+    >
       <div className="flex justify-between items-center">
         <div>
           <h2 style={{ margin: 0 }}>RSVP&rsquo;d Quests</h2>
           <p className="data-stat" style={{ marginTop: 4 }}>
-            {series.length === 0 ? 'No upcoming RSVPs yet' : `${series.length} upcoming`}
+            {series.length === 0 ? 'Nothing on your calendar yet' : `${series.length} upcoming`}
           </p>
         </div>
         <Link to="/quests?mine=1" aria-label="View all RSVP'd quests">
@@ -155,7 +160,7 @@ function RsvpdQuestsPreview() {
           ))}
         </ul>
       )}
-    </section>
+    </motion.section>
   );
 }
 
@@ -166,6 +171,7 @@ function RsvpdQuestsPreview() {
 function BadgesPreview() {
   const { user } = useAuth();
   const [earned, setEarned] = useState(null);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     if (!user) return;
@@ -190,12 +196,17 @@ function BadgesPreview() {
   if (earned === null) return null;
 
   return (
-    <section className="ink-card">
+    <motion.section
+      className="ink-card"
+      initial={reduce ? false : { opacity: 0, y: 8, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+    >
       <div className="flex justify-between items-center">
         <div>
           <h2 style={{ margin: 0 }}>All Badges</h2>
           <p className="data-stat" style={{ marginTop: 4 }}>
-            {earned.length === 0 ? 'No badges earned yet' : `${earned.length} earned`}
+            {earned.length === 0 ? 'None yet — that’s next' : `${earned.length} earned`}
           </p>
         </div>
         <Link to="/badges" aria-label="View all badges">
@@ -209,26 +220,7 @@ function BadgesPreview() {
           ))}
         </div>
       )}
-    </section>
-  );
-}
-
-// The duck mascot in a brand-mustard ring is still the default for anyone
-// without a photoURL set (see EditProfileModal below) — not an initial-
-// based tile, which would read like an org's avatar, a color-per-entity
-// system that doesn't fit a personal profile the same way.
-function UserAvatar({ photoURL }) {
-  if (photoURL) {
-    return (
-      <div className="user-avatar">
-        <img src={photoURL} alt="" style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }} />
-      </div>
-    );
-  }
-  return (
-    <div className="user-avatar" aria-hidden="true">
-      <DuckMark size={40} />
-    </div>
+    </motion.section>
   );
 }
 
@@ -321,7 +313,7 @@ function EditProfileModal({ user, currentName, currentPhotoURL, onClose, onSaved
       }
       onSaved({ name: trimmedName, photoURL: photoURL || currentPhotoURL });
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setSaving(false);
     }
@@ -380,7 +372,7 @@ function EditProfileModal({ user, currentName, currentPhotoURL, onClose, onSaved
           {error && <p className="box-danger">{error}</p>}
           <div className="flex gap-sm">
             <StampButton type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? 'Saving…' : 'Save'}
             </StampButton>
             <StampButton type="button" onClick={onClose} disabled={saving}>
               Cancel
@@ -406,7 +398,8 @@ function EditProfileModal({ user, currentName, currentPhotoURL, onClose, onSaved
 // organization" prompt here anymore — only the four states a caller
 // already in that pipeline (or already an org/admin) can be in.
 export function Profile() {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, logout } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState(null);
   const [photoURL, setPhotoURL] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -416,12 +409,26 @@ export function Profile() {
     getDoc(doc(db, 'users', user.uid)).then((snap) => {
       const data = snap.exists() ? snap.data() : {};
       setName(data.name || '');
-      setPhotoURL(data.photoURL || null);
+      // A custom-uploaded photo (Firestore) wins over the Google account
+      // photo (Firebase Auth) wins over the duck-mascot fallback (see
+      // UserAvatar) — a password account has no Auth photoURL at all, so
+      // it falls straight through to the duck.
+      setPhotoURL(data.photoURL || user.photoURL || null);
     });
   }, [user]);
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
+
+  // Same action as Settings' own LogoutSection — reachable from here too
+  // (Profile is one tap away from the bottom nav; Settings is a second tap
+  // from the gear icon plus a scroll past Theme/Interests/Accommodation).
+  // Kept deliberately quiet — plain text, no border — so it doesn't compete
+  // with Edit Profile/Scan QR Code above for attention.
+  async function handleLogout() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
 
   return (
     <PageMotion>
@@ -513,6 +520,16 @@ export function Profile() {
             )}
           </section>
         )}
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: 24 }}>
+        <StampButton
+          type="button"
+          onClick={handleLogout}
+          style={{ border: 'none', background: 'none', boxShadow: 'none', color: 'var(--line-soft)' }}
+        >
+          Log out
+        </StampButton>
       </div>
     </PageMotion>
   );

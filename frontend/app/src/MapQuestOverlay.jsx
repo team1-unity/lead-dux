@@ -99,7 +99,7 @@ export function MapQuestOverlay() {
           <button type="button" className="photo-lightbox-close" onClick={close} aria-label="Close">
             <IconX width={18} height={18} />
           </button>
-          {error ? <p className="box-danger">{error}</p> : <LoadingSpinner label="Loading quest..." />}
+          {error ? <p className="box-danger">{error}</p> : <LoadingSpinner label="Loading quest…" />}
         </>
       ) : (
         <MapQuestDetailBody series={series} fullDetailsHref={`/quests/${series.seriesId}`} onClose={close} />

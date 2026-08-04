@@ -28,6 +28,7 @@ import { TagStamp } from '@shared/TagStamp.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
+import { Collapse } from '@shared/Collapse.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { TrustTag } from '@shared/TrustTag.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -89,11 +90,18 @@ function formatStars(rating) {
 // two-step menu interaction, and no pre-selected value biasing the rating
 // toward 5. role="radiogroup"/"radio" since exactly one of five is chosen,
 // same semantics a native radio button set would have.
+//
+// Rating something is occasional and expressive, not routine — a good spot
+// for a bit of tactile fun rather than a flat glyph swap. `initial={false}`
+// keeps the pop from firing on mount (only the star that actually changes
+// state should ever bounce); whileTap gives every star an even bigger
+// squeeze-on-press since this is a decorative, not utilitarian, control.
 function StarRatingInput({ value, onChange }) {
+  const reduce = useReducedMotion();
   return (
     <div role='radiogroup' aria-label='Rating' className='star-rating-input'>
       {[1, 2, 3, 4, 5].map((n) => (
-        <button
+        <motion.button
           key={n}
           type='button'
           role='radio'
@@ -101,9 +109,13 @@ function StarRatingInput({ value, onChange }) {
           aria-label={`${n} star${n === 1 ? '' : 's'}`}
           className='star-rating-btn'
           onClick={() => onChange(n)}
+          initial={false}
+          animate={reduce ? undefined : { scale: n === value ? [1, 1.35, 1] : 1 }}
+          whileTap={reduce ? undefined : { scale: 1.3 }}
+          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
         >
           {n <= value ? '★' : '☆'}
-        </button>
+        </motion.button>
       ))}
     </div>
   );
@@ -156,13 +168,13 @@ function QuestReview({ questId }) {
       await callSubmitReview({ questId, rating, body });
       setReview({ rating, body });
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (loading) return <LoadingSpinner label='Loading review...' />;
+  if (loading) return <LoadingSpinner label='Loading review…' />;
 
   if (review) {
     return (
@@ -192,7 +204,7 @@ function QuestReview({ questId }) {
       </label>
       {error && <p className='box-danger'>{error}</p>}
       <StampButton type='submit' variant='primary' disabled={submitting}>
-        {submitting ? 'Submitting...' : 'Submit review'}
+        {submitting ? 'Submitting…' : 'Submit review'}
       </StampButton>
     </form>
   );
@@ -322,7 +334,7 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
       setFile(null);
       setReflection('');
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setUploading(false);
     }
@@ -415,7 +427,7 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
           variant='primary'
           disabled={!file || uploading || (isDefault && !reflection.trim())}
         >
-          {uploading ? 'Uploading...' : isDefault ? 'Submit completion' : 'Submit photo'}
+          {uploading ? 'Uploading…' : isDefault ? 'Submit completion' : 'Submit photo'}
         </StampButton>
       </form>
     );
@@ -505,7 +517,7 @@ function QuestReviewsList({ questId }) {
     };
   }, [questId]);
 
-  if (loading) return <LoadingSpinner label='Loading reviews...' />;
+  if (loading) return <LoadingSpinner label='Loading reviews…' />;
   if (error) return <p className='box-danger'>{error}</p>;
 
   return (
@@ -565,7 +577,7 @@ export function QuestDetailBody({
   const isRsvpd = (selected.rsvpd || []).includes(userId);
   const isFull = selected.capacity != null && rsvpCount >= selected.capacity && !isRsvpd;
   // Org quest, checked in — the completed/attended state: date/spots/
-  // accessibility/RSVP all give way to a plain "Completed on ..." line and
+  // accessibility/RSVP all give way to a plain "Completed on …" line and
   // the review/proof-photo actions. Side quests never set this (checkedIn
   // is always false for them — see the effect below).
   const isCompleted = !primary.isDefault && checkedIn;
@@ -692,7 +704,7 @@ export function QuestDetailBody({
             // Recurring: the picker itself stays put (still lets you switch
             // to another occurrence in the series) — only this slot swaps,
             // and only for whichever occurrence is currently selected.
-            // Non-recurring already said "Completed on ..." in the date
+            // Non-recurring already said "Completed on …" in the date
             // slot above, so nothing repeats it here.
             occurrences.length > 1 && (
               <span className='field-optional'>
@@ -758,7 +770,7 @@ export function QuestDetailBody({
             aria-describedby={gate ? `${selected.id}-gate` : undefined}
           >
             {busyId === selected.id
-              ? 'Saving...'
+              ? 'Saving…'
               : gate
                 ? gate.type === 'locked'
                   ? 'Locked'
@@ -786,7 +798,7 @@ export function QuestDetailBody({
         )}
         <AnimatePresence>
           {/* Not shown once completed — there's no "you're in" left to
-              confirm, and the "Completed on ..."/review/photo actions
+              confirm, and the "Completed on …"/review/photo actions
               already say what's true now. */}
           {canRsvp && isRsvpd && busyId !== selected.id && !isCompleted && (
             <motion.span
@@ -862,7 +874,9 @@ export function QuestDetailBody({
             <span className='quest-card-titles'>View Reviews</span>
             <IconChevron className='quest-chevron' data-open={showReviewsList ? 'true' : 'false'} />
           </button>
-          {showReviewsList && <QuestReviewsList questId={selected.id} />}
+          <Collapse open={showReviewsList}>
+            <QuestReviewsList questId={selected.id} />
+          </Collapse>
         </div>
       )}
     </div>
@@ -884,11 +898,27 @@ export function QuestDetailBody({
 // stretched-link overlay button handles the rest of the card so the two
 // don't conflict (see .quest-card-overlay/.quest-row-content in style.css).
 // Side quests have no orgId, so their avatar is just decorative.
-function QuestRow({ series, isDesktop, isActive, gate, onSelect }) {
+function QuestRow({ series, index, isDesktop, isActive, gate, onSelect }) {
   const { primary } = series;
+  const reduce = useReducedMotion();
 
   return (
-    <motion.li className='quest-row' variants={itemVariants}>
+    <motion.li
+      className='quest-row'
+      initial={reduce ? false : { opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{
+        duration: 0.3,
+        ease: [0.23, 1, 0.32, 1],
+        // Only the first screenful gets a staggered ripple on initial
+        // load — rows scrolled to later already got a head start from
+        // the `-60px` viewport margin above, so stacking more delay on
+        // top of that would just make the list feel like it's lagging
+        // behind the scroll instead of arriving with it.
+        delay: Math.min(index, 5) * 0.04,
+      }}
+    >
       <div
         className='ink-card quest-content-col'
         data-active={isActive ? 'true' : undefined}
@@ -925,15 +955,6 @@ function QuestRow({ series, isDesktop, isActive, gate, onSelect }) {
     </motion.li>
   );
 }
-
-// One entrance per row, staggered from the parent's transition — cheap
-// enough at feed scale (a few dozen series) and gives the list a sense of
-// arriving rather than just appearing.
-const listVariants = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
-};
 
 // Client-side relevance sort: count how many of a quest's tags overlap with
 // the user's own interests, sort descending. Fine at this data scale (a
@@ -1140,14 +1161,14 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
     );
   }
 
-  if (!seriesList) return <LoadingSpinner label='Loading quests...' />;
+  if (!seriesList) return <LoadingSpinner label='Loading quests…' />;
 
   if (seriesList.length === 0) {
     return (
       <div className='quest-empty'>
         <DuckMark size={96} />
-        <h2>No quests yet</h2>
-        <p>Check back soon — organizations are just getting started.</p>
+        <h2>Nothing here yet</h2>
+        <p className='duck-caption'>Organizations are just getting started — I&rsquo;ll let you know the second one posts.</p>
       </div>
     );
   }
@@ -1266,20 +1287,16 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         )}
 
         {visibleSeries.length === 0 ? (
-          <p>No quests match that filter.</p>
+          <p>Nothing matches that — try widening your filters.</p>
         ) : (
-          <motion.ul
-            className='quest-list'
-            variants={listVariants}
-            initial={reduce ? false : 'hidden'}
-            animate='show'
-          >
-            {visibleSeries.map((series) => {
+          <ul className='quest-list'>
+            {visibleSeries.map((series, index) => {
               const gate = sideQuestGate(series.primary, sideQuestStatus);
               return (
                 <QuestRow
                   key={series.seriesId}
                   series={series}
+                  index={index}
                   isDesktop={isDesktop}
                   isActive={isDesktop && activeSeriesId === series.seriesId}
                   gate={gate}
@@ -1291,7 +1308,7 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
                 />
               );
             })}
-          </motion.ul>
+          </ul>
         )}
       </div>
 

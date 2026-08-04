@@ -198,6 +198,7 @@ function MobileSheet({ expanded, onExpandedChange, children }) {
 export function EventsMap() {
   const { user, loading } = useAuth();
   const isDesktop = useIsDesktop();
+  const reduce = useReducedMotion();
   const [searchParams] = useSearchParams();
   const hasFocusedFromParamRef = useRef(false);
   const [seriesList, setSeriesList] = useState(null);
@@ -525,7 +526,7 @@ export function EventsMap() {
   const listContent = dataError ? (
     <p className="box-danger">{dataError}</p>
   ) : seriesList === null ? (
-    <LoadingSpinner label="Loading nearby quests..." />
+    <LoadingSpinner label="Loading nearby quests…" />
   ) : withDistance.length === 0 ? (
     <div className="quest-empty">
       <DuckMark size={96} />
@@ -533,19 +534,27 @@ export function EventsMap() {
       <p>Once an organization posts a quest with a real address, it'll show up here.</p>
     </div>
   ) : visibleSeries.length === 0 ? (
-    <p>No quests match that filter.</p>
+    <p>Nothing matches that — try widening your filters.</p>
   ) : (
     <div className="events-map-list">
-      {visibleSeries.map((g) => {
+      {visibleSeries.map((g, index) => {
         const isOpen = g.seriesId === selectedSeriesId;
         return (
-          <div
+          <motion.div
             key={g.seriesId}
             className="ink-card events-map-list-row"
             data-active={isOpen ? 'true' : undefined}
             ref={(el) => {
               if (el) rowRefs.current.set(g.seriesId, el);
               else rowRefs.current.delete(g.seriesId);
+            }}
+            initial={reduce ? false : { opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{
+              duration: 0.3,
+              ease: [0.23, 1, 0.32, 1],
+              delay: Math.min(index, 5) * 0.04,
             }}
           >
             <Link
@@ -563,7 +572,7 @@ export function EventsMap() {
               </div>
               {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
             </Link>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -591,7 +600,12 @@ export function EventsMap() {
         )}
 
         <div className="events-map-pane">
-          <div className="events-map-container" ref={mapContainerRef}>
+          {/* data-lenis-prevent: Google Maps handles wheel/touch itself
+              (scroll-to-zoom) — this div has no CSS overflow for Lenis's
+              own nested-scroll detection to notice, so without this
+              attribute Lenis intercepts the wheel event for page scroll
+              before the map ever sees it. */}
+          <div className="events-map-container" ref={mapContainerRef} data-lenis-prevent>
             {mapError && (
               <div className="events-map-error">
                 <p className="box-danger">{mapError}</p>

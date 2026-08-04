@@ -34,5 +34,9 @@ export function SinglePinMap({ lat, lng, seed }) {
   }, [lat, lng, seed]);
 
   if (lat == null || lng == null) return null;
-  return <div className="single-pin-map" ref={containerRef} />;
+  // data-lenis-prevent: same reasoning as EventsMap's map container — this
+  // div has no CSS overflow of its own, so Lenis's nested-scroll detection
+  // never notices it and would otherwise steal the wheel event that Google
+  // Maps wants for scroll-to-zoom.
+  return <div className="single-pin-map" ref={containerRef} data-lenis-prevent />;
 }

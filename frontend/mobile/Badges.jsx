@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -21,6 +22,7 @@ import { IconLock } from '@shared/icons.jsx';
 // `isNew` draws a small ribbon for a badge earned since the last visit —
 // see Badges.jsx's seen-tracking effect.
 export function BadgeRing({ badge, size, locked = false, isNew = false }) {
+  const reduce = useReducedMotion();
   const tone = badge.tone || hashTone(badge.id);
   const state = locked ? 'locked' : badge.earned ? 'earned' : 'in-progress';
   const style = {
@@ -29,8 +31,21 @@ export function BadgeRing({ badge, size, locked = false, isNew = false }) {
     '--tag-color': `var(--tag-${tone})`,
     '--tag-ink': `var(--tag-${tone}-ink)`,
   };
+  // Only a freshly-earned badge pops in — everything else (already-earned,
+  // in-progress, locked) renders exactly as before, `initial={false}`
+  // skipping any mount animation entirely. A badge you unlocked days ago
+  // shouldn't replay its entrance every time you revisit this page; only
+  // the ones still carrying the "New" ribbon get the moment.
+  const celebrate = isNew && !reduce;
   return (
-    <div className="badge-ring" data-state={state} style={style}>
+    <motion.div
+      className="badge-ring"
+      data-state={state}
+      style={style}
+      initial={celebrate ? { scale: 0.4, opacity: 0, filter: 'blur(4px)' } : false}
+      animate={celebrate ? { scale: 1, opacity: 1, filter: 'blur(0px)' } : undefined}
+      transition={{ type: 'spring', duration: 0.5, bounce: 0.3 }}
+    >
       {state === 'earned' && (
         <span className="badge-sprite-icon" style={{ backgroundPosition: badgeSpritePosition(badge.id) }} />
       )}
@@ -40,7 +55,7 @@ export function BadgeRing({ badge, size, locked = false, isNew = false }) {
         {badge.name}: {badge.description}
         {locked ? ' (undiscovered)' : badge.earned ? ' (earned)' : ` (${badge.progress}/${badge.target})`}
       </span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -56,7 +71,7 @@ function BadgesMobile({ earned, inProgress, undiscovered, newIds }) {
           ))}
         </div>
       ) : (
-        <p className="data-stat" style={{ marginBottom: 18 }}>No badges earned yet — complete a quest to get started.</p>
+        <p className="data-stat" style={{ marginBottom: 18 }}>No badges yet — your first quest starts the collection.</p>
       )}
 
       {inProgress.length > 0 && (
@@ -100,7 +115,7 @@ function BadgesDesktop({ earned, inProgress, undiscovered, newIds }) {
             ))}
           </div>
         ) : (
-          <p className="data-stat" style={{ margin: 0 }}>No badges earned yet — complete a quest to get started.</p>
+          <p className="data-stat" style={{ margin: 0 }}>No badges yet — your first quest starts the collection.</p>
         )}
       </section>
 
@@ -176,7 +191,7 @@ export function Badges() {
     };
   }, [user]);
 
-  if (!badges) return <LoadingSpinner label="Loading badges..." />;
+  if (!badges) return <LoadingSpinner label="Loading badges…" />;
 
   const earned = badges.filter((b) => b.earned);
   const inProgress = badges.filter((b) => !b.earned && b.started);

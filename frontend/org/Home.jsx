@@ -66,7 +66,7 @@ export function Home() {
     };
   }, [user]);
 
-  if (org === null || data === null) return <LoadingSpinner label="Loading..." />;
+  if (org === null || data === null) return <LoadingSpinner label="Loading…" />;
 
   const trustStatus = getTrustStatus(org.reviewCount || 0, org.avgRating || 0);
 

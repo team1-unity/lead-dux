@@ -75,7 +75,7 @@ export function QuestDetails() {
   // user.uid unconditionally, so this has to wait on both, not just
   // `series`, or it crashes here specifically (a client-side nav never hit
   // this because `user` is already warm by the time this page mounts).
-  if (loading || !series) return <LoadingSpinner label="Loading quest..." />;
+  if (loading || !series) return <LoadingSpinner label="Loading quest…" />;
   if (!user) return <Navigate to="/login" replace />;
 
   return (

@@ -5,6 +5,7 @@ import { db, storage } from './firebaseapp.jsx';
 import { callApprovePhotoSubmission, callRejectPhotoSubmission } from './fetch.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
+import { Collapse } from './Collapse.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
 import { IconChevron, IconX } from './icons.jsx';
 
@@ -50,7 +51,7 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
       {submission.reflection && <p className="data-row-sub">{submission.reflection}</p>}
       <div className="data-row-actions" style={{ marginTop: 8 }}>
         <StampButton type="button" variant="primary" onClick={onApprove} disabled={busy}>
-          {busy ? 'Approving...' : 'Approve'}
+          {busy ? 'Approving…' : 'Approve'}
         </StampButton>
         <StampButton type="button" variant="danger" onClick={() => setRejecting((v) => !v)} disabled={busy}>
           Reject
@@ -60,7 +61,7 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
         <div className="flex flex-col gap-sm" style={{ marginTop: 8 }}>
           <textarea placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <StampButton type="button" variant="danger" onClick={() => onReject(reason)} disabled={busy}>
-            {busy ? 'Rejecting...' : 'Confirm reject'}
+            {busy ? 'Rejecting…' : 'Confirm reject'}
           </StampButton>
         </div>
       )}
@@ -109,7 +110,7 @@ function QuestSubmissionGroup({ group, urls, busyId, onApprove, onReject }) {
         <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
       </button>
 
-      {open && (
+      <Collapse open={open}>
         <div className="submission-grid" style={{ marginTop: 12 }}>
           {group.items.map((s) => (
             <SubmissionCard
@@ -122,7 +123,7 @@ function QuestSubmissionGroup({ group, urls, busyId, onApprove, onReject }) {
             />
           ))}
         </div>
-      )}
+      </Collapse>
     </section>
   );
 }
@@ -183,7 +184,7 @@ export function PendingPhotoSubmissions({ scopeField, scopeValue, title = 'Pendi
     }
   }
 
-  if (!submissions) return <LoadingSpinner label="Loading photo submissions..." />;
+  if (!submissions) return <LoadingSpinner label="Loading photo submissions…" />;
 
   const groups = groupByQuest(submissions);
 

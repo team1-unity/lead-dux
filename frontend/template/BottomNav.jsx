@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
@@ -17,7 +18,8 @@ import {
   IconHome,
 } from './icons.jsx';
 import { Logo } from './Logo.jsx';
-import { getInitials } from './initials.js';
+import { UserAvatar } from './UserAvatar.jsx';
+import { OrgAvatar } from './OrgAvatar.jsx';
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
 // desktop — same items, same component, just a different flex direction
@@ -130,9 +132,12 @@ export function BottomNav() {
   const location = useLocation();
   const isDesktop = useIsDesktop();
   const [displayName, setDisplayName] = useState(null);
+  const [photoURL, setPhotoURL] = useState(null);
+  const [orgLogoUrl, setOrgLogoUrl] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const unreadFeedback = useUnreadFeedbackCount(user, role);
+  const reduce = useReducedMotion();
 
   // A route change (including one triggered by picking a FAB or avatar menu
   // item) always closes both menus — BottomNav stays mounted across
@@ -142,18 +147,59 @@ export function BottomNav() {
     setAvatarMenuOpen(false);
   }, [location.pathname]);
 
+  // Desktop-only: the topbar slides out of the way while reading down a
+  // page, and back in the moment you scroll up — reclaims the vertical
+  // space it otherwise sits on permanently. Mobile keeps the bottom tab
+  // bar always visible (hiding the one persistent way to navigate on a
+  // phone is a much bigger cost than reclaiming ~60px). Pages with their
+  // own internal scroll pane instead of a scrolling document (the desktop
+  // map/quest-feed split views) never fire a window scroll event, so the
+  // bar simply stays put there — a safe, unnoticeable default rather than
+  // something that needs its own separate handling.
+  const [navHidden, setNavHidden] = useState(false);
+  const lastScrollY = useRef(0);
+  useEffect(() => {
+    if (!isDesktop || reduce) {
+      setNavHidden(false);
+      return undefined;
+    }
+    lastScrollY.current = window.scrollY;
+    function onScroll() {
+      const y = window.scrollY;
+      const delta = y - lastScrollY.current;
+      if (y < 80) {
+        setNavHidden(false);
+      } else if (delta > 4) {
+        setNavHidden(true);
+      } else if (delta < -4) {
+        setNavHidden(false);
+      }
+      lastScrollY.current = y;
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [isDesktop, reduce]);
+
   // Only fetched for roles that render an avatar (desktop only) — an
-  // organization's own name from its org doc, a member's own name from
-  // their user doc. Every other role never touches this.
+  // organization's own name and logo (see OrgAvatar — same logoUrl field
+  // its own OrganizationProfile.jsx page reads) from its org doc, a
+  // member's own name and photo (for the image-or-duck avatar below — see
+  // UserAvatar) from their user doc. Every other role never touches this.
   useEffect(() => {
     if (!user) return;
     if (role === 'organization') {
       getDoc(doc(db, 'organizations', user.uid)).then((snap) => {
-        if (snap.exists()) setDisplayName(snap.data().name || '');
+        const data = snap.exists() ? snap.data() : {};
+        setDisplayName(data.name || '');
+        setOrgLogoUrl(data.logoUrl || null);
       });
     } else if (role === 'user' || role === 'pending_org') {
       getDoc(doc(db, 'users', user.uid)).then((snap) => {
-        if (snap.exists()) setDisplayName(snap.data().name || '');
+        const data = snap.exists() ? snap.data() : {};
+        setDisplayName(data.name || '');
+        // Custom-uploaded photo wins over the Google account photo wins
+        // over the duck-mascot fallback — same priority as Profile.jsx.
+        setPhotoURL(data.photoURL || user.photoURL || null);
       });
     }
   }, [role, user]);
@@ -216,7 +262,18 @@ export function BottomNav() {
           aria-hidden='true'
         />
       )}
-      <div className='bottom-nav' role='navigation' aria-label='Primary'>
+      <motion.div
+        className='bottom-nav'
+        role='navigation'
+        aria-label='Primary'
+        // A keyboard user tabbing through the page can land on a link in
+        // here even while it's slid out of view — focus (which bubbles,
+        // unlike hover) forces it back on screen rather than leaving focus
+        // sitting on something invisible.
+        onFocus={() => setNavHidden(false)}
+        animate={{ y: navHidden && !fabOpen && !avatarMenuOpen ? '-100%' : '0%' }}
+        transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+      >
         <Link to='/' className='bottom-nav-brand' aria-hidden='true' tabIndex={-1}>
           <Logo size={24} />
         </Link>
@@ -231,6 +288,14 @@ export function BottomNav() {
               aria-current={current ? 'page' : undefined}
               title={item.label}
             >
+              {current && (
+                <motion.span
+                  layoutId='nav-active-pill'
+                  className='bottom-nav-active-pill'
+                  aria-hidden='true'
+                  transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
               <span className='bottom-nav-icon'>
                 <Icon />
                 {item.badge && unreadFeedback > 0 && (
@@ -303,7 +368,9 @@ export function BottomNav() {
                 {showNameNextToAvatar && displayName && (
                   <span className='bottom-nav-org-name'>{displayName}</span>
                 )}
-                <span className='nav-avatar'>{getInitials(displayName)}</span>
+                <div className='nav-avatar'>
+                  <OrgAvatar name={displayName} seed={user.uid} logoUrl={orgLogoUrl} />
+                </div>
               </Link>
             ) : role === 'user' ? (
               // Same reasoning as the organization branch above — Settings
@@ -315,7 +382,7 @@ export function BottomNav() {
                 className='bottom-nav-avatar-link'
                 aria-current={location.pathname === '/profile' ? 'page' : undefined}
               >
-                <span className='nav-avatar'>{getInitials(displayName)}</span>
+                <UserAvatar photoURL={photoURL} size={24} className='nav-avatar nav-avatar-photo' />
               </Link>
             ) : (
               // pending_org keeps the older dropdown shape — this role
@@ -329,7 +396,7 @@ export function BottomNav() {
                   aria-expanded={avatarMenuOpen}
                   onClick={() => setAvatarMenuOpen((v) => !v)}
                 >
-                  <span className='nav-avatar'>{getInitials(displayName)}</span>
+                  <UserAvatar photoURL={photoURL} size={24} className='nav-avatar nav-avatar-photo' />
                 </button>
                 {avatarMenuOpen && (
                   <div className='bottom-nav-avatar-menu' role='menu'>
@@ -353,7 +420,7 @@ export function BottomNav() {
             )}
           </div>
         )}
-      </div>
+      </motion.div>
     </>
   );
 }

@@ -94,7 +94,7 @@ function InterestsEditor() {
     }
   }
 
-  if (interests === null) return <LoadingSpinner label="Loading interests..." />;
+  if (interests === null) return <LoadingSpinner label="Loading interests…" />;
 
   return (
     <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -115,7 +115,7 @@ function InterestsEditor() {
       </div>
       {error && <p className="box-danger">{error}</p>}
       <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
-        {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save interests'}
+        {submitting ? 'Saving…' : saved ? 'Saved!' : 'Save interests'}
       </StampButton>
     </section>
   );
@@ -182,7 +182,7 @@ function AccommodationNeedsEditor() {
     }
   }
 
-  if (needs === null) return <LoadingSpinner label="Loading accessibility info..." />;
+  if (needs === null) return <LoadingSpinner label="Loading accessibility info…" />;
 
   return (
     <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -207,7 +207,7 @@ function AccommodationNeedsEditor() {
         Your neighborhood or city
         <PlaceAutocompleteInput
           ariaLabel="Your neighborhood or city"
-          placeholder="Search for a place..."
+          placeholder="Search for a place…"
           onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat: selectedLat, lng: selectedLng }) => {
             setLocation(selectedLocation);
             setPlaceId(selectedPlaceId);
@@ -221,16 +221,16 @@ function AccommodationNeedsEditor() {
       </label>
       {error && <p className="box-danger">{error}</p>}
       <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
-        {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save'}
+        {submitting ? 'Saving…' : saved ? 'Saved!' : 'Save'}
       </StampButton>
     </section>
   );
 }
 
-// Signing out lives here now, not on Profile (see Profile.jsx's identity
-// card, which links to Settings via a gear icon instead) — Settings is
-// "how the app looks/whether I keep my account," and signing out fits that
-// better than Profile's "who I am" identity card.
+// The full Account section — Profile.jsx also has a quiet "Log out" link
+// of its own now (one tap closer, since Settings itself is a second tap
+// past the gear icon), but this stays the canonical place for it, first in
+// the list rather than buried under Theme/Interests/Accommodation.
 function LogoutSection() {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -308,7 +308,7 @@ function DangerZone() {
                 disabled={confirmText !== 'DELETE' || submitting}
                 onClick={deleteAccount}
               >
-                {submitting ? 'Deleting...' : 'Permanently delete'}
+                {submitting ? 'Deleting…' : 'Permanently delete'}
               </StampButton>
               <StampButton
                 type="button"
@@ -355,10 +355,10 @@ export function Settings() {
       />
       <TopBar title="Settings" />
       <div className="settings-grid">
+        <LogoutSection />
         <ThemePicker />
         {role === 'user' && <InterestsEditor />}
         {role === 'user' && <AccommodationNeedsEditor />}
-        <LogoutSection />
         <DangerZone />
       </div>
     </PageMotion>

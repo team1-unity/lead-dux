@@ -302,7 +302,7 @@ export function PendingPhotoReview() {
   // mount dozens of absolutely-positioned cards at once).
   const stackToRender = useMemo(() => (photos ? photos.slice(-5) : []), [photos]);
 
-  if (photos === null) return <LoadingSpinner label="Loading photo submissions..." />;
+  if (photos === null) return <LoadingSpinner label="Loading photo submissions…" />;
 
   return (
     <div>

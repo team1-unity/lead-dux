@@ -150,41 +150,27 @@
   font-display: swap;
 }
 
-/* Crushed/Cuprum/DM Sans aren't the ambient UI font anymore (see
-   --font-* below), but Certificate.jsx still draws its canvas text
-   directly in these families for the Diamond-rank certificate's own
-   fixed "stamped" look — keep these registered so that canvas text
-   doesn't silently fall back to a system font. */
-@font-face {
-  font-family: 'Crushed';
-  src: url('/fonts/crushed-v32-latin-400.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Cuprum';
-  src: url('/fonts/cuprum-v29-latin-variable.woff2') format('woff2');
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'DM Sans';
-  src: url('/fonts/dm-sans-v17-latin-variable.woff2') format('woff2');
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
+  /* ============================================================
+     TEMPORARY TRIAL — "Cozy Duck Growth" reskin (see design brief).
+     Explicitly exploratory, not a committed direction — every value
+     in this block that changed for the trial says so inline. Revert
+     by restoring the values noted in each comment (nothing here is
+     committed to git, so `git diff`/`git checkout` on this file also
+     works as a full undo).
+     ============================================================ */
   /* brand hues — rarely used raw; almost everything below derives from
      these. "Theme 9a": warm cream page, butter-yellow primary-action fill,
      brown ink text — no green/blue/black in structural chrome, ever.
      Names kept from the previous green-accented pass (avoids renaming
-     every one of their call sites below) but every value here is new. */
+     every one of their call sites below) but every value here is new.
+     --brand-green-deep was a dead duplicate of --brand-green until now —
+     it's the saturated gold --accent promotes to in light mode (see
+     below); --brand-green itself stays the original pale butter-yellow,
+     fixed for the auth hero panel regardless of theme. */
   --brand-green: #f0e4a8;
-  --brand-green-deep: #f0e4a8;
+  --brand-green-deep: #b45309;
+  --brand-green-ink: #57491f;
   --brand-mustard: #c99a2e;
   --brand-blue: #3d6fa8;
   --brand-orange: #d68f3a;
@@ -197,83 +183,121 @@
      file, just holding a url() instead of a color. */
   --duck-mark-url: url('/brand/duck-brown.png');
 
-  /* surfaces */
-  --paper: #faf6e8;
-  --paper-card: #ffffff;
-  --paper-well: #f2ecdd;
-  --line: #57491f;
-  --line-soft: #6b5a2a;
-  --border: rgba(107, 90, 42, 0.12);
+  /* surfaces — values sampled directly from get-ripe.com's live computed
+     styles (page section bg + card bg), not estimated: their page is
+     #efe5d4, their card #fff7eb, a real ~1.17:1 lift. Our old --paper
+     (#fbf3e7) was already almost as pale as RIPE's own CARD color, which
+     is why lightening --paper-card further kept hitting a ceiling near
+     pure white — deepening --paper itself to RIPE's real page tone is
+     what actually creates the room for a visible card lift.
+     --line-soft/--warning/--info/--success below are each darkened to
+     hold their AA margin against this deeper page (see their comments).
+     Revert to --paper:#fbf3e7 --paper-card:#fff8ec --paper-well:#fff8ec
+     to undo. */
+  --paper: #efe5d4;
+  --paper-card: #fff7eb;
+  --paper-well: #fff7eb;
+  --line: #4a3728;
+  --line-soft: #716352;
+  --border: #8b6f4e;
   --shadow: rgba(87, 73, 31, 0.12);
+  /* Neutral, not theme-tinted on purpose — a photo's own edge shouldn't
+     pick up the brand's brown/yellow cast (that reads as dirt on the
+     image), so this stays pure black regardless of theme. */
+  --image-outline: rgba(0, 0, 0, 0.1);
 
-  /* pastel tag rack — one per quest interest tag. The 9 named here match
-     the handoff doc's own accent examples 1:1; the rest are extended in
-     the same recipe (low-chroma pastel fill matched to the cream base's
-     lightness + a darker matching ink) since the doc didn't cover every
-     tag this app actually has. */
-  --tag-environment: #d9e8c9;
-  --tag-environment-ink: #3e6b3e;
-  --tag-community: #ede6c7;
-  --tag-community-ink: #8a7a2e;
-  --tag-youth: #cdd6ee;
-  --tag-youth-ink: #2e4e8a;
-  --tag-education: #c9d9e8;
-  --tag-education-ink: #3d6fa8;
-  --tag-outdoors: #f3dcc9;
-  --tag-outdoors-ink: #a0602e;
-  --tag-technology: #cbe0e0;
-  --tag-technology-ink: #3c7a7a;
-  --tag-fitness: #efcfcf;
-  --tag-fitness-ink: #b0403a;
-  --tag-food-security: #ead0c9;
-  --tag-food-security-ink: #9a5340;
-  --tag-arts: #e3d6ee;
-  --tag-arts-ink: #6b4fa0;
-  --tag-verified: #d9e8c9;
-  --tag-verified-ink: #3e6b3e;
-  --tag-rejected: #f3dcd9;
-  --tag-rejected-ink: #b0403a;
+  /* tag rack — TRIAL v3: the extended "meadow/pond/golden/coral" sticker
+     set (v2) was still vivid-saturated, left over from before the accent
+     softened to a muted duck-yellow — it no longer matched the rest of
+     the now-muted palette. Re-muted every hue down to the same "soft,
+     worn-cozy" saturation as the accent/surfaces, each solved against its
+     ink for a real ≥4.6:1 (dark ink #4a3728 for the lighter/cooler hues,
+     cream ink #fffdf8 for the deeper/warmer ones). */
+  --tag-environment: #78b668;
+  --tag-environment-ink: #4a3728;
+  --tag-community: #9f663d;
+  --tag-community-ink: #fffdf8;
+  --tag-youth: #7baec7;
+  --tag-youth-ink: #4a3728;
+  --tag-education: #4a65b5;
+  --tag-education-ink: #fffdf8;
+  --tag-outdoors: #9c682d;
+  --tag-outdoors-ink: #fffdf8;
+  --tag-technology: #64b5ae;
+  --tag-technology-ink: #4a3728;
+  --tag-fitness: #b85546;
+  --tag-fitness-ink: #fffdf8;
+  --tag-food-security: #8f6d3e;
+  --tag-food-security-ink: #fffdf8;
+  --tag-arts: #bc9bcc;
+  --tag-arts-ink: #4a3728;
+  --tag-verified: #78b668;
+  --tag-verified-ink: #4a3728;
+  --tag-rejected: #b85546;
+  --tag-rejected-ink: #fffdf8;
 
-  /* rank ladder — one pair per side-quest tier / leadership rank name.
-     Not covered by the handoff doc at all; extended in the same pastel
-     formula. Gold leans into the theme's own butter-yellow on purpose —
-     "gold rank" and the brand accent are a natural fit. */
-  --rank-iron: #e3e0d9;
-  --rank-iron-ink: #5c5a50;
-  --rank-bronze: #ead9be;
-  --rank-bronze-ink: #7a4b1e;
-  --rank-silver: #eaeae2;
-  --rank-silver-ink: #55544c;
-  --rank-gold: #f3e7b8;
-  --rank-gold-ink: #7a5c05;
-  --rank-diamond: #d9e9ec;
-  --rank-diamond-ink: #1f6b7a;
+  /* rank ladder — TRIAL: exact values from the reference doc's own
+     Iron/Bronze/Silver/Gold/Diamond spec (fill = their dot color, ink =
+     their dot border color). Revert target: iron #a8a89e/#3f3f38, bronze
+     #c97d3e/#4a2a10, silver #c3c7c2/#3d3d38, gold #dba52e/#5c4108,
+     diamond #4fb3c4/#0d3d42. */
+  --rank-iron: #9aa5ae;
+  --rank-iron-ink: #7c8791;
+  --rank-bronze: #c97c4b;
+  --rank-bronze-ink: #a6613a;
+  --rank-silver: #afc0ce;
+  --rank-silver-ink: #8fa4b5;
+  --rank-gold: #f2b94b;
+  --rank-gold-ink: #d89a1f;
+  --rank-diamond: #8fd9e8;
+  --rank-diamond-ink: #5fbbce;
 
-  /* semantic */
-  --accent: #f0e4a8;
-  --accent-contrast: #57491f;
-  --accent-soft: #f7f0d2;
+  /* semantic — TRIAL: golden accent + dark ink text (matching the
+     reference's "Accept Quest" button: bg #F0B23F, text #4A3728) — a
+     reversal from white-on-gold back to dark-on-gold. Coral repurposed
+     for danger/alerts per the reference's "alerts/hearts" role. Revert
+     target: --accent:var(--brand-green-deep) [#b45309] --accent-contrast:
+     #fffaf0 --accent-soft:#f7f0d2 --danger:#b0403a --warning:#a0602e
+     --info:#3d6fa8. */
+  --accent: #f0e0a0;
+  --accent-contrast: #4a3728;
+  --accent-soft: #e6dacb;
   --secondary: #cdd6ee;
   --secondary-ink: #2e4e8a;
-  --info: #3d6fa8;
-  --success: #3e6b3e;
-  --warning: #a0602e;
-  --danger: #b0403a;
-  --danger-soft: #f3dcd9;
+  --info: #2d6c86;
+  --success: #417033;
+  --warning: #9f4f0d;
+  --danger: #b73a1d;
+  --danger-soft: #f5e2df;
   --link: var(--line);
   --focus-ring: #3d6fa8;
 
-  --font-display: 'Source Serif 4', Georgia, serif;
-  --font-heading: 'Source Serif 4', Georgia, serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  /* TRIAL: Baloo 2 (display/rounded) + Quicksand (body) + Caveat
+     (handwritten accent, new token) replacing Source Serif 4 + Inter.
+     Loaded via Google Fonts CDN in index.html for this trial rather than
+     self-hosted. Revert target: --font-display/--font-heading:'Source
+     Serif 4',Georgia,serif — --font-body:'Inter',system-ui,sans-serif —
+     remove --font-script and the index.html font link. */
+  --font-display: 'Baloo 2', sans-serif;
+  --font-heading: 'Baloo 2', sans-serif;
+  --font-body: 'Quicksand', sans-serif;
+  --font-script: 'Caveat', cursive;
   --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  --radius: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 28px;
-  --radius-full: 20px;
+  /* TRIAL: card/input radii pulled back — felt too "toy blob" rounded.
+     --radius-full stays 999px on purpose: several fixed-size square
+     elements (avatars, icon buttons — 40-64px boxes) rely on it being
+     larger than half their own size to render as a true circle, not a
+     rounded square; buttons use --radius-button below instead, decoupled
+     from that circle-guarantee role. Revert target if fully undone:
+     --radius:14px --radius-lg:18px --radius-xl:28px. */
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+  --radius-button: 14px;
   --nav-height: 64px;
-  --nav-height-desktop: 76px;
+  --nav-height-desktop: 60px;
   --bp-wide: 860px;
 }
 
@@ -283,9 +307,11 @@
    surfaces (an inverted echo of the light theme's cream), cream-ish ink
    text, same low-chroma pastel accent families just re-lit for a dark
    background (dark muted fill + a brighter version of the same ink).
-   --accent/--brand-green (the butter-yellow) is deliberately left
-   unchanged in both dark blocks below — a bright accent staying vivid
-   against a dark surface is the point, not something to also darken. */
+   --accent/--brand-green (the original pale butter-yellow) is restored
+   here on purpose — a bright accent staying vivid against a dark surface
+   was already working, so only light mode's --accent got promoted to the
+   deeper --brand-green-deep (see :root above); dark mode keeps the old
+   value rather than inheriting that change. */
 @media (prefers-color-scheme: dark) {
   :root {
     --duck-mark-url: url('/brand/duck-yellow.png');
@@ -296,6 +322,9 @@
     --line-soft: #c9bd9e;
     --border: rgba(240, 228, 168, 0.14);
     --shadow: rgba(0, 0, 0, 0.4);
+    --image-outline: rgba(255, 255, 255, 0.1);
+    --accent: var(--brand-green);
+    --accent-contrast: var(--brand-green-ink);
 
     --tag-environment: #2e3d24;
     --tag-environment-ink: #b9d9a0;
@@ -349,6 +378,9 @@
   --line-soft: #c9bd9e;
   --border: rgba(240, 228, 168, 0.14);
   --shadow: rgba(0, 0, 0, 0.4);
+  --image-outline: rgba(255, 255, 255, 0.1);
+  --accent: var(--brand-green);
+  --accent-contrast: var(--brand-green-ink);
 
   --tag-environment: #2e3d24;
   --tag-environment-ink: #b9d9a0;
@@ -393,56 +425,66 @@
   --focus-ring: #6fa8d9;
 }
 :root[data-theme='light'] {
+  /* TRIAL: mirrors the base :root Cozy Duck Growth values exactly — this
+     block wins over plain :root whenever a "Light" theme is explicitly
+     stored (see theme.js), so it has to carry every trial value too or
+     anyone with a stored preference sees none of them. */
   --duck-mark-url: url('/brand/duck-brown.png');
-  --paper: #faf6e8;
-  --paper-card: #ffffff;
-  --paper-well: #f2ecdd;
-  --line: #57491f;
-  --line-soft: #6b5a2a;
-  --border: rgba(107, 90, 42, 0.12);
+  --paper: #efe5d4;
+  --paper-card: #fff7eb;
+  --paper-well: #fff7eb;
+  --line: #4a3728;
+  --line-soft: #716352;
+  --border: #8b6f4e;
   --shadow: rgba(87, 73, 31, 0.12);
+  /* Neutral, not theme-tinted on purpose — a photo's own edge shouldn't
+     pick up the brand's brown/yellow cast (that reads as dirt on the
+     image), so this stays pure black regardless of theme. */
+  --image-outline: rgba(0, 0, 0, 0.1);
+  --accent: #f0e0a0;
+  --accent-contrast: #4a3728;
 
-  --tag-environment: #d9e8c9;
-  --tag-environment-ink: #3e6b3e;
-  --tag-community: #ede6c7;
-  --tag-community-ink: #8a7a2e;
-  --tag-youth: #cdd6ee;
-  --tag-youth-ink: #2e4e8a;
-  --tag-education: #c9d9e8;
-  --tag-education-ink: #3d6fa8;
-  --tag-outdoors: #f3dcc9;
-  --tag-outdoors-ink: #a0602e;
-  --tag-technology: #cbe0e0;
-  --tag-technology-ink: #3c7a7a;
-  --tag-fitness: #efcfcf;
-  --tag-fitness-ink: #b0403a;
-  --tag-food-security: #ead0c9;
-  --tag-food-security-ink: #9a5340;
-  --tag-arts: #e3d6ee;
-  --tag-arts-ink: #6b4fa0;
-  --tag-verified: #d9e8c9;
-  --tag-verified-ink: #3e6b3e;
-  --tag-rejected: #f3dcd9;
-  --tag-rejected-ink: #b0403a;
+  --tag-environment: #78b668;
+  --tag-environment-ink: #4a3728;
+  --tag-community: #9f663d;
+  --tag-community-ink: #fffdf8;
+  --tag-youth: #7baec7;
+  --tag-youth-ink: #4a3728;
+  --tag-education: #4a65b5;
+  --tag-education-ink: #fffdf8;
+  --tag-outdoors: #9c682d;
+  --tag-outdoors-ink: #fffdf8;
+  --tag-technology: #64b5ae;
+  --tag-technology-ink: #4a3728;
+  --tag-fitness: #b85546;
+  --tag-fitness-ink: #fffdf8;
+  --tag-food-security: #8f6d3e;
+  --tag-food-security-ink: #fffdf8;
+  --tag-arts: #bc9bcc;
+  --tag-arts-ink: #4a3728;
+  --tag-verified: #78b668;
+  --tag-verified-ink: #4a3728;
+  --tag-rejected: #b85546;
+  --tag-rejected-ink: #fffdf8;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
-  --rank-iron: #e3e0d9;
-  --rank-iron-ink: #5c5a50;
-  --rank-bronze: #ead9be;
-  --rank-bronze-ink: #7a4b1e;
-  --rank-silver: #eaeae2;
-  --rank-silver-ink: #55544c;
-  --rank-gold: #f3e7b8;
-  --rank-gold-ink: #7a5c05;
-  --rank-diamond: #d9e9ec;
-  --rank-diamond-ink: #1f6b7a;
+  --rank-iron: #9aa5ae;
+  --rank-iron-ink: #7c8791;
+  --rank-bronze: #c97c4b;
+  --rank-bronze-ink: #a6613a;
+  --rank-silver: #afc0ce;
+  --rank-silver-ink: #8fa4b5;
+  --rank-gold: #f2b94b;
+  --rank-gold-ink: #d89a1f;
+  --rank-diamond: #8fd9e8;
+  --rank-diamond-ink: #5fbbce;
 
-  --accent-soft: #f7f0d2;
+  --accent-soft: #e6dacb;
   --secondary-ink: #2e4e8a;
-  --success: #3e6b3e;
-  --warning: #a0602e;
-  --danger: #b0403a;
-  --danger-soft: #f3dcd9;
+  --success: #417033;
+  --warning: #9f4f0d;
+  --danger: #b73a1d;
+  --danger-soft: #f5e2df;
   --focus-ring: #3d6fa8;
 }
 
@@ -454,6 +496,22 @@
 
 html {
   overflow-x: hidden;
+  /* macOS renders text heavier than intended by default; harmless
+     everywhere else since other platforms ignore these properties. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* This ships as a Capacitor WebView on top of being a regular site, so the
+   touch specifics matter for real: manipulation skips the ~300ms tap delay
+   still present on some Android WebViews, and a transparent tap-highlight
+   replaces the default grey flash Chrome/WebView draws on every tap (every
+   button already has its own :active press-scale — the OS's own highlight
+   on top of that reads as a double, slightly-off response to the same tap). */
+html,
+body {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -502,6 +560,16 @@ h3 {
   font-weight: 700;
   letter-spacing: 0;
   margin: 0 0 16px;
+  /* Balances line lengths on short headings so a wrapped title never
+     leaves one orphaned word alone on its own line — quest titles and
+     org names are exactly the unpredictable-length strings this helps. */
+  text-wrap: balance;
+}
+p {
+  /* Prevents a dangling last-word orphan on wrapped body copy (quest
+     descriptions, review text) without balancing every line the way
+     heading text above does. */
+  text-wrap: pretty;
 }
 h1 {
   font-size: 1.9rem;
@@ -579,6 +647,9 @@ label {
   font-weight: 600;
 }
 
+/* No border, matching the rest of the app (buttons/tags/cards) — the
+   --paper-card fill against the deeper --paper page is what defines the
+   field now, same as everything else. */
 input,
 textarea,
 select {
@@ -586,25 +657,22 @@ select {
   font-family: var(--font-body);
   padding: 10px 13px;
   border-radius: var(--radius);
-  border: 1.5px solid var(--border);
+  border: none;
   background: var(--paper-card);
   color: var(--line);
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: box-shadow 0.15s ease;
 }
 
 input:hover,
 textarea:hover,
 select:hover {
-  border-color: var(--line-soft);
+  background: color-mix(in srgb, var(--paper-card) 85%, var(--line) 6%);
 }
 
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: none;
-  border-color: var(--focus-ring);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 25%, transparent);
 }
 
@@ -614,7 +682,7 @@ textarea {
 }
 
 fieldset {
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
 }
@@ -637,7 +705,7 @@ fieldset label {
    look and work fine (easy to miss without actually typing a query). */
 .place-autocomplete-container {
   border-radius: var(--radius);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   background: var(--paper-card);
 }
 
@@ -694,32 +762,59 @@ fieldset label {
 /* button, plus .stamp-btn — StampButton.jsx's `as` prop can render this as
    an <a> (e.g. a Link-powered nav CTA) instead of a real <button>, and the
    tag selector alone wouldn't reach that. */
-/* Flat per the "theme 9a" handoff (no shadows anywhere) — the old
-   hover-lift + shadow tactile press effect is gone; a border-color change
-   is the only hover feedback now, and StampButton.jsx's own Framer Motion
-   whileTap scale (a squish, not a shadow) still provides press feedback
-   on top of this without reintroducing depth chrome. */
+/* TRIAL v2 — RIPE reference (get-ripe.com): zero border, zero shadow,
+   solid color-block fill only, full pill radius. Definition comes purely
+   from the fill color against its surroundings, never from a border or a
+   drop shadow. Revert target (Cozy Duck Growth v1): border-radius:
+   var(--radius-button), border: 2px solid var(--border), background:
+   var(--paper-card), box-shadow: 0 2px 0 var(--border), plus the
+   :active box-shadow/translate rule below it. */
 button,
 .stamp-btn {
   font: inherit;
   font-family: var(--font-heading);
   font-weight: 600;
-  padding: 10px 18px;
-  border-radius: var(--radius);
-  border: 1.5px solid var(--border);
-  background: var(--paper-card);
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--paper-well);
   color: var(--line);
   text-decoration: none;
   display: inline-block;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
-    border-color 0.15s ease;
+    scale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 button:hover:not(:disabled),
 .stamp-btn:hover {
-  border-color: var(--line-soft);
+  background: color-mix(in srgb, var(--paper-well) 80%, var(--line) 8%);
+}
+
+/* Every plain <button>/.stamp-btn gets instant press feedback, not just the
+   ones wrapped in StampButton's own Framer Motion whileTap — until now a
+   raw <button> (bottom nav, photo-lightbox close, notification dismiss,
+   quest row taps, feedback rating buttons...) had no press cue at all
+   beyond a border-color fade, which is easy to miss. `scale` (not
+   `transform: scale()`) composes independently of every `transform: none`
+   reset already scattered through this file for the old hover-lift effect,
+   so this applies everywhere for free without fighting those rules. Uses
+   the standalone `scale` property, not `:active { transform: scale() }` —
+   same reasoning. */
+button:active:not(:disabled),
+.stamp-btn:active {
+  scale: 0.96;
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .stamp-btn {
+    transition: background-color 0.15s ease;
+  }
+  button:active:not(:disabled),
+  .stamp-btn:active {
+    scale: 1;
+  }
 }
 
 button:disabled {
@@ -742,76 +837,92 @@ nav {
 
 /* ---------- card + chip system ---------- */
 
+/* TRIAL: flat sticker shadow added (revert: remove box-shadow line). */
+/* RIPE reference (get-ripe.com): no border, no shadow — a card is just a
+   solid color block, distinguished from the page purely by its fill.
+   --paper-card now equals --paper (see :root), so cards use --paper-well
+   instead — the one step darker "recessed" tone — or they'd be invisible
+   with the border gone. Revert target: background: var(--paper-card),
+   border: 2px solid var(--border), box-shadow: 0 2px 0 var(--paper-well),
+   and restore the [data-danger] border-color override below. */
 .ink-card {
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: none;
   border-radius: var(--radius-lg);
   padding: 18px 20px;
-  transition: border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .ink-card[data-danger='true'] {
-  border-color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .ink-btn-primary {
   background: var(--accent);
-  border-color: var(--accent);
   color: var(--accent-contrast);
 }
 .ink-btn-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 88%, black);
-  border-color: color-mix(in srgb, var(--accent) 88%, black);
 }
 
+/* A solid soft-danger pill rather than an outline — no border exists in
+   this system to carry the "this is destructive" signal, so the fill
+   itself has to (still --danger text on top for the strongest cue). */
 .ink-btn-danger {
-  background: transparent;
-  border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .ink-btn-danger:hover:not(:disabled) {
-  background: var(--danger-soft);
+  background: color-mix(in srgb, var(--danger-soft) 80%, var(--danger) 15%);
 }
 
 /* pastel pill for tags/interests — TagStamp.jsx renders this. When rendered
    as a <button> (the selectable interest-picker variant) this deliberately
    overrides the global button treatment — a pill toggles, it doesn't press
    like a real button. */
+/* Unified badge formula with .status-stamp below: same font-size (0.8rem),
+   same padding, same radius, same 2px border weight as every other bordered
+   surface in the app — the two components differ in WHEN they show a
+   fill (toggleable vs. always-on), never in how they're drawn. */
 .tag-stamp {
   display: inline-flex;
   align-items: center;
   font: inherit;
   font-family: var(--font-heading);
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   letter-spacing: 0.01em;
   padding: 5px 13px;
   border-radius: var(--radius-full);
-  border: 1.5px solid transparent;
+  border: none;
   color: var(--tag-ink, var(--line));
   background: var(--tag-color, var(--paper-well));
   cursor: default;
   box-shadow: none;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .tag-stamp:hover,
 .tag-stamp:active {
   box-shadow: none;
   transform: none;
+  /* Opts out of the new global button:active press-scale (see button/
+     .stamp-btn above) — a selectable tag toggles state, it doesn't press
+     like a real button. */
+  scale: 1;
 }
+/* Unselected state used to be a colored outline on a transparent
+   background — no outlines exist in this system anymore, so it's now a
+   solid neutral pill instead; selecting it is the only thing that
+   introduces color, via the filled state below. */
 .tag-stamp[data-selectable='true'] {
   cursor: pointer;
-  background: transparent;
-  border-color: var(--tag-color, var(--border));
+  background: var(--paper-well);
   color: var(--tag-select-ink, var(--line-soft));
 }
 .tag-stamp[data-selectable='true']:hover {
-  background: color-mix(in srgb, var(--tag-color, var(--paper-well)) 35%, transparent);
+  background: color-mix(in srgb, var(--paper-well) 70%, var(--tag-color, var(--line-soft)) 20%);
 }
 .tag-stamp[data-selected='true'] {
-  background: var(--tag-color, var(--paper-well));
-  border-color: var(--tag-color, var(--paper-well));
+  background: var(--tag-color, var(--accent-soft));
   color: var(--tag-ink, var(--line));
 }
 
@@ -824,7 +935,7 @@ nav {
   align-items: center;
   font-family: var(--font-heading);
   font-weight: 600;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   letter-spacing: 0.01em;
   padding: 5px 13px;
   border: none;
@@ -833,9 +944,8 @@ nav {
   background: var(--tag-color, var(--paper-well));
 }
 .status-stamp[data-muted='true'] {
-  background: none;
+  background: var(--paper-well);
   color: var(--line-soft);
-  border: 1.5px solid var(--border);
 }
 
 /* Sizing lives in CSS (via --duck-size), not an inline width/height style,
@@ -855,6 +965,19 @@ nav {
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
+}
+
+/* A line "spoken" by the mascot — used sparingly, at two or three moments
+   that can carry a little personality (a greeting, an empty state), not
+   pasted under every DuckMark in the app. Italic + soft ink is the only
+   differentiation from a normal caption; no speech-bubble chrome, no
+   quote marks — the duck sitting directly above it already makes clear
+   whose line it is. */
+.duck-caption {
+  font-style: italic;
+  color: var(--line-soft);
+  text-align: center;
+  margin: 6px 0 0;
 }
 
 /* ---------- auth screens (Login, Register, Forgot/Reset password) ----------
@@ -961,7 +1084,7 @@ nav {
   }
   .auth-hero-word {
     font-size: 1.3rem;
-    color: var(--accent-contrast);
+    color: var(--brand-green-ink);
   }
   .auth-card-hero {
     background: var(--brand-green);
@@ -973,10 +1096,10 @@ nav {
     display: block;
     margin: 0;
     /* Same fixed-ink reasoning as .auth-hero-word/.auth-hero-duck above —
-       --accent-contrast is never redefined in dark mode (same as --accent
-       itself), so it stays fixed dark ink on this always-butter-yellow
-       panel regardless of app theme. */
-    color: var(--accent-contrast);
+       --brand-green-ink is its own token (not --accent-contrast, which
+       now varies with light/dark mode) precisely because this panel's
+       --brand-green background stays fixed regardless of theme. */
+    color: var(--brand-green-ink);
     font-size: 1rem;
     opacity: 0.78;
     max-width: 260px;
@@ -1043,9 +1166,9 @@ nav {
 }
 .lq-logo[data-tone='brand'] {
   /* Meant for placement on the fixed butter-yellow brand surface (see
-     .auth-card-hero) — --accent-contrast, not --line, since that surface
+     .auth-card-hero) — --brand-green-ink, not --line, since that surface
      doesn't change with the app's light/dark theme either. */
-  color: var(--accent-contrast);
+  color: var(--brand-green-ink);
 }
 
 /* ---------- Onboarding's step progress (Onboarding.jsx) ---------- */
@@ -1082,7 +1205,19 @@ nav {
   margin: 0;
   font-size: 1.4rem;
 }
-.top-bar-title-hero {
+/* This was designed for TopBar's own `hero` prop but nothing ever actually
+   passed it — every TopBar call site in the app uses a plain title, so this
+   dramatic scale has sat unused since it was written. The everyday screens'
+   own hand-rolled greetings (Home's "Hello, Name", the quest feed's
+   "Explore Quests", any generic .page-greeting) fall back to the plain
+   global h1 (1.9rem, identical to a form section heading) instead —
+   extending this rule to cover them directly gives the screens people
+   actually live in the same presence Landing's hero already has, with no
+   new token needed. */
+.top-bar-title-hero,
+.home-greeting h1,
+.quest-feed-greeting h1,
+.page-greeting h1 {
   margin: 0;
   font-family: var(--font-heading);
   font-weight: 700;
@@ -1113,8 +1248,15 @@ nav {
   right: 0;
   bottom: 0;
   height: var(--nav-height);
-  background: var(--paper-card);
-  border-top: 1.5px solid var(--border);
+  /* Matches the page exactly, not a step down — fully transparent was the
+     other option, but text/icons scrolling directly underneath a see-
+     through fixed bar would put the nav's own labels against whatever
+     color happens to be behind them, unpredictable and sometimes illegible.
+     Same background as the page keeps contrast fixed and predictable while
+     still reading as "no separate bar," just without depending on see-
+     through content to get there. */
+  background: var(--paper);
+  border-top: 2px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1137,12 +1279,13 @@ nav {
     justify-content: flex-start;
     align-items: center;
     gap: 10px;
-    padding: 0 40px;
+    padding: 0 32px;
     border-top: none;
-    border-bottom: 1.5px solid var(--border);
+    border-bottom: none;
   }
 }
 .bottom-nav-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1160,13 +1303,27 @@ nav {
   text-decoration: none;
   letter-spacing: 0.01em;
 }
+/* Renders only inside the current item (see BottomNav.jsx) and carries a
+   shared layoutId, so switching tabs slides this one pill from its old
+   position to its new one instead of the old snap-on/snap-off background —
+   the same "every transition gets a considered curve" idea behind the
+   button press easing above, applied to the one persistent nav affordance
+   instead of a one-off marketing hover. */
+.bottom-nav-active-pill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent-soft);
+  border-radius: var(--radius-full);
+  z-index: -1;
+  pointer-events: none;
+}
 @media (min-width: 860px) {
   .bottom-nav-item {
     flex-direction: row;
     justify-content: center;
     gap: 9px;
     width: auto;
-    padding: 10px 18px;
+    padding: 8px 16px;
   }
   .bottom-nav-item svg {
     width: 22px;
@@ -1188,12 +1345,11 @@ nav {
   transform: none;
   box-shadow: none;
 }
-.bottom-nav-item[aria-current='page'] {
-  background: var(--accent-soft);
-  /* color: var(--accent); */
-}
 .bottom-nav-item[aria-current='page']:hover:not(:disabled) {
-  background: var(--accent-soft);
+  /* The sliding .bottom-nav-active-pill (see above) already shows
+     selection — the generic hover wash below would otherwise paint a
+     second, static background on top of it. */
+  background: none;
 }
 
 /* Mobile-only "+" FAB (option 1c) — not a create action, a popup revealing
@@ -1217,10 +1373,10 @@ nav {
   border: none;
   border-radius: var(--radius-full);
   background: var(--brand-green);
-  /* --accent-contrast, not --line — --brand-green is a fixed butter-yellow
+  /* --brand-green-ink, not --line — --brand-green is a fixed butter-yellow
      that doesn't change with the app's light/dark theme, so --line
      flipping to a light color in dark mode would go pale-on-pale here. */
-  color: var(--accent-contrast);
+  color: var(--brand-green-ink);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1242,7 +1398,7 @@ nav {
   height: 46px;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   color: var(--line);
   display: flex;
   align-items: center;
@@ -1297,7 +1453,7 @@ nav {
   height: 40px;
   flex: none;
   border-radius: var(--radius-full);
-  border: 2px solid var(--brand-mustard);
+  border: none;
   background: var(--accent-soft);
   color: var(--accent);
   display: flex;
@@ -1306,9 +1462,17 @@ nav {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.85rem;
+  overflow: hidden;
 }
 .bottom-nav-avatar-link[aria-expanded='true'] .nav-avatar {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+/* A photo/duck avatar (user, pending_org) matches Profile page's
+   .user-avatar fill exactly — only the organization avatar (plain
+   initials) keeps the accent-soft/accent tinted look above. */
+.nav-avatar-photo {
+  background: var(--paper-card);
+  color: var(--line);
 }
 .bottom-nav-avatar-menu {
   position: absolute;
@@ -1320,7 +1484,7 @@ nav {
   min-width: 170px;
   padding: 6px;
   background: var(--paper-card);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   box-shadow: none;
 }
@@ -1435,14 +1599,25 @@ nav {
   min-width: 0;
   padding: 0;
   position: relative;
-  /* .ink-card's own border-color (--border) is a near-invisible 8%-opacity
-     black in the light theme — fine for most cards, but a quest row sits
-     directly against the page's own cream background with nothing else to
-     separate them, so it reads as an edge that just stops rather than a
-     bounded card. A stronger, dedicated color-mix here (not a change to
-     --border itself, which cascades to every other card/button/input in
-     the app) keeps this scoped to quest rows specifically. */
-  border-color: color-mix(in srgb, var(--line-soft) 45%, transparent);
+  transition:
+    background-color 0.15s ease,
+    scale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* The tap target for "open this quest" is .quest-card-overlay — a fully
+   transparent, absolutely-positioned <button> stacked on top of this card
+   (see the comment on .quest-card-overlay below) — so the universal
+   `button:active { scale: 0.96 }` press cue lands on an invisible element
+   and produces no visible feedback at all. :has() lets the actual visible
+   card squish instead, driven by its own child's :active state, which is
+   the only way to do this without restructuring which element is the real
+   button. */
+.quest-content-col:has(.quest-card-overlay:active) {
+  scale: 0.98;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quest-content-col:has(.quest-card-overlay:active) {
+    scale: 1;
+  }
 }
 
 /* Quests.jsx's flat card layout: a stretched-link overlay covers the whole
@@ -1579,7 +1754,7 @@ button.quest-card-head:hover:not(:disabled) {
   align-items: center;
   padding: 3px 12px;
   border-radius: var(--radius-full);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.78rem;
@@ -2159,6 +2334,7 @@ a.org-home-stat-tile:hover {
   font-family: var(--font-display);
   font-size: 2.4rem;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .stat-hero-label {
   font-family: var(--font-heading);
@@ -2298,7 +2474,7 @@ a.org-home-stat-tile:hover {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   box-shadow: none;
   color: var(--line);
 }
@@ -2376,7 +2552,7 @@ a.org-home-stat-tile:hover {
 }
 .data-row {
   padding: 14px 16px;
-  border-bottom: 1.5px solid var(--border);
+  border-bottom: 2px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2398,6 +2574,7 @@ a.org-home-stat-tile:hover {
 .data-row-sub {
   margin: 2px 0 0;
   font-size: 0.9rem;
+  color: var(--line-soft);
 }
 .data-stat {
   font-family: var(--font-heading);
@@ -2406,11 +2583,19 @@ a.org-home-stat-tile:hover {
   color: var(--line-soft);
   white-space: nowrap;
   flex: none;
+  /* Point/submission/attendee counts live here and update live — equal-width
+     digits keep the surrounding layout from twitching as a count changes. */
+  font-variant-numeric: tabular-nums;
 }
 .data-row-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  /* A little more separation than the 8px gap between .data-row's other
+     stacked children (head/sub lines) — those are all description, this
+     is the one interactive zone, and it was reading as just one more line
+     in the same stack instead of a distinct action area. */
+  margin-top: 4px;
 }
 .data-row-actions button {
   padding: 7px 13px;
@@ -2616,7 +2801,7 @@ a.org-home-stat-tile:hover {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   box-shadow: none;
 }
 .pending-review-action-reject {
@@ -2729,7 +2914,7 @@ a.org-home-stat-tile:hover {
    list + inline step-through rating flow for pending feedback requests
    ---------- */
 .feedback-row {
-  border-bottom: 1.5px solid var(--border);
+  border-bottom: 2px solid var(--border);
 }
 .feedback-row:last-child {
   border-bottom: none;
@@ -2824,7 +3009,7 @@ a.org-home-stat-tile:hover {
   height: 38px;
   padding: 0;
   border-radius: var(--radius);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   background: var(--paper-card);
   font-weight: 600;
   font-size: 0.85rem;
@@ -2952,7 +3137,10 @@ a.org-home-stat-tile:hover {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: 10px;
+  /* Was a hardcoded 10px, drifted from every text button's radius
+     (--radius-button) — icon-only buttons should round the same as
+     every other button, not their own one-off value. */
+  border-radius: var(--radius-button);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3035,7 +3223,7 @@ a.org-home-stat-tile:hover {
   min-width: 200px;
   padding: 6px;
   background: var(--paper-card);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   box-shadow: none;
 }
@@ -3065,7 +3253,7 @@ a.org-home-stat-tile:hover {
    buttons above is the only extra structure needed; the toggle button
    itself reuses .quest-card-head/.quest-card-titles/.quest-chevron. */
 .quest-expand-section {
-  border-top: 1.5px solid var(--border);
+  border-top: 2px solid var(--border);
   margin-top: 12px;
 }
 
@@ -3095,6 +3283,13 @@ a.org-home-stat-tile:hover {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  /* Matches the 16px margin every plain <h2> already gets for free from the
+     global h1/h2/h3 rule — call sites that need the count-badge layout this
+     row provides were zeroing the h2's own margin to avoid doubling up
+     inside the flex row, then patching the gap back in ad hoc (8px here,
+     12px there), which read as visibly tighter than every other section on
+     the same page. One rule, one value, no more per-call-site guessing. */
+  margin-bottom: 16px;
 }
 
 /* a data-row that's also a <button> (AllUsers' clickable rows) needs to
@@ -3104,7 +3299,7 @@ a.org-home-stat-tile:hover {
    individually, so this wins regardless of source order. */
 button.data-row {
   border: none;
-  border-bottom: 1.5px solid var(--border);
+  border-bottom: 2px solid var(--border);
   border-radius: 0;
   box-shadow: none;
   font-weight: 400;
@@ -3180,7 +3375,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   gap: 9px;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: none;
   border-radius: var(--radius-full);
   padding: 11px 16px;
 }
@@ -3206,7 +3401,7 @@ button.data-row:active:not(:disabled) {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-button);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3239,11 +3434,12 @@ button.data-row:active:not(:disabled) {
   height: 64px;
   flex: none;
   border-radius: var(--radius-full);
-  border: 3px solid var(--brand-mustard);
+  border: none;
   background: var(--paper-card);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .profile-identity {
@@ -3311,6 +3507,13 @@ button.data-row:active:not(:disabled) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+  /* Grid's default `stretch` was forcing RsvpdQuestsPreview/BadgesPreview
+     (a handful of lines each) to match ProgressCard's height once its own
+     Collapse opens to the full milestone ladder + certificate banner —
+     visible dead space at the bottom of the two short cards on any row
+     they shared with an expanded ProgressCard. Each card now sizes to its
+     own content instead. */
+  align-items: start;
 }
 
 /* ---------- Organization Profile page (see OrganizationProfile.jsx) ---------- */
@@ -3328,6 +3531,8 @@ button.data-row:active:not(:disabled) {
   border-radius: var(--radius-full);
   object-fit: cover;
   flex: none;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 .org-profile-header-info {
   display: flex;
@@ -3374,10 +3579,16 @@ button.data-row:active:not(:disabled) {
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 10px;
-  border: 1.5px solid var(--border);
   padding: 0;
   background: var(--paper-well);
   width: 100%;
+  /* A neutral outline, not the themed --border — a real photo's edge
+     picking up this app's brown/yellow cast reads as dirt on the image,
+     not as a deliberate frame. outline (not border) keeps this from
+     adding layout width, and the negative offset insets it so it doesn't
+     cover the photo's own edge pixels. */
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 .photo-gallery-thumb img {
   width: 100%;
@@ -3399,7 +3610,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
 }
 .photo-lightbox-backdrop {
   position: fixed;
@@ -3432,11 +3643,26 @@ button.data-row:active:not(:disabled) {
   padding: 0;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--line);
+}
+/* The visible circle stays 32px (any bigger and it overpowers the photo
+   it's closing), but the actual tap target grows to the recommended 44px
+   via an invisible centered pseudo-element rather than resizing the button
+   itself — this is the single most-reused close button in the app (photo
+   lightbox, QR modal, attendees list, map overlay), so it's worth getting
+   right once here. */
+.photo-lightbox-close::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 /* ---------- WelcomeTour (one-time first-run walkthrough) ---------- */
@@ -3581,7 +3807,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   gap: 10px;
   background: none;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   padding: 6px 14px 6px 6px;
   border-radius: var(--radius-full);
   font-family: var(--font-body);
@@ -3669,8 +3895,8 @@ button.data-row:active:not(:disabled) {
   width: 100%;
   box-sizing: border-box;
   background: var(--paper-card);
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
   padding: 10px 16px;
   margin-bottom: 14px;
   font-family: var(--font-heading);
@@ -3693,8 +3919,11 @@ button.data-row:active:not(:disabled) {
   color: var(--line-soft);
   margin: 0 0 16px;
 }
+/* Was the same --paper-well as the new .ink-card default (see above) —
+   "muted" needs to recede below the default now, not match it, so this
+   blends all the way into the page instead. */
 .ink-card[data-muted='true'] {
-  background: var(--paper-well);
+  background: var(--paper);
 }
 
 /* ---------- rank progression (Profile's ProgressCard, Certificate, admin
@@ -3780,7 +4009,7 @@ button.data-row:active:not(:disabled) {
 .rank-milestones {
   display: flex;
   justify-content: space-between;
-  gap: 4px;
+  gap: 8px;
 }
 .rank-milestone {
   display: flex;
@@ -3837,7 +4066,11 @@ button.data-row:active:not(:disabled) {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   padding: 12px 16px;
-  margin-top: 4px;
+  /* This is the "you did it, go get your certificate" moment — it was
+     sitting only 4px under the rank milestones above it, closer than any
+     other two blocks on the page, so it read as crowded rather than as its
+     own callout. */
+  margin-top: 16px;
 }
 
 /* ---------- Diamond certificate (Certificate.jsx) ---------- */
@@ -4083,16 +4316,6 @@ button.data-row:active:not(:disabled) {
   .events-map-mobile-overlays .tag-filter-row {
     max-width: none;
   }
-  /* Same readability fix .events-map-overlays (desktop) already has — an
-     unselected selectable tag is normally `background: transparent` (just
-     a colored outline, meant for the page's own plain paper background),
-     which is see-through to whatever's on the map underneath it here.
-     --paper-card is already the app's own theme-aware white(light)/
-     black(dark) surface token, so this needs no new color logic. The
-     already-selected pill (tone-filled, already opaque) is untouched. */
-  .events-map-mobile-overlays .tag-stamp[data-selectable='true'] {
-    background: var(--paper-card);
-  }
   .events-map-mobile-overlays .tag-stamp {
     box-shadow: none;
   }
@@ -4106,7 +4329,9 @@ button.data-row:active:not(:disabled) {
     right: 0;
     bottom: 0;
     height: 95vh;
-    background: var(--paper-card);
+    /* Matches --bottom-nav (var(--paper)), not --paper-card — same fix as
+       the desktop sidebar above. */
+    background: var(--paper);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     box-shadow: none;
     z-index: 5;
@@ -4232,7 +4457,10 @@ button.data-row:active:not(:disabled) {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background: var(--paper-card);
+    /* Matches --bottom-nav (var(--paper)), not --paper-card — the sidebar
+       sits directly against the nav bar, and the two were visibly
+       different tones before. */
+    background: var(--paper);
     border-right: 1px solid var(--border);
     padding: 20px;
   }
@@ -4282,17 +4510,6 @@ button.data-row:active:not(:disabled) {
   .events-map-overlays .tag-stamp {
     box-shadow: none;
   }
-  /* An unselected selectable tag is normally `background: transparent` (see
-     .tag-stamp[data-selectable='true']) — just a colored outline, meant to
-     sit on the page's own plain paper background. Floating directly over
-     the map instead, that outline is see-through to whatever's on the map
-     underneath it and hard to read; force an opaque paper background here
-     specifically so the label stays legible regardless of what's on the
-     map behind it. The already-selected pill (tone-filled, already
-     opaque) is untouched. */
-  .events-map-overlays .tag-stamp[data-selectable='true'] {
-    background: var(--paper-card);
-  }
 }
 
 .events-map-list {
@@ -4341,6 +4558,8 @@ button.data-row:active:not(:disabled) {
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--paper-well);
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 .map-quest-hero-img {
   width: 100%;
@@ -4494,6 +4713,8 @@ button.data-row:active:not(:disabled) {
   flex: none;
   border-radius: var(--radius-full);
   overflow: hidden;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 .map-review-header-text {
   flex: 1;
@@ -4518,7 +4739,7 @@ button.data-row:active:not(:disabled) {
   font-size: 0.85rem;
 }
 .map-review-star-filled {
-  color: var(--brand-mustard);
+  color: var(--accent);
 }
 .map-review-star-empty {
   color: var(--border);
@@ -4537,7 +4758,7 @@ button.data-row:active:not(:disabled) {
   width: 100%;
   height: 220px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   overflow: hidden;
   background: var(--paper-well);
   margin-bottom: 14px;
@@ -4559,7 +4780,7 @@ button.data-row:active:not(:disabled) {
   z-index: 2;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   overflow-y: auto;
   padding: 20px;
 }
@@ -4614,7 +4835,7 @@ button.data-row:active:not(:disabled) {
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   box-shadow: none;
   aspect-ratio: 4 / 5;
   cursor: pointer;
@@ -4689,7 +4910,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   color: var(--line);
 }
 /* Opens upward from the bottom-right trigger, not downward — downward
@@ -4752,7 +4973,7 @@ button.data-row:active:not(:disabled) {
   padding: 0;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;

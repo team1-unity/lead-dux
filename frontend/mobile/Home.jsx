@@ -8,6 +8,23 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 import { NotificationBanner } from '@shared/NotificationBanner.jsx';
+import { PageMotion } from '@shared/PageMotion.jsx';
+
+// A small rotating set rather than one fixed line — Home is the one screen
+// in the app someone opens several times a day, so a single static caption
+// under the duck would go stale fast. Picked by day-of-month rather than
+// per-render, so it stays put for the whole day instead of changing on
+// every navigation back to this screen.
+const HOME_CAPTIONS = [
+  'Ready when you are.',
+  "Let's find you something today.",
+  'Your community is waiting.',
+  'One quest a day adds up fast.',
+  "Somewhere out there needs a leader today — maybe that's you.",
+];
+function homeCaption() {
+  return HOME_CAPTIONS[new Date().getDate() % HOME_CAPTIONS.length];
+}
 
 // The new landing screen for the `user` role (see BottomNav's PRIMARY_BY_ROLE
 // and App.jsx's PublicHome) — a quick greeting plus the two actions the
@@ -31,17 +48,18 @@ export function Home() {
     });
   }, [user]);
 
-  if (profile === null) return <LoadingSpinner label="Loading..." />;
+  if (profile === null) return <LoadingSpinner label="Loading…" />;
 
   const firstName = profile.name ? profile.name.split(' ')[0] : null;
 
   return (
-    <div className="home-page">
+    <PageMotion className="home-page">
       <NotificationBanner />
 
       <div className="home-greeting">
         <DuckMark size={140} />
         <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
+        <p className="duck-caption">{homeCaption()}</p>
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -60,6 +78,6 @@ export function Home() {
           </StampButton>
         </Link>
       </div>
-    </div>
+    </PageMotion>
   );
 }

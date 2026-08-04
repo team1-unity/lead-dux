@@ -22,7 +22,7 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
       <p style={{ margin: 0 }}>{message}</p>
       <div className="flex gap-sm" style={{ marginTop: 10 }}>
         <StampButton type="button" variant="danger" disabled={submitting} onClick={onConfirm}>
-          {submitting ? 'Working...' : confirmLabel}
+          {submitting ? 'Working…' : confirmLabel}
         </StampButton>
         <StampButton type="button" onClick={onCancel} disabled={submitting}>
           Cancel
@@ -153,7 +153,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             shows for quests that predate that change. */}
         {!selected.qrToken ? (
           <StampButton type="button" variant="primary" onClick={a.generateQr} disabled={a.qrBusy}>
-            {a.qrBusy ? 'Generating...' : 'Generate QR Code'}
+            {a.qrBusy ? 'Generating…' : 'Generate QR Code'}
           </StampButton>
         ) : (
           <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
@@ -239,7 +239,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           </label>
           {a.recurError && <p className="box-danger">{a.recurError}</p>}
           <StampButton type="submit" variant="primary" disabled={a.recurSubmitting}>
-            {a.recurSubmitting ? 'Saving...' : 'Make recurring'}
+            {a.recurSubmitting ? 'Saving…' : 'Make recurring'}
           </StampButton>
         </form>
       )}
@@ -259,7 +259,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           {confirmingRefresh && (
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
-              confirmLabel={a.qrBusy ? 'Working...' : 'Yes, regenerate'}
+              confirmLabel={a.qrBusy ? 'Working…' : 'Yes, regenerate'}
               submitting={a.qrBusy}
               onConfirm={() => {
                 a.refreshQr();

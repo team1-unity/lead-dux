@@ -463,7 +463,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
         }
         onCreated();
       } catch (err) {
-        setSubmitError(err.message || 'Something went wrong.');
+        setSubmitError(err.message || "That didn't go through — try again in a moment.");
         setConfirmingReschedule(false);
       } finally {
         setSubmitting(false);
@@ -492,7 +492,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
       clearDraft();
     } catch (err) {
       setView('form');
-      setSubmitError(err.message || 'Something went wrong.');
+      setSubmitError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setSubmitting(false);
     }
@@ -659,7 +659,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
               {confirmingReschedule && (
                 <ConfirmBox
                   message="This clears every current RSVP for this date and notifies each of those attendees that it changed — they'll need to RSVP again if they still want to attend. This can't be undone."
-                  confirmLabel={submitting ? 'Saving...' : 'Yes, reschedule'}
+                  confirmLabel={submitting ? 'Saving…' : 'Yes, reschedule'}
                   submitting={submitting}
                   onConfirm={handleSubmit}
                   onCancel={() => setConfirmingReschedule(false)}
@@ -678,7 +678,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
                   key={placeKey}
                   id='quest-where'
                   ariaLabel='Quest location'
-                  placeholder='Search for an address or venue...'
+                  placeholder='Search for an address or venue…'
                   onSelect={onLocationSelected}
                 />
               ) : (
@@ -945,7 +945,7 @@ export function CreateQuestForm({ quests, onCreated, onCancel, editingQuest, can
 
       <div className='quest-form-footer'>
         <StampButton type='submit' variant='primary' disabled={submitting || confirmingReschedule}>
-          {editingQuest ? (submitting ? 'Saving...' : 'Save changes') : 'Publish quest'}
+          {editingQuest ? (submitting ? 'Saving…' : 'Save changes') : 'Publish quest'}
         </StampButton>
         {/* <span className='field-optional'>Saves as you write · nothing to lose</span> */}
         <button

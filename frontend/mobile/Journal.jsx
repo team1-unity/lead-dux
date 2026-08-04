@@ -183,7 +183,7 @@ function FeedbackRequestModal({ entry, requestsUsedThisMonth, onClose }) {
           style={{ marginTop: 8 }}
         >
           {requesting
-            ? 'Requesting...'
+            ? 'Requesting…'
             : atCap
               ? "You've used all your requests this month"
               : 'Request feedback'}
@@ -554,7 +554,7 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
                     onClick={saveReflection}
                     disabled={saving}
                   >
-                    {saving ? 'Saving...' : 'Save reflection'}
+                    {saving ? 'Saving…' : 'Save reflection'}
                   </StampButton>
                   {savedBody.trim() && (
                     <StampButton type='button' onClick={cancelEditing} disabled={saving}>
@@ -678,7 +678,7 @@ function ThumbnailPicker({ entry, onClose }) {
           disabled={Boolean(saving)}
           style={{ marginBottom: 12 }}
         >
-          {saving === 'upload' ? 'Uploading...' : 'Upload your own photo'}
+          {saving === 'upload' ? 'Uploading…' : 'Upload your own photo'}
         </StampButton>
         <div className='journal-thumbnail-picker-grid'>
           <button
@@ -766,7 +766,7 @@ export function Journal() {
     <PageMotion>
       <TopBar title='Journal' />
       {entries === null ? (
-        <LoadingSpinner label='Loading your journal...' />
+        <LoadingSpinner label='Loading your journal…' />
       ) : entries.length === 0 ? (
         <div className='quest-empty'>
           <h2>No Entries Yet</h2>

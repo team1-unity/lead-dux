@@ -131,7 +131,7 @@ function AboutEditForm({ org, onSaved, onCancel }) {
       ]);
       onSaved({ ...profilePayload, socialLinks: social, ltag, etag });
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setSubmitting(false);
     }
@@ -339,7 +339,7 @@ function AboutEditForm({ org, onSaved, onCancel }) {
 
       <div className="quest-form-footer">
         <StampButton type="submit" variant="primary" disabled={submitting}>
-          {submitting ? 'Saving...' : 'Save'}
+          {submitting ? 'Saving…' : 'Save'}
         </StampButton>
         <button type="button" className="quest-form-ghost-btn" onClick={onCancel} disabled={submitting}>
           Cancel
@@ -417,7 +417,7 @@ function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
       await callAddOrganizationPhoto(path);
       onPathsChange([...paths, path]);
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setUploading(false);
     }
@@ -429,7 +429,7 @@ function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
       await callRemoveOrganizationPhoto(path);
       onPathsChange(paths.filter((p) => p !== path));
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     }
   }
 
@@ -437,7 +437,7 @@ function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
     <>
       {isOwner && (
         <label className="quest-form-ghost-btn stamp-btn" style={{ marginBottom: 12, display: 'inline-block' }}>
-          {uploading ? 'Uploading...' : '+ Add photo'}
+          {uploading ? 'Uploading…' : '+ Add photo'}
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
@@ -521,7 +521,7 @@ export function OrganizationProfile() {
   }, [orgId]);
 
   if (notFound) return <Navigate to="/" replace />;
-  if (!org) return <LoadingSpinner label="Loading organization..." />;
+  if (!org) return <LoadingSpinner label="Loading organization…" />;
 
   const socialEntries = Object.entries(org.socialLinks || {}).filter(([, url]) => url);
 
@@ -640,7 +640,7 @@ export function OrganizationProfile() {
             )}
           </div>
           {seriesList === null ? (
-            <LoadingSpinner label="Loading quests..." />
+            <LoadingSpinner label="Loading quests…" />
           ) : isOwner ? (
             <>
               <p className="data-stat" style={{ marginTop: 10 }}>

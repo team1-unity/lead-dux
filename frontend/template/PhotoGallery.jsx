@@ -15,7 +15,7 @@ export function PhotoGallery({ photos = [], onDelete }) {
   const [openIndex, setOpenIndex] = useState(null);
 
   if (photos.length === 0) {
-    return <p className="data-stat">No photos yet — check back after the next event.</p>;
+    return <p className="data-stat">No photos yet — the next event will start the gallery.</p>;
   }
 
   return (
