@@ -32,16 +32,6 @@ const REFLECTION_PROMPTS = [
   'How did this quest reflect your leadership growth?',
 ];
 
-// Mirrors FEEDBACK_QUESTIONS in functions/main.py by hand, same as every
-// other constant kept in sync across the two sides of this app.
-const FEEDBACK_QUESTIONS = {
-  engagement: 'How actively did they participate and engage during the quest?',
-  presence: 'How present and attentive were they throughout?',
-  involvement: 'How involved were they in contributing to the group or task?',
-  initiative: 'How much initiative did they show — stepping up or helping without being asked?',
-  attitude: 'How positive and cooperative was their attitude?',
-};
-
 // A small curated set of background pictures a member can pick for an
 // entry (see set_journal_thumbnail in functions/main.py) — no upload flow,
 // just a handful of stock photos plus "remove". A card with none picked
@@ -78,47 +68,54 @@ function toDate(value) {
 
 // Read-only — whatever the organization has already said (or "waiting"/
 // "expired") about a feedback request already made for this entry. Shown
-// inline in the expanded view whenever entry.requestStatus is set. The
-// *action* of making a new request now lives on the quest's own Past
-// Attended detail (mobile/Quests.jsx) instead of here — testing found
-// requesting feedback from inside the journal wasn't an intuitive place to
-// look for it, even though the request's result still lands back in the
-// journal entry it's about.
+// below the reflection (see ExpandedJournalEntry's render order) whenever
+// entry.requestStatus is set. The *action* of making a new request now
+// lives on the quest's own Past Attended detail (mobile/Quests.jsx)
+// instead of here — testing found requesting feedback from inside the
+// journal wasn't an intuitive place to look for it, even though the
+// request's result still lands back in the journal entry it's about.
+//
+// The completed case never renders entry.score/entry.answers — those
+// still exist on the doc (the org's own record, and what the point bonus
+// is computed from server-side), but request_quest_feedback's own
+// _generate_feedback_summary turns them into entry.summary/entry.
+// growthArea before this ever sees them, so no numeric rating reaches the
+// leader. The points-awarded line that used to live here is gone too —
+// submit_feedback_request_response now fires a Home-screen notice for
+// that instead (see NotificationBanner.jsx), so repeating it a second
+// time, permanently, inside the entry itself was redundant.
 function FeedbackStatus({ entry }) {
   if (!entry.requestStatus) return null;
 
   if (entry.requestStatus === 'pending') {
     const expired = entry.expiresAt && toDate(entry.expiresAt).getTime() < Date.now();
     return (
-      <div className='journal-feedback-pending-corner'>
-        <p style={{ margin: 0, whiteSpace: 'normal' }} className='data-stat'>
-          {expired
-            ? "Expired — the organization didn't respond in time."
-            : 'Feedback requested — waiting on the organization to respond.'}
-        </p>
-      </div>
+      <p className='journal-feedback-pending data-stat'>
+        {expired
+          ? "Expired — the organization didn't respond in time."
+          : 'Feedback requested — waiting on the organization to respond.'}
+      </p>
     );
   }
 
   return (
     <div className='journal-feedback'>
-      <span className='journal-rating'>{entry.score}/10</span>
-      <ul style={{ marginTop: 8 }}>
-        {Object.entries(FEEDBACK_QUESTIONS).map(([key, question]) => (
-          <li key={key}>
-            {question} — <strong>{entry.answers?.[key]}/10</strong>
-          </li>
-        ))}
-      </ul>
-      {entry.extraThoughts && <p style={{ margin: 0 }}>{entry.extraThoughts}</p>}
+      <hr className='journal-feedback-divider' />
+      <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 8px' }}>
+        Your feedback
+      </p>
+      <p style={{ margin: 0 }}>{entry.summary}</p>
+      {entry.growthArea && (
+        <p style={{ margin: '8px 0 0' }}>
+          <strong>Opportunity for Growth</strong> — {entry.growthArea}
+        </p>
+      )}
+      {entry.extraThoughts && (
+        <blockquote className='journal-feedback-quote'>{entry.extraThoughts}</blockquote>
+      )}
       {entry.orgName && (
         <p className='quest-org-line' style={{ marginTop: 6 }}>
           — {entry.orgName}
-        </p>
-      )}
-      {entry.pointsAwarded > 0 && (
-        <p className='box-success' style={{ marginTop: 8 }}>
-          You earned {entry.pointsAwarded} points for this!
         </p>
       )}
     </div>
@@ -292,6 +289,36 @@ function JournalCardMenu({ entry, isEditing, onChangePicture, onEdit }) {
 function JournalCard({ entry, isOpen, onOpen }) {
   const isNew = !entry.read && entry.requestStatus === 'completed';
 
+  // thumbnailUrl is usually already a plain, directly-usable URL (the
+  // curated stock picks, or an uploaded picture — both resolved before
+  // set_journal_thumbnail ever stores them), but approve_photo_submission
+  // can also auto-fill it with a raw Storage path (see that function's own
+  // note in functions/main.py) when a leader's proof photo gets approved.
+  // Same maybe-a-path-maybe-a-URL resolution HeroCarousel.jsx/
+  // PendingPhotoReview.jsx already do for org photos.
+  const [resolvedUrl, setResolvedUrl] = useState(null);
+  useEffect(() => {
+    if (!entry.thumbnailUrl) {
+      setResolvedUrl(null);
+      return undefined;
+    }
+    if (/^https?:\/\//.test(entry.thumbnailUrl)) {
+      setResolvedUrl(entry.thumbnailUrl);
+      return undefined;
+    }
+    let cancelled = false;
+    getDownloadURL(storageRef(storage, entry.thumbnailUrl))
+      .then((url) => {
+        if (!cancelled) setResolvedUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.thumbnailUrl]);
+
   function onKeyDown(e) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -299,7 +326,7 @@ function JournalCard({ entry, isOpen, onOpen }) {
     }
   }
 
-  const hasPicture = Boolean(entry.thumbnailUrl);
+  const hasPicture = Boolean(resolvedUrl);
 
   return (
     <motion.div
@@ -319,11 +346,12 @@ function JournalCard({ entry, isOpen, onOpen }) {
       transition={{ duration: 0.15 }}
     >
       {/* Blank until a picture is actually chosen (see "Change background
-          picture" in the expanded card's menu) — no default stock photo
-          standing in for one that was never picked. */}
+          picture" in the expanded card's menu) or auto-filled from an
+          approved proof photo (see approve_photo_submission) — no default
+          stock photo standing in for one that was never picked. */}
       {hasPicture && (
         <>
-          <img src={entry.thumbnailUrl} alt='' className='journal-card-bg' loading='lazy' />
+          <img src={resolvedUrl} alt='' className='journal-card-bg' loading='lazy' />
           <div className='journal-card-scrim' aria-hidden='true' />
         </>
       )}
@@ -432,12 +460,6 @@ function ExpandedJournalEntry({ entry, onClose }) {
         >
           <h2 style={{ marginTop: 0, paddingRight: 40 }}>{entry.questTitle}</h2>
 
-          {/* Hidden while actively editing — it's corner-anchored (see
-              .journal-feedback-pending-corner) in roughly the same bottom
-              area as the Save/Cancel buttons below, so showing both at
-              once would visually collide. */}
-          {!editing && <FeedbackStatus entry={entry} />}
-
           <div className='journal-reflection'>
             {/* <h3>Your Reflection</h3> */}
             {editing ? (
@@ -504,6 +526,11 @@ function ExpandedJournalEntry({ entry, onClose }) {
               </div>
             )}
           </div>
+
+          {/* Below the reflection, not above it — hidden while actively
+              editing (the Save/Cancel buttons take this same bottom area
+              instead). */}
+          {!editing && <FeedbackStatus entry={entry} />}
         </motion.div>
       </motion.div>
 
@@ -629,8 +656,9 @@ function ThumbnailPicker({ entry, onClose }) {
 // Every organization quest a user has checked into, one entry per
 // occurrence — created the moment check-in happens (see check_in_to_event),
 // independent of whether feedback is ever requested for it. Live
-// (onSnapshot), same as the BottomNav badge and FeedbackToast, so a
-// freshly-answered feedback request appears here without a reload.
+// (onSnapshot), same as the BottomNav badge and NotificationBanner's
+// Home-screen notice, so a freshly-answered feedback request appears here
+// without a reload.
 export function Journal() {
   const { user, loading } = useAuth();
   const [entries, setEntries] = useState(null);

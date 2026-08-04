@@ -1854,10 +1854,10 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     # to request feedback from, and get their own reflection at photo-
     # submission time instead, see submit_quest_photo). `requestStatus`
     # starts unset (not "pending") since no feedback has been requested
-    # yet; `notified`/`read` are deliberately left off the doc entirely
-    # rather than defaulted, so FeedbackToast/BottomNav's `==false` queries
-    # (see the "Organization feedback requests" module note below) never
-    # match a quest with no feedback on it.
+    # yet; `read` is deliberately left off the doc entirely rather than
+    # defaulted, so BottomNav's `==false` query (see the "Organization
+    # feedback requests" module note below) never matches a quest with no
+    # feedback on it.
     if quest.get("orgId"):
         db.collection("users").document(uid).collection("journal").document(quest_id).set({
             "questId": quest_id,
@@ -2146,6 +2146,29 @@ def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
     _award_points(db, submitter_uid, total_points)
     ref.update({"pointsAwarded": total_points})
 
+    # Auto-fill the leader's journal cover photo from their own just-
+    # approved proof photo — organization quests only (side quests have no
+    # journal entry at all; see check_in_to_event's own note on that).
+    # Waits for approval rather than doing this at submission time: an
+    # org can still reject a submission, and a rejected/unverified photo
+    # shouldn't already be sitting as the journal's cover by then. Only
+    # when the entry doesn't already have a real photo of its own — a
+    # picture someone deliberately chose (set_journal_thumbnail) always
+    # wins, and stays untouched by a later approval. Stored as the plain
+    # Storage path rather than a resolved download URL (unlike the
+    # curated-URL case set_journal_thumbnail otherwise expects) — same
+    # "resolve it client-side, same as any other Storage path" precedent
+    # HeroCarousel.jsx/PendingPhotoReview.jsx already use for org photos.
+    #
+    # TODO once a default placeholder background exists: that default
+    # should count as "blank" here too, the same way an unset thumbnailUrl
+    # already does.
+    if quest.get("orgId"):
+        journal_ref = _journal_ref(db, submitter_uid, quest_id)
+        journal_snap = journal_ref.get()
+        if journal_snap.exists and not journal_snap.to_dict().get("thumbnailUrl"):
+            journal_ref.update({"thumbnailUrl": submission["storagePath"]})
+
     return {"success": True}
 
 
@@ -2223,17 +2246,19 @@ def reject_photo_submission(req: https_fn.CallableRequest) -> dict:
 # longer depends on feedback existing at all. request_quest_feedback and
 # submit_feedback_request_response both additionally mirror the request's
 # state onto that same journal doc (requestStatus/requestedAt/expiresAt,
-# then answers/score/extraThoughts/pointsAwarded/completedAt) so the
-# mobile Journal page, FeedbackToast, and the BottomNav badge only ever
-# need to watch users/{uid}/journal — never feedbackRequests directly.
-# `notified` gates the one-time "you got feedback" popup
-# (frontend/template/FeedbackToast.jsx); `read` gates the BottomNav journal
-# badge — the two are deliberately separate, since dismissing the popup
-# shouldn't itself mark the journal entry as read. Both are left unset on
-# the journal doc until a request actually completes (see check_in_to_event
+# then answers/score/summary/growthArea/extraThoughts/pointsAwarded/
+# completedAt) so the mobile Journal page and the BottomNav badge only
+# ever need to watch users/{uid}/journal — never feedbackRequests
+# directly. `read` gates the BottomNav journal badge — left unset on the
+# journal doc until a request actually completes (see check_in_to_event
 # and the module note there) rather than defaulted to some value, since a
 # Firestore `==false` query never matches a doc where the field is simply
 # absent — exactly the behavior wanted for a quest with no feedback on it.
+# The one-time "you got feedback" notice is a separate concern entirely —
+# submit_feedback_request_response also calls _notify_user (kind=
+# "feedback_received"), the same users/{uid}/notifications mechanism
+# quest_rescheduled/quest_cancelled already use, surfaced by
+# NotificationBanner.jsx on the member Home screen.
 
 FEEDBACK_REQUEST_WINDOW_DAYS = 14  # how long a pending request stays answerable
 FEEDBACK_REQUEST_MONTHLY_CAP = 3  # completed requests per calendar month, per leader
@@ -2251,6 +2276,18 @@ FEEDBACK_QUESTIONS = {
     "involvement": "How involved were they in contributing to the group or task?",
     "initiative": "How much initiative did they show — stepping up or helping without being asked?",
     "attitude": "How positive and cooperative was their attitude?",
+}
+
+# The leader-facing label for each FEEDBACK_QUESTIONS key — what
+# _generate_feedback_summary below tells Gemini to call each category,
+# and what the prompt's own "mention each category exactly once" rule is
+# checked against. Never shown as a number; see that function's own note.
+FEEDBACK_CATEGORY_LABELS = {
+    "engagement": "Participation & Engagement",
+    "presence": "Presence & Attentiveness",
+    "involvement": "Contribution",
+    "initiative": "Initiative",
+    "attitude": "Attitude & Cooperation",
 }
 
 
@@ -2379,6 +2416,88 @@ def request_quest_feedback(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "expiresAt": expires_at.isoformat()}
 
 
+_FEEDBACK_SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        # Empty string, not null — Gemini's structured-output schema here
+        # is plain JSON Schema without a nullable/union type, so "no growth
+        # area to mention" is represented the same way _generate_feedback_
+        # summary's own caller checks any other optional string field: a
+        # falsy value, not a missing/null one.
+        "growthArea": {"type": "string"},
+    },
+    "required": ["summary", "growthArea"],
+    "additionalProperties": False,
+}
+
+# Turns a leader's 5 category ratings (1-10, never shown to them as
+# numbers — see FEEDBACK_CATEGORY_LABELS) into an encouraging natural-
+# language summary instead. Same genai.Client()-reads-the-env-var-itself,
+# never-let-a-Gemini-hiccup-break-the-caller pattern as
+# _generate_quest_recommendations — a summary/growthArea pair always comes
+# back, even if that pair is the generic fallback below.
+def _generate_feedback_summary(answers: dict, extra_thoughts: str | None) -> dict:
+    category_lines = "\n".join(
+        f"- {FEEDBACK_CATEGORY_LABELS[key]}: {value}/10" for key, value in answers.items()
+    )
+    prompt = (
+        "You will receive an overall score and individual category scores internally.\n\n"
+        "DO NOT display any numeric ratings, percentages, fractions, or letter grades to the "
+        "user. Instead, generate a concise, encouraging summary that reflects the ratings using "
+        "natural language.\n\n"
+        "Rules:\n"
+        "1. Never reveal the underlying scores.\n"
+        "2. Mention each category exactly once.\n"
+        "3. Translate scores into descriptive language using roughly this mapping — 10: "
+        "outstanding, exceptional, consistently demonstrated, went above and beyond. 8-9: strong, "
+        "actively, consistently, meaningful, reliable. 6-7: solid, generally, often, good. 4-5: "
+        "occasional, developing, showed moments of. 1-3: limited, could benefit from greater, "
+        "opportunities to improve.\n"
+        "4. Keep the tone positive and constructive.\n"
+        "5. Focus on behaviors rather than judgments.\n"
+        "6. Keep the summary between 60 and 120 words.\n"
+        "7. If every category is 8 or above, write an overall highly positive summary and leave "
+        "growthArea as an empty string.\n"
+        "8. If some categories are lower, acknowledge strengths first, then set growthArea to one "
+        "sentence describing the biggest improvement area without mentioning scores. Otherwise "
+        "leave growthArea as an empty string.\n\n"
+        f"Categories and their scores (internal only, never repeat these numbers back):\n{category_lines}\n\n"
+        + (f'The organization also left this note about them: "{extra_thoughts}"\n\n' if extra_thoughts else "\n")
+        + "Do not include any numbers, grades, rankings, or references to a hidden scoring system "
+        "anywhere in your response."
+    )
+
+    fallback = {
+        "summary": (
+            "Thanks for stepping up on this quest — the organization took the time to share "
+            "feedback on how it went, and it's ready for you to read."
+        ),
+        "growthArea": "",
+    }
+    try:
+        client = genai.Client()
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=1024,
+                response_mime_type="application/json",
+                response_json_schema=_FEEDBACK_SUMMARY_SCHEMA,
+            ),
+        )
+        if not response.text:
+            return fallback
+        parsed = json.loads(response.text)
+        summary = parsed.get("summary")
+        if not summary or not isinstance(summary, str):
+            return fallback
+        growth_area = parsed.get("growthArea")
+        return {"summary": summary, "growthArea": growth_area if isinstance(growth_area, str) else ""}
+    except Exception:
+        return fallback
+
+
 # Callable from the org dashboard's pending feedback requests queue (own
 # quests only, or admin for any) — answering one specific leader's request
 # with the fixed 5-question form plus an optional note. Always persists the
@@ -2448,11 +2567,19 @@ def submit_feedback_request_response(req: https_fn.CallableRequest) -> dict:
     under_cap = _completed_feedback_requests_this_month(db, uid) < FEEDBACK_REQUEST_MONTHLY_CAP
     points = FEEDBACK_BONUS_POINTS if score >= FEEDBACK_SCORE_THRESHOLD and under_cap else 0
 
+    # answers/score still get stored (org's own record, and what the bonus
+    # above is computed from) — summary/growthArea are what the leader
+    # actually sees; see _generate_feedback_summary's own note on why the
+    # raw numbers never reach that side.
+    generated = _generate_feedback_summary(answers, extra_thoughts)
+
     completion_fields = {
         "status": "completed",
         "answers": answers,
         "extraThoughts": extra_thoughts,
         "score": score,
+        "summary": generated["summary"],
+        "growthArea": generated["growthArea"],
         "pointsAwarded": points,
         "completedAt": firestore.SERVER_TIMESTAMP,
     }
@@ -2463,13 +2590,23 @@ def submit_feedback_request_response(req: https_fn.CallableRequest) -> dict:
         "answers": answers,
         "extraThoughts": extra_thoughts,
         "score": score,
+        "summary": generated["summary"],
+        "growthArea": generated["growthArea"],
         "pointsAwarded": points,
         "completedAt": firestore.SERVER_TIMESTAMP,
-        "notified": False,
         "read": False,
     })
     batch.commit()
     _award_points(db, uid, points)
+    # Home-screen dismissible notice (see NotificationBanner.jsx) — same
+    # mechanism already used for quest_rescheduled/quest_cancelled, rather
+    # than a separate one-off popup. `read` above is unrelated: it still
+    # gates the Journal page's own unread badge on this entry, independent
+    # of whether this Home notice has been seen/dismissed.
+    _notify_user(
+        db, uid, kind="feedback_received", quest_id=quest_id, quest_title=quest.get("title"),
+        extra={"pointsAwarded": points},
+    )
 
     return {"success": True, "score": score, "pointsAwarded": points}
 
@@ -2633,23 +2770,6 @@ def _refresh_quest_recommendations(db, uid: str) -> None:
         pass
 
 
-# Callable from the frontend's live feedback popup, the moment it's shown —
-# flips `notified` so the same feedback doesn't pop up again on a later page
-# load. Deliberately separate from `read` (see module note above): dismissing
-# or acting on the popup shouldn't also clear the journal's unread badge for
-# an entry the user hasn't actually opened yet.
-@https_fn.on_call()
-def mark_feedback_notified(req: https_fn.CallableRequest) -> dict:
-    _require_auth(req)
-    quest_id = req.data.get("questId")
-    if not quest_id:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "questId is required.")
-    firestore.client().collection("users").document(req.auth.uid).collection("journal").document(quest_id).update({
-        "notified": True,
-    })
-    return {"success": True}
-
-
 # Callable from the Journal page when a user opens a specific entry — clears
 # that entry's contribution to the BottomNav badge count.
 @https_fn.on_call()
@@ -2743,10 +2863,13 @@ def submit_quest_reflection(req: https_fn.CallableRequest) -> dict:
 # same self-scoped-by-path shape as submit_quest_reflection above (no
 # separate ownership check needed: the doc lives under
 # users/{req.auth.uid}/journal, so there's nothing to check against).
-# thumbnailUrl is a plain URL string (one of a small curated set the
-# frontend offers, same "store the URL, not something to resolve later"
-# choice organizations.logoUrl already made) — null clears it back to the
-# entry's default unwritten/blank look.
+# thumbnailUrl is usually a plain, already-resolved URL string (one of a
+# small curated set the frontend offers, same "store the URL, not
+# something to resolve later" choice organizations.logoUrl already made)
+# — but can also be a raw Storage path when approve_photo_submission
+# auto-fills it from an approved proof photo, resolved client-side the
+# same way HeroCarousel.jsx/PendingPhotoReview.jsx already resolve org
+# photos. null clears it back to the entry's default unwritten/blank look.
 @https_fn.on_call()
 def set_journal_thumbnail(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)

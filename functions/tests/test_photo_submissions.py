@@ -2,7 +2,7 @@ import pytest
 from firebase_functions import https_fn
 
 import main
-from tests.helpers import seed_attendance, seed_blob, seed_photo_submission, seed_quest, seed_user
+from tests.helpers import seed_attendance, seed_blob, seed_journal_entry, seed_photo_submission, seed_quest, seed_user
 
 # Approving a submission awards points to the submitting user, and
 # _award_points reads-then-updates their users/{uid} doc — real Firestore
@@ -270,6 +270,42 @@ class TestApprovePhotoSubmission:
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
         assert user["points"] == main.PHOTO_BONUS_POINTS
         assert not main._attendance_ref(fake_firestore.client(), "quest-1", "user-1").get().exists
+
+    def test_org_quest_approval_fills_a_blank_journal_thumbnail(self, fake_firestore, make_request, call):
+        seed_quest(fake_firestore, "quest-1", orgId="org-1", isDefault=False)
+        seed_photo_submission(fake_firestore, "quest-1", "user-1")
+        seed_journal_entry(fake_firestore, "user-1", "quest-1")  # no thumbnailUrl — blank
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+
+        _approve(fake_firestore, make_request, call)
+
+        entry = main._journal_ref(fake_firestore.client(), "user-1", "quest-1").get().to_dict()
+        assert entry["thumbnailUrl"] == "photoSubmissions/quest-1_user-1/1.jpg"
+
+    def test_org_quest_approval_does_not_overwrite_an_existing_journal_thumbnail(
+        self, fake_firestore, make_request, call,
+    ):
+        seed_quest(fake_firestore, "quest-1", orgId="org-1", isDefault=False)
+        seed_photo_submission(fake_firestore, "quest-1", "user-1")
+        seed_journal_entry(fake_firestore, "user-1", "quest-1", thumbnailUrl="https://example.com/chosen.jpg")
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+
+        _approve(fake_firestore, make_request, call)
+
+        entry = main._journal_ref(fake_firestore.client(), "user-1", "quest-1").get().to_dict()
+        assert entry["thumbnailUrl"] == "https://example.com/chosen.jpg"
+
+    def test_side_quest_approval_never_touches_a_journal_entry(self, fake_firestore, make_request, call):
+        # Side quests have no journal entry at all (see check_in_to_event's
+        # own note) — approval shouldn't attempt to write one into
+        # existence just to set a thumbnail.
+        seed_quest(fake_firestore, "quest-1", orgId=None, isDefault=True, tier="bronze", rsvpd=["user-1"])
+        seed_photo_submission(fake_firestore, "quest-1", "user-1", orgId=None, isDefault=True)
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+
+        _approve(fake_firestore, make_request, call, uid="admin-1", role="admin")
+
+        assert not main._journal_ref(fake_firestore.client(), "user-1", "quest-1").get().exists
 
     def test_side_quest_already_checked_in_does_not_double_award_tier_points(self, fake_firestore, make_request, call):
         # Edge case: an admin generated a QR for this side quest and the

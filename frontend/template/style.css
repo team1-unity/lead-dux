@@ -4813,14 +4813,40 @@ button.data-row:active:not(:disabled) {
 }
 
 /* The pending-feedback one-liner (see FeedbackStatus in Journal.jsx) —
-   corner-anchored like the close button/3-dot menu rather than sitting
-   inline, and hidden entirely while editing (see ExpandedJournalEntry) so
-   it never overlaps the Save/Cancel buttons in that same bottom area. */
-.journal-feedback-pending-corner {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  right: 56px;
+   sits in normal flow below the reflection now, same as the completed
+   .journal-feedback block below; hidden entirely while editing (see
+   ExpandedJournalEntry) so it never needs to dodge the Save/Cancel
+   buttons in that same area. */
+.journal-feedback-pending {
+  margin: 16px 0 0;
+  /* .data-stat's own white-space: nowrap suits a short stat, not this
+     full sentence. */
+  white-space: normal;
+}
+
+/* The completed-feedback block (FeedbackStatus in Journal.jsx) — sits
+   below the reflection, set off by its own divider + small heading so it
+   reads as a distinct "the organization said this" section rather than
+   more of the leader's own entry. summary/growthArea are natural-language
+   text generated server-side (see _generate_feedback_summary in
+   functions/main.py) — this never renders a raw number. */
+.journal-feedback {
+  margin-top: 20px;
+}
+.journal-feedback-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 16px;
+}
+/* The organization's own free-text note (entry.extraThoughts) — set off
+   as an actual quotation (their literal words, unedited) rather than
+   blending into the generated summary paragraph above it. */
+.journal-feedback-quote {
+  margin: 12px 0 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--accent);
+  color: var(--line-soft);
+  font-style: italic;
 }
 
 .journal-thumbnail-picker-grid {

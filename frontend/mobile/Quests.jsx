@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -1078,6 +1078,13 @@ function sideQuestPriority(tier, status) {
 export function Quests({ interests, name, recommendedQuestOrder }) {
   const { user, role } = useAuth();
   const navigate = useNavigate();
+  // Read once, as the initial state below — a one-time entry point (see
+  // mobile/Home.jsx's "revisit past quests"/"your RSVP'd quests" links,
+  // /quests?view=past and ?view=mine), not a persisted/synced param, so
+  // changing the dropdown afterward doesn't need to write anything back
+  // to the URL.
+  const [searchParams] = useSearchParams();
+  const initialView = searchParams.get('view');
   const [seriesList, setSeriesList] = useState(null);
   // Every quest doc, unfiltered — kept alongside seriesList (which only
   // ever holds upcoming ones) purely so the Past Attended view below has
@@ -1096,8 +1103,16 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   // never orgId) — landing an admin on the "org" segment by default means
   // a quest they just created via the admin dashboard's "Add default
   // neighborhood quest" form appears to have vanished until they notice
-  // there's a second tab. Every other role still defaults to "org".
-  const [segment, setSegment] = useState(role === 'admin' ? 'side-quests' : 'org');
+  // there's a second tab. Every other role still defaults to "org". A
+  // view=past/mine link always wins regardless of role — both only ever
+  // exist under the org segment.
+  const [segment, setSegment] = useState(
+    initialView === 'past' || initialView === 'mine'
+      ? 'org'
+      : role === 'admin'
+        ? 'side-quests'
+        : 'org',
+  );
   const [search, setSearch] = useState('');
   // 'recommended'/'soonest'/'newest' apply different orderings to the same
   // upcoming org-quest list ('recommended' leaves load()'s own relevance/
@@ -1105,27 +1120,36 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   // folded into this same dropdown rather than a separate segmented control
   // (see the tag-filter-row below), since both only ever apply within the
   // org-quests segment anyway.
-  const [sortBy, setSortBy] = useState('recommended');
+  const [sortBy, setSortBy] = useState(
+    initialView === 'past' || initialView === 'mine' ? initialView : 'recommended',
+  );
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
 
   // Attendance docs are the only record of which quests someone actually
   // checked into (vs. just RSVP'd) — same query BadgesPreview uses (see
-  // Profile.jsx), just keyed down to eventIds for the Past Attended filter
-  // below rather than feeding computeBadges.
-  const [attendedEventIds, setAttendedEventIds] = useState(null);
+  // Profile.jsx), keyed down to eventId -> checkedInAt for the Past
+  // Attended filter below. Keeping the actual check-in timestamp (not
+  // just membership in a Set) is what lets that view's "most recent
+  // first" sort mean the same thing as mobile/Home.jsx's own "last
+  // attended quest" — both need to agree on which occurrence was truly
+  // most recent, not just whichever occurrence a series' primary
+  // (earliest attended one — see groupBySeries) happens to be.
+  const [attendedAtByEventId, setAttendedAtByEventId] = useState(null);
   useEffect(() => {
     if (!user) {
-      setAttendedEventIds(null);
+      setAttendedAtByEventId(null);
       return undefined;
     }
     let cancelled = false;
     getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid)))
       .then((snap) => {
-        if (!cancelled) setAttendedEventIds(new Set(snap.docs.map((d) => d.data().eventId)));
+        if (!cancelled) {
+          setAttendedAtByEventId(new Map(snap.docs.map((d) => [d.data().eventId, d.data().checkedInAt])));
+        }
       })
       .catch(() => {
-        if (!cancelled) setAttendedEventIds(new Set());
+        if (!cancelled) setAttendedAtByEventId(new Map());
       });
     return () => {
       cancelled = true;
@@ -1250,15 +1274,15 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   // Past Attended (see the sortBy==='past' option below) — organization
   // quests only (no side-quests equivalent), built from allQuests (the one
   // list load() doesn't pre-filter to upcoming) crossed against
-  // attendedEventIds, so a quest only shows here once actually checked
+  // attendedAtByEventId, so a quest only shows here once actually checked
   // into, not just RSVP'd and never attended.
   const pastAttendedSeriesList = useMemo(() => {
-    if (!allQuests || !attendedEventIds) return [];
+    if (!allQuests || !attendedAtByEventId) return [];
     const attended = allQuests.filter(
-      (q) => !q.isDefault && !isUpcoming(q) && attendedEventIds.has(q.id),
+      (q) => !q.isDefault && !isUpcoming(q) && attendedAtByEventId.has(q.id),
     );
     return attachSeriesRatings(groupBySeries(attended), seriesRatingsById || new Map());
-  }, [allQuests, attendedEventIds, seriesRatingsById]);
+  }, [allQuests, attendedAtByEventId, seriesRatingsById]);
 
   const availableTags = useMemo(() => {
     const seen = new Set();
@@ -1303,15 +1327,33 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         return bTime - aTime;
       });
     } else if (sortBy === 'past') {
-      // Most recently attended first.
-      list = [...list].sort((a, b) => {
-        const aTime = a.primary.eventDate ? toDate(a.primary.eventDate).getTime() : 0;
-        const bTime = b.primary.eventDate ? toDate(b.primary.eventDate).getTime() : 0;
-        return bTime - aTime;
-      });
+      // Most recently attended first — by each series' own most recent
+      // checkedInAt (not primary.eventDate, the series' EARLIEST
+      // occurrence — see groupBySeries). A recurring series someone's
+      // attended more than once would otherwise sort by its oldest visit
+      // instead of its most recent one, disagreeing with mobile/Home.jsx's
+      // own "last attended quest" link, which goes by checkedInAt too.
+      const mostRecentCheckIn = (series) =>
+        Math.max(
+          ...series.occurrences.map((o) => {
+            const checkedInAt = attendedAtByEventId?.get(o.id);
+            return checkedInAt ? toDate(checkedInAt).getTime() : -Infinity;
+          }),
+        );
+      list = [...list].sort((a, b) => mostRecentCheckIn(b) - mostRecentCheckIn(a));
     }
     return list;
-  }, [segmentedList, pastAttendedSeriesList, activeTag, search, sortBy, segment, sideQuestStatus, user]);
+  }, [
+    segmentedList,
+    pastAttendedSeriesList,
+    activeTag,
+    search,
+    sortBy,
+    segment,
+    sideQuestStatus,
+    user,
+    attendedAtByEventId,
+  ]);
 
   const activeSeriesId = isDesktop ? (openSeriesId ?? visibleSeries[0]?.seriesId ?? null) : null;
   const activeSeries = visibleSeries.find((s) => s.seriesId === activeSeriesId) || null;
