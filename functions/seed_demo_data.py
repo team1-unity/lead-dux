@@ -1380,6 +1380,38 @@ def seed_hero_journal_entries(completed_quests, user_uids):
         _ensure_attended(blank_cq, uid)
     print(f"  Hero journals: {len(HERO_JOURNALS)} users, {filled_count} reflections + matching photos, 1 blank entry each")
 
+    # Maria Ortiz's Thanksgiving Food Drive Sorting entry additionally gets
+    # a completed feedback response — a concrete "reflection already
+    # written, feedback arrives afterward" example for the Journal page
+    # (FeedbackStatus renders above the reflection body there), same shape
+    # as seed_feedback_and_journal's own completed_feedback cases above,
+    # just targeted at a specific named hero/quest instead of whichever
+    # completed_quests[0]/[1] happen to be.
+    maria_uid = name_to_uid["Maria Ortiz"]
+    maria_cq = by_title["Thanksgiving Food Drive Sorting"]
+    _ensure_attended(maria_cq, maria_uid)
+    maria_answers = {"engagement": 9, "presence": 9, "involvement": 8, "initiative": 8, "attitude": 10}
+    maria_score = round(sum(maria_answers.values()) / len(maria_answers), 1)
+    maria_points = main.FEEDBACK_BONUS_POINTS if maria_score >= main.FEEDBACK_SCORE_THRESHOLD else 0
+    maria_extra_thoughts = (
+        "Maria jumped right in without needing much direction, even as a first-timer — exactly "
+        "the energy we hope every new volunteer brings."
+    )
+    main._feedback_request_ref(db, maria_cq["quest_id"], maria_uid).set({
+        "questId": maria_cq["quest_id"], "uid": maria_uid, "requesterName": "Maria Ortiz",
+        "orgId": maria_cq["org_uid"], "orgName": maria_cq["org_name"],
+        "questTitle": maria_cq["title"], "eventDate": maria_cq["event_date"],
+        "requestedAt": NOW - timedelta(days=3), "expiresAt": NOW + timedelta(days=11),
+        "status": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
+        "score": maria_score, "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+    })
+    main._journal_ref(db, maria_uid, maria_cq["quest_id"]).set({
+        "requestStatus": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
+        "score": maria_score, "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+        "notified": False, "read": False,
+    }, merge=True)
+    print(f"  Maria Ortiz completed feedback: Thanksgiving Food Drive Sorting, score {maria_score}")
+
 
 def seed_notifications(user_uids):
     """One quest_cancelled and one quest_rescheduled notice — see

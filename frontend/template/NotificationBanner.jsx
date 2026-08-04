@@ -19,8 +19,8 @@ function formatEventDate(isoOrTimestamp) {
 // (update_quest on a date change, delete_quest/delete_quest_series/
 // keep-only-this-date on a cancellation). Both explicitly say the app
 // doesn't touch any calendar entry someone may have already added — see
-// AddToCalendar.jsx's own note that it only ever generates a Google/
-// Outlook/.ics link, never anything this app could reach back into later.
+// AddToCalendar.jsx's own note that it only ever generates a Google
+// Calendar/.ics link, never anything this app could reach back into later.
 function messageFor(notice) {
   const calendarNote = "This app can't remove or update anything you already added to your own calendar — please check it yourself.";
   if (notice.kind === 'quest_rescheduled') {

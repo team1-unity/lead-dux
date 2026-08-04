@@ -16,7 +16,6 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { AddPropertyMenu } from '@shared/AddPropertyMenu.jsx';
-import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { PhotoGallery } from '@shared/PhotoGallery.jsx';
@@ -531,7 +530,6 @@ export function OrganizationProfile() {
         <div className="org-profile-header-info">
           <div className="flex items-center gap-sm">
             <h1 style={{ margin: 0 }}>{org.name}</h1>
-            {org.verified && <StatusStamp tone="verified">Verified</StatusStamp>}
           </div>
           <div className="flex items-center gap-sm" style={{ marginTop: 6 }}>
             <TrustTag status={getTrustStatus(org.reviewCount || 0, org.avgRating || 0)} />

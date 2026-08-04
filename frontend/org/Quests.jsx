@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
-import { buildDirectionsUrl } from '@shared/mapLinks.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { ConfirmBox, ShareButton, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
@@ -18,14 +17,13 @@ import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
+import { LocationLink } from '@shared/LocationLink.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
 import {
   IconPlus,
   IconEdit,
   IconTrash,
   IconChevron,
-  IconCalendar,
-  IconPin,
   IconUsers,
   IconX,
 } from '@shared/icons.jsx';
@@ -236,7 +234,13 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           // intact; the select itself sizes to its content/maxWidth rather
           // than stretching the full row width.
           <>
-            <IconCalendar style={{ flex: 'none' }} />
+            <AddToCalendar
+              quest={selected}
+              dateLabel={formatEventDate(selected.eventDate)}
+              showLabel={false}
+              className='quest-meta-row quest-meta-link'
+              style={{ flex: 'none', display: 'inline-flex', alignItems: 'center' }}
+            />
             <label className='visually-hidden' htmlFor='org-quest-date-select'>
               Date
             </label>
@@ -255,43 +259,31 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           </>
         ) : (
           formatEventDate(selected.eventDate) && (
-            <p className='quest-meta-row' style={{ margin: 0 }}>
-              <IconCalendar /> {formatEventDate(selected.eventDate)}
-            </p>
+            <AddToCalendar
+              quest={selected}
+              dateLabel={formatEventDate(selected.eventDate)}
+              className='quest-meta-row quest-meta-link'
+            />
           )
         )}
-        <AddToCalendar quest={selected} style={{ padding: '4px 10px', fontSize: '0.8rem' }} />
       </div>
-      {selected.location && (
-        // External Google Maps directions link, same as the quest's own
-        // map detail (MapQuestDetailBody.jsx) — this used to link to this
-        // app's own /map view instead, but an org checking their own
-        // quest's location wants driving directions there, not a re-pan of
-        // the in-app map.
-        <a
-          href={buildDirectionsUrl(selected.lat, selected.lng)}
-          target='_blank'
-          rel='noopener noreferrer'
+      {/* Same as the quest's own map detail (MapQuestDetailBody.jsx) — this
+          used to link to this app's own /map view instead, but an org
+          checking their own quest's location wants driving directions
+          there, not a re-pan of the in-app map. */}
+      <LocationLink location={selected.location} lat={selected.lat} lng={selected.lng} />
+      <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
+        <button
+          type='button'
+          onClick={a.toggleAttendees}
+          disabled={a.busy}
           className='quest-meta-row quest-meta-link'
         >
-          <IconPin /> {selected.location}
-        </a>
-      )}
-      <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
-        <p className='quest-meta-row' style={{ margin: 0 }}>
           <IconUsers />{' '}
           {selected.capacity
             ? `${rsvpCount} / ${selected.capacity} spots filled`
             : `${rsvpCount} RSVP'd`}
-        </p>
-        <StampButton
-          type='button'
-          onClick={a.toggleAttendees}
-          disabled={a.busy}
-          style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-        >
-          View Attendees
-        </StampButton>
+        </button>
       </div>
       <p className='quest-description'>{primary.description}</p>
 
@@ -430,15 +422,17 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         </LightboxBackdrop>
       )}
 
-      {/* Always shown inline, no expand/collapse toggle — matches the
-          quest's own map detail (MapQuestDetailBody.jsx) and the
-          volunteer-facing detail (mobile/Quests.jsx), all three sharing
-          QuestReviewsList. Real Google Maps doesn't hide reviews behind a
-          click either, and the fetch itself is cheap. */}
-      <div className='quest-expand-section' style={{ paddingTop: 12 }}>
-        <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
-        <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
-      </div>
+      {/* Hidden entirely with nothing to show — matches the quest's own map
+          detail (MapQuestDetailBody.jsx), which gates its Reviews tab the
+          same way. No expand/collapse toggle otherwise: shown inline,
+          same as the volunteer-facing detail (mobile/Quests.jsx), all
+          three sharing QuestReviewsList. */}
+      {series.reviewCount > 0 && (
+        <div className='quest-expand-section' style={{ paddingTop: 12 }}>
+          <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
+          <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
+        </div>
+      )}
     </div>
   );
 }

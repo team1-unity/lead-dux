@@ -12,12 +12,7 @@ import {
 } from 'framer-motion';
 import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import {
-  callMarkFeedbackRead,
-  callRequestQuestFeedback,
-  callSetJournalThumbnail,
-  callSubmitQuestReflection,
-} from '@shared/fetch.jsx';
+import { callMarkFeedbackRead, callSetJournalThumbnail, callSubmitQuestReflection } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -46,8 +41,6 @@ const FEEDBACK_QUESTIONS = {
   initiative: 'How much initiative did they show — stepping up or helping without being asked?',
   attitude: 'How positive and cooperative was their attitude?',
 };
-
-const FEEDBACK_REQUEST_MONTHLY_CAP = 3; // mirrors FEEDBACK_REQUEST_MONTHLY_CAP in functions/main.py
 
 // A small curated set of background pictures a member can pick for an
 // entry (see set_journal_thumbnail in functions/main.py) — no upload flow,
@@ -85,9 +78,12 @@ function toDate(value) {
 
 // Read-only — whatever the organization has already said (or "waiting"/
 // "expired") about a feedback request already made for this entry. Shown
-// inline in the expanded view whenever entry.requestStatus is set; the
-// *action* of making a new request lives in FeedbackRequestModal below
-// instead (triggered from the 3-dot menu), not here.
+// inline in the expanded view whenever entry.requestStatus is set. The
+// *action* of making a new request now lives on the quest's own Past
+// Attended detail (mobile/Quests.jsx) instead of here — testing found
+// requesting feedback from inside the journal wasn't an intuitive place to
+// look for it, even though the request's result still lands back in the
+// journal entry it's about.
 function FeedbackStatus({ entry }) {
   if (!entry.requestStatus) return null;
 
@@ -129,69 +125,6 @@ function FeedbackStatus({ entry }) {
   );
 }
 
-// The 3-dot menu's "Request feedback" destination — a standalone modal
-// stating the once-requested-that's-it, up-to-3x-a-month policy, rather
-// than an always-visible inline button. Only ever opened when there's no
-// requestStatus yet (the menu hides this item once there is — see
-// JournalCardMenu below), so this only has one real job: confirm the
-// request.
-function FeedbackRequestModal({ entry, requestsUsedThisMonth, onClose }) {
-  const [requesting, setRequesting] = useState(false);
-  const [error, setError] = useState('');
-  const atCap = requestsUsedThisMonth >= FEEDBACK_REQUEST_MONTHLY_CAP;
-
-  async function request() {
-    setError('');
-    setRequesting(true);
-    try {
-      await callRequestQuestFeedback(entry.id);
-      onClose();
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setRequesting(false);
-    }
-  }
-
-  return (
-    <LightboxBackdrop onClose={onClose} label='Request feedback'>
-      <div
-        className='journal-expanded-card'
-        style={{ width: 'min(380px, 100%)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          type='button'
-          className='journal-expanded-close'
-          onClick={onClose}
-          aria-label='Close'
-        >
-          <IconX width={18} height={18} />
-        </button>
-        <h3 style={{ marginTop: 0, paddingRight: 28 }}>Request feedback</h3>
-        <p className='data-stat' style={{ whiteSpace: 'normal' }}>
-          You can only request feedback from an organization up to {FEEDBACK_REQUEST_MONTHLY_CAP}{' '}
-          times a month. You've used {requestsUsedThisMonth} of {FEEDBACK_REQUEST_MONTHLY_CAP} this
-          month.
-        </p>
-        {error && <p className='box-danger'>{error}</p>}
-        <StampButton
-          type='button'
-          variant='primary'
-          onClick={request}
-          disabled={requesting || atCap}
-          style={{ marginTop: 8 }}
-        >
-          {requesting
-            ? 'Requesting...'
-            : atCap
-              ? "You've used all your requests this month"
-              : 'Request feedback'}
-        </StampButton>
-      </div>
-    </LightboxBackdrop>
-  );
-}
 
 // True count of columns to lay entries out into — 1 narrow / 2 mid / 3
 // wide. Kept as a fixed number (not a CSS auto-fit grid) since the
@@ -264,7 +197,7 @@ function useParallaxColumnOffsets(columnCount, disabled) {
 // only shows up before a request has ever been made — once
 // entry.requestStatus is set, there's nothing left to request until next
 // month, and FeedbackStatus already shows the result inline.
-function JournalCardMenu({ entry, isEditing, onChangePicture, onRequestFeedback, onEdit }) {
+function JournalCardMenu({ entry, isEditing, onChangePicture, onEdit }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
 
@@ -329,16 +262,6 @@ function JournalCardMenu({ entry, isEditing, onChangePicture, onRequestFeedback,
           >
             Change background picture
           </button>
-          {!entry.requestStatus && (
-            <button
-              type='button'
-              role='menuitem'
-              className='journal-card-menu-item'
-              onClick={() => select(onRequestFeedback)}
-            >
-              Request feedback
-            </button>
-          )}
           {/* A new/unwritten entry already opens straight into the write
               form (see ExpandedJournalEntry's initial `editing` state) —
               nothing for this item to switch into, so it's only offered
@@ -425,14 +348,13 @@ function JournalCard({ entry, isOpen, onOpen }) {
 // menu's "Edit journal entry" (see JournalCardMenu), which lives here now
 // too. An entry with nothing saved yet has nothing to "view", so it opens
 // straight into the write form instead.
-function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
+function ExpandedJournalEntry({ entry, onClose }) {
   const [savedBody, setSavedBody] = useState(entry.reflectionBody || '');
   const [editing, setEditing] = useState(!(entry.reflectionBody || '').trim());
   const [body, setBody] = useState(entry.reflectionBody || '');
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState('');
-  const [requestingFeedback, setRequestingFeedback] = useState(false);
   const [pickingPicture, setPickingPicture] = useState(false);
   const reduce = useReducedMotion();
 
@@ -488,7 +410,6 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
           entry={entry}
           isEditing={editing}
           onChangePicture={() => setPickingPicture(true)}
-          onRequestFeedback={() => setRequestingFeedback(true)}
           onEdit={() => {
             setBody(savedBody);
             setError('');
@@ -586,13 +507,6 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
         </motion.div>
       </motion.div>
 
-      {requestingFeedback && (
-        <FeedbackRequestModal
-          entry={entry}
-          requestsUsedThisMonth={requestsUsedThisMonth}
-          onClose={() => setRequestingFeedback(false)}
-        />
-      )}
       {pickingPicture && <ThumbnailPicker entry={entry} onClose={() => setPickingPicture(false)} />}
     </LightboxBackdrop>
   );
@@ -602,7 +516,7 @@ function ExpandedJournalEntry({ entry, requestsUsedThisMonth, onClose }) {
 // modal-on-top (no shared-element concerns, unlike the expand/morph
 // interaction above), so LightboxBackdrop is a direct fit as-is. Stacks on
 // top of the already-open expanded card (both are just LightboxBackdrop
-// portals to document.body), same as FeedbackRequestModal above.
+// portals to document.body).
 function ThumbnailPicker({ entry, onClose }) {
   const { user } = useAuth();
   const [saving, setSaving] = useState(null); // the url (or "remove"/"upload") currently being saved, or null
@@ -736,17 +650,23 @@ export function Journal() {
     });
   }, [user]);
 
-  // Cosmetic only (see FeedbackRequestModal) — how many requests have
-  // already completed this calendar month, across every entry.
-  const requestsUsedThisMonth = useMemo(() => {
-    if (!entries) return 0;
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    return entries.filter(
-      (e) =>
-        e.requestStatus === 'completed' && e.completedAt && toDate(e.completedAt) >= monthStart,
-    ).length;
+  // useParallaxColumnOffsets' page-level useScroll only recalculates its
+  // scrollable range on an actual scroll/resize event, not on DOM content
+  // changing height by itself. Before entries load, this page is just
+  // TopBar + a loading spinner — on a tall enough viewport that's often
+  // exactly viewport height, i.e. zero scrollable range, and useScroll's
+  // progress locks onto 1 in that edge case instead of 0. It then has no
+  // reason to recompute once the real (much taller) .journal-columns grid
+  // mounts, even though scrollY never actually moved — the columns render
+  // pre-offset to their full parallax swing from the very first frame. A
+  // synthetic resize, fired once the real content has painted at its final
+  // height, gives it that reason. Re-fires on every entries change (not
+  // just the first load) since the same zero-range edge case could recur
+  // any time the list shrinks back down to one short entry.
+  useEffect(() => {
+    if (entries === null) return undefined;
+    const id = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    return () => cancelAnimationFrame(id);
   }, [entries]);
 
   // Round-robin distribution into N columns — see useParallaxColumnOffsets'
@@ -794,7 +714,6 @@ export function Journal() {
           <ExpandedJournalEntry
             key={openEntry.id}
             entry={openEntry}
-            requestsUsedThisMonth={requestsUsedThisMonth}
             onClose={() => setOpenId(null)}
           />
         )}

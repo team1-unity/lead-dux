@@ -1067,8 +1067,8 @@ nav {
   border-top: 1.5px solid var(--border);
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 28px;
+  justify-content: space-around;
+  /* gap: 28px; */
   z-index: 10;
 }
 @media (min-width: 860px) {
@@ -1984,12 +1984,20 @@ button.quest-card-head:hover:not(:disabled) {
   text-decoration: none;
   cursor: pointer;
   font: inherit;
+  box-shadow: none;
 }
 .quest-meta-link:hover:not(:disabled) {
   color: var(--line);
   text-decoration: underline;
   box-shadow: none;
   transform: none;
+}
+/* .quest-meta-row svg pins the icon to --line-soft even inside a
+   .quest-meta-link, so without this the icon wouldn't follow the text's
+   hover color — making it read as a separate, non-interactive decoration
+   instead of part of the same clickable link. */
+.quest-meta-link:hover:not(:disabled) svg {
+  color: var(--line);
 }
 
 .quest-description {
@@ -2184,6 +2192,13 @@ a.org-home-stat-tile:hover {
 .quest-search-row .search-field {
   flex: 1;
   max-width: none;
+  /* Flex items default to a min-width based on their content, not 0 — the
+     search icon alone would otherwise set a floor wide enough to push the
+     fixed-width toggle pill off a narrow phone screen. This lets the field
+     shrink as far as it has to (even past that floor) so the pill next to
+     it never gets cut off. */
+  min-width: 0;
+  overflow: hidden;
 }
 .quest-search-row .stamp-btn {
   flex: none;
@@ -2207,9 +2222,9 @@ a.org-home-stat-tile:hover {
 }
 
 /* Themed thin scrollbar for the few places content genuinely scrolls
-   inside its own box (a quest list beside a sticky detail pane) — a bare
-   OS scrollbar there is a real signal there's more to see, unlike the
-   tag row above, so this stays visible but styled instead of hidden. */
+   inside its own box (a quest list and its sticky detail pane beside it) —
+   a bare OS scrollbar there is a real signal there's more to see, unlike
+   the tag row above, so this stays visible but styled instead of hidden. */
 /* position:relative — the containing block for MapQuestOverlay.jsx's
    detail view (.events-map-detail-slot, portaled straight into this pane),
    so it covers exactly this pane and nothing more, in both breakpoints'
@@ -2218,25 +2233,30 @@ a.org-home-stat-tile:hover {
   position: relative;
 }
 .quest-list,
-.events-map-list-pane {
+.events-map-list-pane,
+.quest-detail-pane {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 .quest-list::-webkit-scrollbar,
-.events-map-list-pane::-webkit-scrollbar {
+.events-map-list-pane::-webkit-scrollbar,
+.quest-detail-pane::-webkit-scrollbar {
   width: 6px;
 }
 .quest-list::-webkit-scrollbar-track,
-.events-map-list-pane::-webkit-scrollbar-track {
+.events-map-list-pane::-webkit-scrollbar-track,
+.quest-detail-pane::-webkit-scrollbar-track {
   background: transparent;
 }
 .quest-list::-webkit-scrollbar-thumb,
-.events-map-list-pane::-webkit-scrollbar-thumb {
+.events-map-list-pane::-webkit-scrollbar-thumb,
+.quest-detail-pane::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: var(--radius-full);
 }
 .quest-list::-webkit-scrollbar-thumb:hover,
-.events-map-list-pane::-webkit-scrollbar-thumb:hover {
+.events-map-list-pane::-webkit-scrollbar-thumb:hover,
+.quest-detail-pane::-webkit-scrollbar-thumb:hover {
   background: var(--line-soft);
 }
 .tag-filter-row .tag-stamp,
@@ -2319,9 +2339,14 @@ a.org-home-stat-tile:hover {
     position: sticky;
     top: calc(var(--nav-height-desktop) + 40px);
     /* Fills the viewport below the header at all times, however short its
-       own content is or however far the list beside it scrolls — never
-       leaves blank page background showing underneath. */
-    min-height: calc(100vh - var(--nav-height-desktop) - 80px);
+       own content is — never leaves blank page background showing
+       underneath. Capped at that same height (not just a minimum) with its
+       own scroll, same reasoning as .quest-feed-main beside it: a long
+       detail (e.g. a quest with reviews) would otherwise grow the whole
+       page tall enough to scroll the sticky list out of view entirely,
+       rather than just scrolling its own content. */
+    height: calc(100vh - var(--nav-height-desktop) - 80px);
+    overflow-y: auto;
   }
 }
 .quest-detail-empty {
@@ -3755,6 +3780,18 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
   min-height: calc(100vh - var(--nav-height) - 56px);
 }
+/* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
+   1180px cap (see #root above), the greeting/rank-card/CTA buttons were
+   stretching to fill nearly the whole content column. Capped to 40vw and
+   centered instead, matching the same 860px breakpoint used everywhere
+   else in this file for desktop-only treatments. */
+@media (min-width: 860px) {
+  .home-page {
+    max-width: 40vw;
+    width: 100%;
+    margin: 0 auto;
+  }
+}
 
 /* A must-dismiss popup notice (NotificationBanner.jsx) — a quest RSVP'd to
    was rescheduled or cancelled. Sits above the greeting, not inside its
@@ -4344,10 +4381,11 @@ button.data-row:active:not(:disabled) {
   color: var(--line-soft);
   white-space: nowrap;
 }
-/* ---------- Map quest detail (MapQuestDetailBody.jsx) — shared by the
-   overlay view opened from EventsMap.jsx and the standalone
-   /map/:seriesId page ---------- */
-.map-quest-hero {
+/* ---------- Quest detail hero (HeroCarousel.jsx) — shared by the map
+   quest detail (MapQuestDetailBody.jsx: the overlay view opened from
+   EventsMap.jsx and the standalone /map/:seriesId page) and the Explore
+   Quests detail (mobile/Quests.jsx's QuestDetailBody) ---------- */
+.quest-hero {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -4355,13 +4393,13 @@ button.data-row:active:not(:disabled) {
   overflow: hidden;
   background: var(--paper-well);
 }
-.map-quest-hero-img {
+.quest-hero-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-.map-quest-hero-fallback {
+.quest-hero-fallback {
   width: 100%;
   height: 100%;
   display: flex;
@@ -4373,7 +4411,8 @@ button.data-row:active:not(:disabled) {
    itself (a real lightbox close button, not one hanging in the padding
    above it), rather than the generic .photo-lightbox-close every other
    modal in this app uses (which floats relative to the whole bordered
-   card, not specifically the image at its top). */
+   card, not specifically the image at its top). Map-only: the Explore
+   Quests detail has no close/back button overlaying its hero. */
 .map-quest-hero-close {
   position: absolute;
   top: 10px;
@@ -4410,31 +4449,30 @@ button.data-row:active:not(:disabled) {
   z-index: 1;
 }
 
-/* Community-photos hero carousel (HeroCarousel, MapQuestDetailBody.jsx) —
-   a plain flex track of full-width slides, shifted with `transform:
-   translateX` to whichever slide is current; .map-quest-hero's own
-   `overflow: hidden` crops everything outside the active slide. Auto-
-   advances on a timer with no manual controls at all (by design — see the
-   component's own note), so the sliding transition is the only motion this
-   ever needs. */
-.map-quest-hero-carousel {
+/* Community-photos hero carousel (HeroCarousel.jsx) — a plain flex track
+   of full-width slides, shifted with `transform: translateX` to whichever
+   slide is current; .quest-hero's own `overflow: hidden` crops everything
+   outside the active slide. Auto-advances on a timer with no manual
+   controls at all (by design — see the component's own note), so the
+   sliding transition is the only motion this ever needs. */
+.quest-hero-carousel {
   width: 100%;
   height: 100%;
   overflow: hidden;
 }
-.map-quest-hero-carousel-track {
+.quest-hero-carousel-track {
   display: flex;
   width: 100%;
   height: 100%;
   transition: transform 0.6s ease;
 }
-.map-quest-hero-carousel-track .map-quest-hero-img {
+.quest-hero-carousel-track .quest-hero-img {
   flex: none;
   width: 100%;
   height: 100%;
 }
 @media (prefers-reduced-motion: reduce) {
-  .map-quest-hero-carousel-track {
+  .quest-hero-carousel-track {
     transition: none;
   }
 }

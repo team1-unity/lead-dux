@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { db, storage } from '@shared/firebaseapp.jsx';
@@ -12,15 +12,10 @@ import {
   callSubmitReview,
   callGetSideQuestStatus,
   callSubmitQuestPhoto,
-  callListOrganizationTrustTags,
+  callRequestQuestFeedback,
 } from '@shared/fetch.jsx';
-import {
-  groupBySeries,
-  attachSeriesRatings,
-  attachOrgTrustStatus,
-  isUpcoming,
-  toDate,
-} from '@shared/questSeries.js';
+import { getAuthErrorMessage } from '@shared/authErrors.js';
+import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { TagStamp } from '@shared/TagStamp.jsx';
@@ -28,17 +23,16 @@ import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
-import { TrustTag } from '@shared/TrustTag.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
+import { LocationLink } from '@shared/LocationLink.jsx';
+import { HeroCarousel } from '@shared/HeroCarousel.jsx';
 import { ShareButton } from '@shared/QuestSeriesRow.jsx';
 import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
-import { buildDirectionsUrl } from '@shared/mapLinks.js';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 import {
   IconCalendar,
-  IconPin,
   IconUsers,
   IconCheck,
   IconAlert,
@@ -111,6 +105,67 @@ function StarRatingInput({ value, onChange }) {
 
 // A member's own review for a quest they've checked in to. Shows the
 // existing review read-only if one was already submitted; otherwise a
+// The "Request feedback" destination (see QuestDetailBody's Request
+// Feedback button, below the Leave a review/Proof Photo row) — this used
+// to live in the journal's 3-dot menu; testing found that wasn't an
+// intuitive place to look for it, so it moved here instead. There's
+// nothing to show once requested (the organization's answers land back in
+// the journal entry itself — see mobile/Journal.jsx's FeedbackStatus, and
+// QuestDetailBody's own feedbackRequestStatus, which hides this button
+// once that's set), so this is just a confirm step plus whatever error the
+// server surfaces (e.g. already at the monthly cap — see
+// FEEDBACK_REQUEST_MONTHLY_CAP in functions/main.py).
+function RequestFeedbackForm({ questId, onRequested }) {
+  const [requesting, setRequesting] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const [error, setError] = useState('');
+
+  async function request() {
+    setError('');
+    setRequesting(true);
+    try {
+      await callRequestQuestFeedback(questId);
+      // Flips the underlying feedbackRequestStatus the instant the request
+      // succeeds, not just when this modal eventually closes — otherwise
+      // dismissing it (the X button) right after a successful request
+      // would leave the Request Feedback button back on the page, looking
+      // like nothing happened.
+      onRequested();
+      setRequested(true);
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  if (requested) {
+    return (
+      <div className='ink-card flex items-center gap-sm'>
+        <IconCheck />
+        <p style={{ margin: 0 }}>
+          Feedback requested — you&rsquo;ll see the organization&rsquo;s response in your Journal
+          once it&rsquo;s in.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className='ink-card flex flex-col gap-md'>
+      <p style={{ margin: 0 }}>
+        The organization will get a short set of questions about how you did on this quest. You can
+        only request feedback up to 3 times a month, and you&rsquo;ll see their response in your
+        Journal once it&rsquo;s in.
+      </p>
+      {error && <p className='box-danger'>{error}</p>}
+      <StampButton type='button' variant='primary' onClick={request} disabled={requesting}>
+        {requesting ? 'Requesting...' : 'Request feedback'}
+      </StampButton>
+    </div>
+  );
+}
+
 // submission form. submit_review itself is the source of truth on whether
 // this member actually attended (checked_in) — rather than duplicating
 // that check client-side, an attempt from someone who hasn't checked in
@@ -495,6 +550,7 @@ export function QuestDetailBody({
   const { primary, occurrences } = series;
   const [selectedId, setSelectedId] = useState(occurrences[0].id);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [requestFeedbackOpen, setRequestFeedbackOpen] = useState(false);
   const [checkedIn, setCheckedIn] = useState(false);
   // Side quests only — reported up from QuestPhotoSubmission's own
   // photoSubmissions listener (see its onStatusChange prop) so "Leave
@@ -509,8 +565,33 @@ export function QuestDetailBody({
   useEffect(() => {
     setSelectedId(occurrences[0].id);
     setReviewModalOpen(false);
+    setRequestFeedbackOpen(false);
     setSidePhotoStatus(null);
   }, [series.seriesId]);
+
+  // Community-photos hero (HeroCarousel.jsx) — only fetched for the
+  // standalone detail view (showTitle), matching where the map's own quest
+  // detail (MapQuestDetailBody.jsx) shows the same carousel. Side quests
+  // have no orgId, so this just stays null and HeroCarousel falls back to
+  // its plain DuckMark placeholder, same as an org with zero photos would.
+  const [orgMedia, setOrgMedia] = useState(null);
+  useEffect(() => {
+    if (!showTitle || !primary.orgId) {
+      setOrgMedia(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getDoc(doc(db, 'organizations', primary.orgId))
+      .then((snap) => {
+        if (!cancelled) setOrgMedia(snap.exists() ? snap.data() : null);
+      })
+      .catch(() => {
+        if (!cancelled) setOrgMedia(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showTitle, primary.orgId]);
 
   const selected = occurrences.find((o) => o.id === selectedId) || occurrences[0];
   const rsvpCount = (selected.rsvpd || []).length;
@@ -547,50 +628,78 @@ export function QuestDetailBody({
     };
   }, [primary.isDefault, selected?.id, userId]);
 
+  // Whether feedback has already been requested for this occurrence — a
+  // journal entry (users/{uid}/journal/{questId}) already exists the
+  // moment check-in happens (see check_in_to_event), so this is safe to
+  // read as soon as checkedIn is true. Requesting feedback used to be a
+  // Journal-only action; testing found that wasn't an intuitive place to
+  // look for it, so the button now lives here instead — the request's
+  // result still lands back in that same journal entry (see
+  // mobile/Journal.jsx's FeedbackStatus).
+  const [feedbackRequestStatus, setFeedbackRequestStatus] = useState(null);
+  useEffect(() => {
+    if (primary.isDefault || !userId || !selected?.id || !checkedIn) {
+      setFeedbackRequestStatus(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getDoc(doc(db, 'users', userId, 'journal', selected.id))
+      .then((snap) => {
+        if (!cancelled) setFeedbackRequestStatus(snap.exists() ? snap.data().requestStatus || null : null);
+      })
+      .catch(() => {
+        if (!cancelled) setFeedbackRequestStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [primary.isDefault, selected?.id, userId, checkedIn]);
+
   return (
     <div className='quest-card-body'>
+      {showTitle && (
+        <div className='quest-hero' style={{ marginBottom: 12 }}>
+          <HeroCarousel photoPaths={orgMedia?.photos} orgLogoUrl={orgMedia?.logoUrl} />
+        </div>
+      )}
       {/* Share is an organization-quest concept only (side quests have no
-          individual shareable link — see SharedQuest.jsx) — the icon row
-          itself only exists when there's something to put in it, unlike
-          org/Quests.jsx's own copy of this row, which always has at least
-          Edit/Delete. */}
-      <div style={{ position: 'relative', minHeight: !primary.isDefault ? 36 : undefined }}>
-        {!primary.isDefault && (
-          <div className='quest-detail-icon-actions'>
-            <ShareButton seriesId={primary.seriesId} iconOnly />
+          individual shareable link — see SharedQuest.jsx). With a title to
+          sit next to (showTitle), it shares that row instead of floating
+          over the photo above; without one, it keeps the old absolute-
+          positioned treatment (org/Quests.jsx's own copy of this row
+          always has at least Edit/Delete, so it doesn't need this
+          fallback). */}
+      {showTitle ? (
+        <div className='flex items-center justify-between gap-sm' style={{ flexWrap: 'wrap' }}>
+          <p className='quest-title' style={{ fontSize: '1.25rem', margin: 0 }}>
+            {primary.title}
+          </p>
+          {!primary.isDefault && <ShareButton seriesId={primary.seriesId} iconOnly />}
+        </div>
+      ) : (
+        !primary.isDefault && (
+          <div style={{ position: 'relative', minHeight: 36 }}>
+            <div className='quest-detail-icon-actions'>
+              <ShareButton seriesId={primary.seriesId} iconOnly />
+            </div>
           </div>
-        )}
-        {showTitle && (
-          <div style={!primary.isDefault ? { paddingRight: 50 } : undefined}>
-            <p className='quest-title' style={{ fontSize: '1.25rem' }}>
-              {primary.title}
-            </p>
-            {/* One row for whatever identity info this quest has — org
-                name (+ trust tag) for an organization quest, the points
-                pill for a side quest — rather than two separate rows, so
-                the pill sits right next to the org name when both exist. */}
-            {(primary.orgName || primary.isDefault) && (
-              <p className='quest-org-line flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
-                {primary.orgName && (
-                  <>
-                    {primary.orgId ? (
-                      <Link to={`/organizations/${primary.orgId}`}>{primary.orgName}</Link>
-                    ) : (
-                      <span>{primary.orgName}</span>
-                    )}
-                    <TrustTag status={series.orgTrustStatus} />
-                  </>
-                )}
-                {primary.isDefault && <TierBadge tier={primary.tier} />}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-      {series.orgTrustStatus === 'under_review' && (
-        <p className='box-danger'>
-          This organization is under review for consistently low ratings — its Trust Score has not
-          yet been confirmed.
+        )
+      )}
+      {/* One row for whatever identity info this quest has — org name for
+          an organization quest, the points pill for a side quest — rather
+          than two separate rows, so the pill sits right next to the org
+          name when both exist. Trust tags (Trustworthy/New Organization/
+          Under Review) only show on the org's own profile page
+          (OrganizationProfile.jsx) now, not here. */}
+      {showTitle && (primary.orgName || primary.isDefault) && (
+        <p className='quest-org-line flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
+          {primary.orgName &&
+            (primary.orgId ? (
+              <Link to={`/organizations/${primary.orgId}`}>{primary.orgName}</Link>
+            ) : (
+              <span>{primary.orgName}</span>
+            ))}
+          {primary.isDefault && <TierBadge tier={primary.tier} />}
         </p>
       )}
       <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
@@ -602,7 +711,17 @@ export function QuestDetailBody({
           // stretching — it was only filling the row before because it sat
           // inside a flex-column <label> with the default stretch behavior.
           <>
-            <IconCalendar style={{ flex: 'none' }} />
+            {primary.isDefault || isCompleted ? (
+              <IconCalendar style={{ flex: 'none' }} />
+            ) : (
+              <AddToCalendar
+                quest={selected}
+                dateLabel={formatEventDate(selected.eventDate)}
+                showLabel={false}
+                className='quest-meta-row quest-meta-link'
+                style={{ flex: 'none', display: 'inline-flex', alignItems: 'center' }}
+              />
+            )}
             <label className='visually-hidden' htmlFor='quest-date-select'>
               Date
             </label>
@@ -633,43 +752,35 @@ export function QuestDetailBody({
             </p>
           )
         ) : (
-          formatEventDate(selected.eventDate) && (
+          formatEventDate(selected.eventDate) &&
+          (primary.isDefault ? (
             <p className='quest-meta-row' style={{ margin: 0 }}>
               <IconCalendar /> {formatEventDate(selected.eventDate)}
             </p>
-          )
-        )}
-        {!primary.isDefault &&
-          (isCompleted ? (
-            // Recurring: the picker itself stays put (still lets you switch
-            // to another occurrence in the series) — only this slot swaps,
-            // and only for whichever occurrence is currently selected.
-            // Non-recurring already said "Completed on ..." in the date
-            // slot above, so nothing repeats it here.
-            occurrences.length > 1 && (
-              <span className='field-optional'>
-                Completed on {formatCompletedDate(selected.eventDate)}
-              </span>
-            )
           ) : (
-            <AddToCalendar quest={selected} style={{ padding: '4px 10px', fontSize: '0.8rem' }} />
-          ))}
+            <AddToCalendar
+              quest={selected}
+              dateLabel={formatEventDate(selected.eventDate)}
+              className='quest-meta-row quest-meta-link'
+            />
+          ))
+        )}
+        {!primary.isDefault && isCompleted && occurrences.length > 1 && (
+          // Recurring: the picker itself stays put (still lets you switch
+          // to another occurrence in the series) — only this slot swaps,
+          // and only for whichever occurrence is currently selected.
+          // Non-recurring already said "Completed on ..." in the date
+          // slot above, so nothing repeats it here.
+          <span className='field-optional'>
+            Completed on {formatCompletedDate(selected.eventDate)}
+          </span>
+        )}
       </div>
-      {selected.location && (
-        // External Google Maps directions link, same as the quest's own
-        // map detail (MapQuestDetailBody.jsx) — this used to link to this
-        // app's own /map view instead, but from a quest someone's already
-        // RSVP'd to, what they want is directions there, not a re-pan of
-        // the in-app map.
-        <a
-          href={buildDirectionsUrl(selected.lat, selected.lng)}
-          target='_blank'
-          rel='noopener noreferrer'
-          className='quest-meta-row quest-meta-link'
-        >
-          <IconPin /> {selected.location}
-        </a>
-      )}
+      {/* Same as the quest's own map detail (MapQuestDetailBody.jsx) — this
+          used to link to this app's own /map view instead, but from a
+          quest someone's already RSVP'd to, what they want is directions
+          there, not a re-pan of the in-app map. */}
+      <LocationLink location={selected.location} lat={selected.lat} lng={selected.lng} />
       {/* Side quests are a personal challenge, not an event with capacity —
           there's no one else's attendance to count, so this stays an
           organization-quest-only row. Once checked in (org quests only —
@@ -766,14 +877,22 @@ export function QuestDetailBody({
             organization to review. Gated on actually having checked in
             (not just RSVP'd) — matching what submit_review itself
             requires, so this never opens a form the server would reject.
-            Proof Photo sits right beside it (not below, in its own block)
-            so both completion actions read as one row. */}
+            Proof Photo and Request Feedback sit right beside it (not
+            below, in their own blocks) so every completion action reads as
+            one row. Request Feedback hides once feedbackRequestStatus is
+            set — same reasoning as JournalCardMenu's old copy of this
+            gate, just relocated here (see the effect above). */}
         {!primary.isDefault && canRsvp && isRsvpd && checkedIn && (
           <>
             <StampButton type='button' onClick={() => setReviewModalOpen(true)}>
               Leave a review
             </StampButton>
             <QuestPhotoSubmission questId={selected.id} userId={userId} isDefault={false} />
+            {!feedbackRequestStatus && (
+              <StampButton type='button' onClick={() => setRequestFeedbackOpen(true)}>
+                Request feedback
+              </StampButton>
+            )}
           </>
         )}
       </div>
@@ -796,6 +915,24 @@ export function QuestDetailBody({
           </div>
         </LightboxBackdrop>
       )}
+      {!primary.isDefault && isRsvpd && checkedIn && requestFeedbackOpen && (
+        <LightboxBackdrop onClose={() => setRequestFeedbackOpen(false)} label='Request feedback'>
+          <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
+            <RequestFeedbackForm
+              questId={selected.id}
+              onRequested={() => setFeedbackRequestStatus('pending')}
+            />
+            <button
+              type='button'
+              className='photo-lightbox-close'
+              onClick={() => setRequestFeedbackOpen(false)}
+              aria-label='Close'
+            >
+              <IconX width={18} height={18} />
+            </button>
+          </div>
+        </LightboxBackdrop>
+      )}
       {/* Side quests only here — their own photo submission is gated on
           RSVP status server-side, not attendance, so isRsvpd alone already
           matches what the backend requires. (Org quests render inside
@@ -808,12 +945,12 @@ export function QuestDetailBody({
           onStatusChange={setSidePhotoStatus}
         />
       )}
-      {/* Always shown inline, no expand/collapse toggle — matches the
-          quest's own map detail (MapQuestDetailBody.jsx) and the org's own
-          quest dashboard (org/Quests.jsx), all three sharing
-          QuestReviewsList. Real Google Maps doesn't hide reviews behind a
-          click either, and the fetch itself is cheap. */}
-      {!primary.isDefault && (
+      {/* Hidden entirely with nothing to show — matches the quest's own map
+          detail (MapQuestDetailBody.jsx), which gates its Reviews tab the
+          same way. No expand/collapse toggle otherwise: shown inline,
+          same as the org's own quest dashboard (org/Quests.jsx), all three
+          sharing QuestReviewsList. */}
+      {!primary.isDefault && series.reviewCount > 0 && (
         <div className='quest-expand-section' style={{ paddingTop: 12 }}>
           <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
           <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
@@ -923,16 +1060,34 @@ export function sideQuestGate(primary, status) {
   return null;
 }
 
+// Sort priority for the side-quests list (there's no Sort-by picker for
+// this segment — see the tag-filter-row's segment !== 'side-quests'
+// guard): the caller's own current tier first (the ones actually worth
+// doing at this rank), then other already-unlocked lower tiers, then
+// locked ones last. unlockedTiers is cumulative and rank-ordered (see
+// _unlocked_tiers in functions/main.py) — its last entry is always the
+// caller's own tier. Doesn't change what's gated, only the display order;
+// sideQuestGate above is still what decides locked vs joinable.
+function sideQuestPriority(tier, status) {
+  if (!status) return 1;
+  const unlocked = status.unlockedTiers;
+  if (!unlocked.includes(tier)) return 2;
+  return tier === unlocked[unlocked.length - 1] ? 0 : 1;
+}
+
 export function Quests({ interests, name, recommendedQuestOrder }) {
   const { user, role } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  // Destination for Profile's "RSVP'd Quests" preview (see Profile.jsx) —
-  // shows only series the caller is RSVP'd to at least one occurrence of,
-  // bypassing the org/side-quests segmented toggle entirely rather than
-  // adding a third segment to it.
-  const mineOnly = searchParams.get('mine') === '1';
   const [seriesList, setSeriesList] = useState(null);
+  // Every quest doc, unfiltered — kept alongside seriesList (which only
+  // ever holds upcoming ones) purely so the Past Attended view below has
+  // something to search for a past match in, without a second full-
+  // collection read just for that.
+  const [allQuests, setAllQuests] = useState(null);
+  // The same questSeries docs load()'s upcoming list attaches ratings from
+  // (attachSeriesRatings) — kept around so Past Attended, built separately
+  // below, can show the same star rating a completed quest already has.
+  const [seriesRatingsById, setSeriesRatingsById] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [activeTag, setActiveTag] = useState(null);
@@ -944,29 +1099,48 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   // there's a second tab. Every other role still defaults to "org".
   const [segment, setSegment] = useState(role === 'admin' ? 'side-quests' : 'org');
   const [search, setSearch] = useState('');
-  // 'recommended' leaves load()'s own sort (relevance score, or the AI-
-  // generated recommendation order for org quests) untouched — this only
-  // applies a *different* ordering on top when explicitly chosen, rather
-  // than replacing that default sort's own logic.
+  // 'recommended'/'soonest'/'newest' apply different orderings to the same
+  // upcoming org-quest list ('recommended' leaves load()'s own relevance/
+  // AI-ranked sort untouched). 'mine' and 'past' are filters, not sorts —
+  // folded into this same dropdown rather than a separate segmented control
+  // (see the tag-filter-row below), since both only ever apply within the
+  // org-quests segment anyway.
   const [sortBy, setSortBy] = useState('recommended');
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
 
+  // Attendance docs are the only record of which quests someone actually
+  // checked into (vs. just RSVP'd) — same query BadgesPreview uses (see
+  // Profile.jsx), just keyed down to eventIds for the Past Attended filter
+  // below rather than feeding computeBadges.
+  const [attendedEventIds, setAttendedEventIds] = useState(null);
+  useEffect(() => {
+    if (!user) {
+      setAttendedEventIds(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid)))
+      .then((snap) => {
+        if (!cancelled) setAttendedEventIds(new Set(snap.docs.map((d) => d.data().eventId)));
+      })
+      .catch(() => {
+        if (!cancelled) setAttendedEventIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   function load() {
     setLoadError(null);
-    Promise.all([
-      getDocs(collection(db, 'quests')),
-      getDocs(collection(db, 'questSeries')),
-      callListOrganizationTrustTags(),
-    ])
-      .then(([questsSnap, seriesSnap, trustTags]) => {
-        const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
+    Promise.all([getDocs(collection(db, 'quests')), getDocs(collection(db, 'questSeries'))])
+      .then(([questsSnap, seriesSnap]) => {
+        const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setAllQuests(all);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
-        const trustStatusByOrgId = new Map(trustTags.map((t) => [t.orgId, t.trustStatus]));
-        const grouped = attachOrgTrustStatus(
-          attachSeriesRatings(groupBySeries(all), seriesDocsById),
-          trustStatusByOrgId,
-        );
+        setSeriesRatingsById(seriesDocsById);
+        const grouped = attachSeriesRatings(groupBySeries(all.filter(isUpcoming)), seriesDocsById);
         grouped.sort((a, b) => {
           // Organization quests only — AI ranking is generated server-side
           // from interests/experience/volunteer history, see
@@ -1007,6 +1181,40 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   }
   useEffect(loadSideQuestStatus, [role]);
 
+  // Lets a plain vertical mouse wheel scroll the tag row horizontally —
+  // there's no scrollbar (see .tag-filter-row's scrollbar-width: none) and
+  // a touchpad's native horizontal swipe already works, but a normal mouse
+  // has no horizontal wheel axis at all otherwise. Attached manually
+  // (rather than a JSX onWheel prop) because preventDefault is required to
+  // stop the page itself from also scrolling vertically, and React
+  // registers onWheel as a passive listener, which silently ignores
+  // preventDefault.
+  //
+  // A callback ref rather than useRef+useEffect(fn, []): this row doesn't
+  // exist yet on the very first render (seriesList starts null, so the
+  // component briefly returns just <LoadingSpinner/> below before the tag
+  // row itself ever mounts) — an effect with an empty dependency array
+  // would fire once against that still-null ref and never run again once
+  // the real row showed up. A callback ref instead re-fires any time this
+  // exact DOM node mounts or unmounts, whenever that happens to be.
+  const tagRowCleanupRef = useRef(null);
+  const tagRowRef = useCallback((el) => {
+    if (tagRowCleanupRef.current) {
+      tagRowCleanupRef.current();
+      tagRowCleanupRef.current = null;
+    }
+    if (!el) return;
+    function onWheel(e) {
+      // A trackpad's own horizontal swipe already reports deltaX — leave
+      // that alone and only take over for a plain vertical wheel.
+      if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    tagRowCleanupRef.current = () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   async function toggleRsvp(quest) {
     setBusyId(quest.id);
     try {
@@ -1034,15 +1242,23 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   // other by construction, never both.
   const segmentedList = useMemo(() => {
     if (!seriesList) return [];
-    if (mineOnly) {
-      return seriesList.filter((s) =>
-        s.occurrences.some((o) => (o.rsvpd || []).includes(user?.uid)),
-      );
-    }
     return seriesList.filter((s) =>
       segment === 'side-quests' ? s.primary.isDefault : !s.primary.isDefault,
     );
-  }, [seriesList, segment, mineOnly, user]);
+  }, [seriesList, segment]);
+
+  // Past Attended (see the sortBy==='past' option below) — organization
+  // quests only (no side-quests equivalent), built from allQuests (the one
+  // list load() doesn't pre-filter to upcoming) crossed against
+  // attendedEventIds, so a quest only shows here once actually checked
+  // into, not just RSVP'd and never attended.
+  const pastAttendedSeriesList = useMemo(() => {
+    if (!allQuests || !attendedEventIds) return [];
+    const attended = allQuests.filter(
+      (q) => !q.isDefault && !isUpcoming(q) && attendedEventIds.has(q.id),
+    );
+    return attachSeriesRatings(groupBySeries(attended), seriesRatingsById || new Map());
+  }, [allQuests, attendedEventIds, seriesRatingsById]);
 
   const availableTags = useMemo(() => {
     const seen = new Set();
@@ -1051,7 +1267,15 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   }, [segmentedList]);
 
   const visibleSeries = useMemo(() => {
-    let list = segmentedList;
+    let list;
+    if (sortBy === 'past') {
+      list = pastAttendedSeriesList;
+    } else if (sortBy === 'mine') {
+      list = segmentedList.filter((s) => s.occurrences.some((o) => (o.rsvpd || []).includes(user?.uid)));
+    } else {
+      list = segmentedList;
+    }
+
     if (activeTag) list = list.filter((s) => (s.primary.tags || []).includes(activeTag));
     const q = search.trim().toLowerCase();
     if (q) {
@@ -1060,7 +1284,11 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
       });
     }
-    if (sortBy === 'soonest') {
+    if (segment === 'side-quests') {
+      list = [...list].sort(
+        (a, b) => sideQuestPriority(a.primary.tier, sideQuestStatus) - sideQuestPriority(b.primary.tier, sideQuestStatus),
+      );
+    } else if (sortBy === 'soonest') {
       // No date (a dateless side quest) sorts last, not first — there's no
       // "soonest" to compare it against.
       list = [...list].sort((a, b) => {
@@ -1074,9 +1302,16 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
         const bTime = b.primary.createdAt ? toDate(b.primary.createdAt).getTime() : 0;
         return bTime - aTime;
       });
+    } else if (sortBy === 'past') {
+      // Most recently attended first.
+      list = [...list].sort((a, b) => {
+        const aTime = a.primary.eventDate ? toDate(a.primary.eventDate).getTime() : 0;
+        const bTime = b.primary.eventDate ? toDate(b.primary.eventDate).getTime() : 0;
+        return bTime - aTime;
+      });
     }
     return list;
-  }, [segmentedList, activeTag, search, sortBy]);
+  }, [segmentedList, pastAttendedSeriesList, activeTag, search, sortBy, segment, sideQuestStatus, user]);
 
   const activeSeriesId = isDesktop ? (openSeriesId ?? visibleSeries[0]?.seriesId ?? null) : null;
   const activeSeries = visibleSeries.find((s) => s.seriesId === activeSeriesId) || null;
@@ -1112,13 +1347,13 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
     <div className={isDesktop ? 'quest-feed-layout' : undefined}>
       <div className='quest-feed-main'>
         <div className='quest-feed-greeting'>
-          <h1>{mineOnly ? "Your RSVP'd quests" : `Explore Quests`}</h1>
-          {/* {!mineOnly && (
-            <p>
-              {seriesList.length} quest{seriesList.length === 1 ? '' : 's'} open — here's what's
-              happening nearby.
-            </p>
-          )} */}
+          <h1>
+            {sortBy === 'mine'
+              ? "Your RSVP'd quests"
+              : sortBy === 'past'
+                ? 'Past attended quests'
+                : 'Explore Quests'}
+          </h1>
         </div>
 
         {/* pending_org only — not 'user' too, unlike main's version of this
@@ -1162,25 +1397,31 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
           {/* The org/side-quests switch (previously a two-option segmented
               tab) is now a single toggle pill whose label names the OTHER
               view, matching the wireframe's one "Side Quest" button. */}
-          {!mineOnly && (
-            <StampButton
-              type='button'
-              onClick={() => {
-                setSegment((s) => (s === 'org' ? 'side-quests' : 'org'));
-                setActiveTag(null);
-              }}
-            >
-              {segment === 'org' ? 'Side Quest' : 'Quests'}
-            </StampButton>
-          )}
+          <StampButton
+            type='button'
+            onClick={() => {
+              setSegment((s) => (s === 'org' ? 'side-quests' : 'org'));
+              setActiveTag(null);
+            }}
+          >
+            {segment === 'org' ? 'Side Quest' : 'Quests'}
+          </StampButton>
         </div>
 
-        {/* "Recommended" is load()'s own relevance/AI-ranked order (see
-            there) — the other two options apply a straightforward sort on
-            top instead. Shares a row with the tag chips, matching the
-            wireframe's single filter-pill line. */}
-        {!mineOnly && (
-          <div className='tag-filter-row'>
+        {/* "Recommended"/Soonest/Newest are orderings of the same upcoming
+            org-quest list ('recommended' is load()'s own relevance/AI-
+            ranked sort, left untouched). "My RSVPs" and "Past Attended"
+            are filters folded into this same dropdown instead of a
+            separate segmented control — both only ever apply within the
+            org-quests segment, so there was no need for a third/fourth
+            toggle pill next to Side Quest. Shares a row with the tag
+            chips, matching the wireframe's single filter-pill line.
+            Hidden for side quests — there are only ever a handful of them
+            (the admin-created neighborhood quests), so sorting/tagging/
+            RSVP-filtering a short list like that adds controls nobody
+            needs. */}
+        {segment !== 'side-quests' && (
+          <div className='tag-filter-row' ref={tagRowRef}>
             <label className='visually-hidden' htmlFor='quest-sort-by'>
               Sort by
             </label>
@@ -1193,6 +1434,8 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
               <option value='recommended'>Recommended</option>
               <option value='soonest'>Soonest</option>
               <option value='newest'>Newest</option>
+              <option value='mine'>My RSVPs</option>
+              <option value='past'>Past Attended</option>
             </select>
             {availableTags.length > 0 && (
               <>

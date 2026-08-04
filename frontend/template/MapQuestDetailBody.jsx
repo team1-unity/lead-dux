@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ref as storageRef, getDownloadURL } from 'firebase/storage';
-import { storage } from './firebaseapp.jsx';
 import { StampButton } from './StampButton.jsx';
 import { ShareButton } from './QuestSeriesRow.jsx';
-import { TrustTag } from './TrustTag.jsx';
-import { DuckMark } from './Logo.jsx';
+import { HeroCarousel } from './HeroCarousel.jsx';
 import { QuestReviewsList } from './QuestReviewsList.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
-import { toDate, getTrustStatus } from './questSeries.js';
-import { buildDirectionsUrl } from './mapLinks.js';
+import { toDate } from './questSeries.js';
+import { LocationLink } from './LocationLink.jsx';
 import {
   IconPin,
   IconCalendar,
@@ -42,70 +39,6 @@ function formatEventDate(value) {
 function formatStars(rating) {
   const whole = Math.round(rating);
   return '★'.repeat(whole) + '☆'.repeat(5 - whole);
-}
-
-// Organizations' Community Photos gallery (org.photos, an array of Storage
-// paths — see OrganizationProfile.jsx's OrgPhotoGallery, which this mirrors)
-// as a hero carousel: auto-advances every 5s, no manual controls at all —
-// anyone who wants to linger on a specific photo already has the org's own
-// profile page (linked right below) to browse the same gallery at their own
-// pace. Falls back to the org's logo, then the plain DuckMark placeholder,
-// whenever there are zero photos to show — same fallback MapQuestDetailBody
-// always had, just one layer deeper now.
-function HeroCarousel({ photoPaths, orgLogoUrl }) {
-  const [urls, setUrls] = useState([]);
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    if (!photoPaths || photoPaths.length === 0) {
-      setUrls([]);
-      return undefined;
-    }
-    let cancelled = false;
-    Promise.all(
-      photoPaths.map((p) =>
-        // Some seeded demo orgs have external placeholder URLs in this
-        // field from before it had a real writer — only genuine Storage
-        // paths need resolving (see OrgPhotoGallery's own identical note).
-        /^https?:\/\//.test(p) ? Promise.resolve(p) : getDownloadURL(storageRef(storage, p)).catch(() => null),
-      ),
-    ).then((resolved) => {
-      if (!cancelled) setUrls(resolved.filter(Boolean));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [photoPaths]);
-
-  useEffect(() => {
-    setIndex(0);
-    if (urls.length < 2) return undefined;
-    const id = setInterval(() => setIndex((i) => (i + 1) % urls.length), 5000);
-    return () => clearInterval(id);
-  }, [urls.length]);
-
-  if (urls.length === 0) {
-    return orgLogoUrl ? (
-      <img src={orgLogoUrl} alt="" className="map-quest-hero-img" />
-    ) : (
-      <div className="map-quest-hero-fallback" aria-hidden="true">
-        <DuckMark size={64} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="map-quest-hero-carousel">
-      <div
-        className="map-quest-hero-carousel-track"
-        style={{ transform: `translateX(-${index * 100}%)` }}
-      >
-        {urls.map((url, i) => (
-          <img key={i} src={url} alt="" className="map-quest-hero-img" />
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // Everything from the org's own "About" profile section apart from the
@@ -193,12 +126,11 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
   const isDesktop = useIsDesktop();
   const { primary, org } = series;
   const [tab, setTab] = useState('overview');
-  const trustStatus = getTrustStatus(org?.reviewCount || 0, org?.avgRating || 0);
   const hasReviews = series.reviewCount > 0;
 
   return (
     <div className="map-quest-detail-body">
-      <div className="map-quest-hero">
+      <div className="quest-hero">
         <HeroCarousel photoPaths={org?.photos} orgLogoUrl={org?.logoUrl} />
         {onClose && isDesktop && (
           <button type="button" className="map-quest-hero-close" onClick={onClose} aria-label="Close">
@@ -223,6 +155,9 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
           </span>
         </p>
       )}
+      {/* Trust tag (Trustworthy/New Organization/Under Review) only shows
+          on the org's own profile page (OrganizationProfile.jsx) now, not
+          here. */}
       {primary.orgName && (
         <div className="flex items-center gap-sm" style={{ marginTop: 4, flexWrap: 'wrap' }}>
           {primary.orgId ? (
@@ -232,21 +167,11 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
           ) : (
             <span className="quest-org-line">{primary.orgName}</span>
           )}
-          <TrustTag status={trustStatus} />
         </div>
       )}
 
       <div className="map-quest-info-block" style={{ marginTop: 10 }}>
-        {primary.location && (
-          <a
-            href={buildDirectionsUrl(primary.lat, primary.lng)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="quest-meta-row quest-meta-link"
-          >
-            <IconPin /> {primary.location}
-          </a>
-        )}
+        <LocationLink location={primary.location} lat={primary.lat} lng={primary.lng} />
         {formatEventDate(primary.eventDate) && (
           // Always the soonest *upcoming* date, not a recurrence-pattern
           // summary — useMapQuestSeries.js/EventsMap.jsx both filter a

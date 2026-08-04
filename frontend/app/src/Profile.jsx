@@ -12,7 +12,6 @@ import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
-import { groupBySeries, isUpcoming } from '@shared/questSeries.js';
 import { IconCheck, IconChevron, IconLock, IconGear, IconX } from '@shared/icons.jsx';
 import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from '@shared/rank.js';
 import { computeBadges } from '@shared/badges.js';
@@ -107,53 +106,6 @@ function ProgressCard() {
             </div>
           )}
         </>
-      )}
-    </section>
-  );
-}
-
-// A quick glimpse of quests the caller is RSVP'd to — the full list (with
-// cancel/manage actions) still lives on Quests itself; tapping through here
-// just pre-filters that page via ?mine=1 (see Quests.jsx's `mineOnly`)
-// rather than duplicating any of that UI on Profile.
-function RsvpdQuestsPreview() {
-  const { user } = useAuth();
-  const [series, setSeries] = useState(null);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    getDocs(query(collection(db, 'quests'), where('rsvpd', 'array-contains', user.uid))).then((snap) => {
-      if (cancelled) return;
-      const quests = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
-      setSeries(groupBySeries(quests));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  if (series === null) return null;
-
-  return (
-    <section className="ink-card">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 style={{ margin: 0 }}>RSVP&rsquo;d Quests</h2>
-          <p className="data-stat" style={{ marginTop: 4 }}>
-            {series.length === 0 ? 'No upcoming RSVPs yet' : `${series.length} upcoming`}
-          </p>
-        </div>
-        <Link to="/quests?mine=1" aria-label="View all RSVP'd quests">
-          <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-        </Link>
-      </div>
-      {series.length > 0 && (
-        <ul className="data-sublist" style={{ marginTop: 10 }}>
-          {series.slice(0, 3).map((s) => (
-            <li key={s.seriesId}>{s.primary.title}</li>
-          ))}
-        </ul>
       )}
     </section>
   );
@@ -465,7 +417,6 @@ export function Profile() {
 
       <div className="profile-grid">
         {role === 'user' && <ProgressCard />}
-        {role === 'user' && <RsvpdQuestsPreview />}
         {role === 'user' && <BadgesPreview />}
 
         {role !== 'user' && (
