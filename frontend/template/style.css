@@ -1055,8 +1055,8 @@ nav {
   border-top: 1.5px solid var(--border);
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 28px;
+  justify-content: space-around;
+  /* gap: 28px; */
   z-index: 10;
 }
 @media (min-width: 860px) {
@@ -1562,8 +1562,13 @@ button.quest-card-head:hover:not(:disabled) {
    sideQuestGate in Quests.jsx. Dimmed rather than hidden: the row stays
    fully clickable/expandable so the explanatory message and CTA
    (.side-quest-gate below) are still reachable, just visually
-   de-emphasized against quests the user can actually act on. */
-.quest-content-col[data-gated] {
+   de-emphasized against quests the user can actually act on.
+   data-past (org/Quests.jsx's own quest dashboard — every occurrence of
+   that series has already happened) gets the identical treatment, for the
+   same reason: still fully reachable for reviews/attendance, just visually
+   pushed behind quests that are still upcoming. */
+.quest-content-col[data-gated],
+.quest-content-col[data-past] {
   opacity: 0.6;
 }
 .side-quest-gate {
@@ -1967,12 +1972,20 @@ button.quest-card-head:hover:not(:disabled) {
   text-decoration: none;
   cursor: pointer;
   font: inherit;
+  box-shadow: none;
 }
 .quest-meta-link:hover:not(:disabled) {
   color: var(--line);
   text-decoration: underline;
   box-shadow: none;
   transform: none;
+}
+/* .quest-meta-row svg pins the icon to --line-soft even inside a
+   .quest-meta-link, so without this the icon wouldn't follow the text's
+   hover color — making it read as a separate, non-interactive decoration
+   instead of part of the same clickable link. */
+.quest-meta-link:hover:not(:disabled) svg {
+  color: var(--line);
 }
 
 .quest-description {
@@ -2155,21 +2168,21 @@ a.org-home-stat-tile:hover {
   text-overflow: ellipsis;
 }
 
-/* Search + the org/side-quests toggle button share one row (see
-   Quests.jsx) — the search field grows to fill the remaining space next to
-   the fixed-width toggle pill. */
+/* Search + the Filters button share one row (see Quests.jsx) — the search
+   field grows to fill the remaining space next to the fixed-size button.
+   .vanish-search-field itself already carries flex:1/min-width:0 (see
+   below), so there's no row-scoped override needed here the way the
+   plain shared .search-field class would need in a row like this.
+   position:relative so the desktop popover (see .quest-filter-popover)
+   can span this row's full width — same width as .quest-list/.quest-
+   feed-main beside/below it, since they share the same parent column —
+   rather than being anchored to just the button's own narrow box. */
 .quest-search-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
-}
-.quest-search-row .search-field {
-  flex: 1;
-  max-width: none;
-}
-.quest-search-row .stamp-btn {
-  flex: none;
 }
 
 .tag-filter-row {
@@ -2190,9 +2203,9 @@ a.org-home-stat-tile:hover {
 }
 
 /* Themed thin scrollbar for the few places content genuinely scrolls
-   inside its own box (a quest list beside a sticky detail pane) — a bare
-   OS scrollbar there is a real signal there's more to see, unlike the
-   tag row above, so this stays visible but styled instead of hidden. */
+   inside its own box (a quest list and its sticky detail pane beside it) —
+   a bare OS scrollbar there is a real signal there's more to see, unlike
+   the tag row above, so this stays visible but styled instead of hidden. */
 /* position:relative — the containing block for MapQuestOverlay.jsx's
    detail view (.events-map-detail-slot, portaled straight into this pane),
    so it covers exactly this pane and nothing more, in both breakpoints'
@@ -2201,25 +2214,30 @@ a.org-home-stat-tile:hover {
   position: relative;
 }
 .quest-list,
-.events-map-list-pane {
+.events-map-list-pane,
+.quest-detail-pane {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 .quest-list::-webkit-scrollbar,
-.events-map-list-pane::-webkit-scrollbar {
+.events-map-list-pane::-webkit-scrollbar,
+.quest-detail-pane::-webkit-scrollbar {
   width: 6px;
 }
 .quest-list::-webkit-scrollbar-track,
-.events-map-list-pane::-webkit-scrollbar-track {
+.events-map-list-pane::-webkit-scrollbar-track,
+.quest-detail-pane::-webkit-scrollbar-track {
   background: transparent;
 }
 .quest-list::-webkit-scrollbar-thumb,
-.events-map-list-pane::-webkit-scrollbar-thumb {
+.events-map-list-pane::-webkit-scrollbar-thumb,
+.quest-detail-pane::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: var(--radius-full);
 }
 .quest-list::-webkit-scrollbar-thumb:hover,
-.events-map-list-pane::-webkit-scrollbar-thumb:hover {
+.events-map-list-pane::-webkit-scrollbar-thumb:hover,
+.quest-detail-pane::-webkit-scrollbar-thumb:hover {
   background: var(--line-soft);
 }
 .tag-filter-row .tag-stamp,
@@ -2265,10 +2283,169 @@ a.org-home-stat-tile:hover {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
-.quest-sort-select {
+/* ---------- quest filters (Explore Quests) ---------- */
+/* Replaces the old standalone Side Quest toggle + sort <select> + always-
+   visible tag row with one Filters icon button opening a panel (desktop:
+   anchored popover; mobile: bottom sheet) — see FilterPanelContent,
+   DesktopFilterPopover, MobileFilterSheet in mobile/Quests.jsx. Pills
+   inside reuse StampButton's existing primary/default variants, so only
+   the button/panel chrome itself needs new CSS here. Styled as the same
+   rounded-square button every other control in the app already uses (see
+   button/.stamp-btn's own var(--radius)/border/paper-card base), not a
+   bold filled circle — a muted icon button that only picks up the accent
+   color once a filter is actually active or the panel is open, same
+   selected-state language as every pill inside it, rather than a separate
+   numeric badge floating off its corner. */
+.quest-filter-wrap {
   flex: none;
-  padding: 6px 10px;
-  font-size: 0.85rem;
+}
+.quest-filter-btn {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--paper-card);
+  color: var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.quest-filter-btn:hover {
+  color: var(--line);
+  background: var(--paper-well);
+}
+.quest-filter-btn[data-filters-active='true'],
+.quest-filter-btn[aria-expanded='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Desktop: spans the full width of .quest-search-row (its positioned
+   ancestor — see there) rather than a fixed width hanging off just the
+   button's own narrow box, so it lines up with .quest-list/.quest-feed-
+   main beside/below it instead of looking like a disconnected floating
+   card. Own drop shadow, no backdrop (see DesktopFilterPopover's own
+   comment on why). */
+.quest-filter-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 18px;
+}
+
+/* Mobile: a proper centered modal card, on the same full-viewport backdrop
+   every other modal in the app uses (LightboxBackdrop, its default
+   centered/padded layout — no override needed here) — same rounded-on-
+   every-side, floating-with-margin treatment as .detail-modal-content
+   (Attendees/QR/EditProfile), not a bottom sheet flush against the screen
+   edges. A bottom sheet's flush bottom edge turned out to read as a
+   clipped/cut-off box rather than an intentional edge-to-edge surface;
+   floating with margin on every side reads as a deliberate modal instead,
+   and matches what every other modal in this app already looks like. */
+.quest-filter-sheet {
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Shared internal structure both surfaces render (see FilterPanelContent). */
+.quest-filter-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.quest-filter-panel-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.quest-filter-clear {
+  flex: none;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  /* Plain <button> inherits the base button rule's resting shadow/lift
+     (see button, .stamp-btn above) — reset here since this reads as a
+     plain text link action, not a bordered button. */
+  box-shadow: none;
+}
+.quest-filter-clear:hover {
+  text-decoration: underline;
+  box-shadow: none;
+  transform: none;
+}
+.quest-filter-group {
+  margin-bottom: 16px;
+}
+.quest-filter-group:last-child {
+  margin-bottom: 0;
+}
+.quest-filter-group-label {
+  margin: 0 0 8px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--accent);
+}
+/* Type/Activity/Sort — the label sits beside its pill row, not stacked
+   above it, so each group reads as one line rather than a heading-plus-
+   row pair (was jumbled into one unlabeled Sort & Activity group before;
+   this scans faster). A fixed label column keeps every row's pills
+   starting at the same left edge regardless of label length ("Sort" vs.
+   "Activity"). */
+.quest-filter-group-inline {
+  display: flex;
+  /* flex-start, not center — when a row's pills wrap onto a second line
+     (e.g. Sort's three options at a narrow width), center would vertically
+     center the label against the whole two-line block, leaving it
+     floating between the lines instead of level with the first one
+     (Recommended). flex-start keeps the label pinned to the top, level
+     with the first pill row regardless of how many lines wrap below it. */
+  align-items: flex-start;
+  gap: 14px;
+  /* A bit more breathing room between Type/Activity/Sort than the base
+     .quest-filter-group's 16px — each row already reads as a single dense
+     line (label + pills together), so it needs more separation from its
+     neighbors than a stacked label-above-pills group would. */
+  margin-bottom: 22px;
+}
+.quest-filter-group-inline:last-child {
+  margin-bottom: 0;
+}
+.quest-filter-group-inline .quest-filter-group-label {
+  margin: 0;
+  flex: none;
+  width: 68px;
+  /* Nudges the label's text down to sit level with the first pill row's
+     own text, rather than its top edge lining up with the pills' top
+     edge (the pills have their own vertical padding the label doesn't). */
+  padding-top: 9px;
+}
+.quest-filter-group-inline .quest-filter-pill-row {
+  flex: 1;
+}
+.quest-filter-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* ---------- desktop split view: list + detail panel ---------- */
@@ -2302,9 +2479,14 @@ a.org-home-stat-tile:hover {
     position: sticky;
     top: calc(var(--nav-height-desktop) + 40px);
     /* Fills the viewport below the header at all times, however short its
-       own content is or however far the list beside it scrolls — never
-       leaves blank page background showing underneath. */
-    min-height: calc(100vh - var(--nav-height-desktop) - 80px);
+       own content is — never leaves blank page background showing
+       underneath. Capped at that same height (not just a minimum) with its
+       own scroll, same reasoning as .quest-feed-main beside it: a long
+       detail (e.g. a quest with reviews) would otherwise grow the whole
+       page tall enough to scroll the sticky list out of view entirely,
+       rather than just scrolling its own content. */
+    height: calc(100vh - var(--nav-height-desktop) - 80px);
+    overflow-y: auto;
   }
 }
 .quest-detail-empty {
@@ -2961,6 +3143,56 @@ a.org-home-stat-tile:hover {
   scrollbar-width: none;
 }
 
+/* Wider than the shared .detail-modal-content default (org/Quests.jsx's
+   Attendees modal) — a multi-column card grid (.attendee-grid below) wants
+   more room than the single-column QR/photo-review modals sharing that
+   base class were designed around. */
+.quest-attendees-modal {
+  max-width: 560px;
+}
+
+/* org/Quests.jsx's Attendees modal — a centered card per attendee (avatar
+   on top, name/email/status pill stacked below, all center-aligned)
+   rather than QuestReviewsList's own left-aligned rows (see .map-review-*
+   above): there's no long body text under a name here the way a review
+   has, so a compact grid reads faster at a glance and actually fills the
+   wider modal instead of leaving one narrow left-aligned column with dead
+   space beside it. auto-fill/minmax means this reflows on its own from 3
+   columns down to 1 as the modal narrows, no breakpoint needed. */
+.attendee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 20px 12px;
+}
+.attendee-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+.attendee-card-avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.attendee-card-name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--line);
+}
+.attendee-card-email {
+  margin: 0 0 2px;
+  font-size: 0.75rem;
+  color: var(--line-soft);
+  word-break: break-word;
+}
+
 /* .photo-lightbox-close normally floats half outside its content (a bare
    photo, in PhotoGallery.jsx/PendingPhotoSubmissions.jsx — negative offsets
    look intentional against a borderless image). These containers wrap a
@@ -3156,6 +3388,78 @@ button.data-row:active:not(:disabled) {
   outline: none;
   box-shadow: none;
 }
+
+/* VanishSearchInput (Explore Quests) — same bordered paper pill as
+   .search-field above, just with a canvas + an animated placeholder layer
+   stacked on top of the real input instead of a plain input alone. See
+   frontend/template/VanishSearchInput.jsx. */
+.vanish-search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--paper-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 11px 16px;
+  overflow: hidden;
+}
+.vanish-search-icon {
+  flex: none;
+  color: var(--line-soft);
+}
+.vanish-search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.vanish-search-input {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  border: none;
+  padding: 0;
+  background: none;
+  font-family: var(--font-body);
+  color: var(--line);
+}
+.vanish-search-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.vanish-search-input.is-animating {
+  color: transparent;
+}
+.vanish-search-canvas {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scale(0.5);
+  transform-origin: top left;
+  opacity: 0;
+}
+.vanish-search-canvas.is-animating {
+  opacity: 1;
+}
+.vanish-search-placeholder-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.vanish-search-placeholder-layer p {
+  margin: 0;
+  color: var(--line-soft);
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 .quest-detail-edit-btn {
   position: absolute;
   top: 0;
@@ -3203,23 +3507,20 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
 }
 
-.profile-identity {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.profile-identity-info {
-  flex: 1;
-  min-width: 160px;
-}
-.profile-identity-info h1 {
-  margin-bottom: 2px;
-}
 .profile-meta {
   margin: 0;
   color: var(--line-soft);
+}
+
+/* The last 3 earned badges, next to the name (see Profile.jsx) — a plain
+   horizontal row, same BadgeRing tiles the Badges page itself uses, just
+   small. The whole row is one link (not one per badge): tapping any of
+   them goes to /badges, the same single destination regardless of which
+   icon was tapped. */
+.profile-name-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .back-link {
@@ -3258,16 +3559,47 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-well);
 }
 
-.profile-preview-badges {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+}
+
+/* The identity card — avatar/name+badges/email/Log out/Edit Profile, one
+   card at every width (used to split into a different desktop-only grid
+   with settings inline in a second column; that's reverted — a gear icon
+   here is simpler and consistent with OrganizationProfile.jsx's own). The
+   gear icon is positioned absolutely off this card's own top-right corner
+   (overriding .profile-settings-link's plain margin-left:auto flow-row
+   position above, which OrganizationProfile.jsx's own header still uses
+   as-is), not stacked in the centered column with everything else. */
+.profile-identity-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 55vh;
+  text-align: center;
+}
+.profile-identity-card .profile-settings-link {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  margin-left: 0;
+}
+.profile-identity-card .profile-name-badges {
+  justify-content: center;
+}
+/* Narrower on desktop and centered — full page width read as too wide
+   for a card this sparse (an avatar, a couple lines of text, two
+   buttons). */
+@media (min-width: 860px) {
+  .profile-identity-card {
+    max-width: 35vw;
+    margin: 0 auto;
+  }
 }
 
 /* ---------- Organization Profile page (see OrganizationProfile.jsx) ---------- */
@@ -3687,6 +4019,18 @@ button.data-row:active:not(:disabled) {
   flex-direction: column;
   justify-content: center;
   min-height: calc(100vh - var(--nav-height) - 56px);
+}
+/* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
+   1180px cap (see #root above), the greeting/rank-card/CTA buttons were
+   stretching to fill nearly the whole content column. Capped to 40vw and
+   centered instead, matching the same 860px breakpoint used everywhere
+   else in this file for desktop-only treatments. */
+@media (min-width: 860px) {
+  .home-page {
+    max-width: 40vw;
+    width: 100%;
+    margin: 0 auto;
+  }
 }
 
 /* A must-dismiss popup notice (NotificationBanner.jsx) — a quest RSVP'd to
@@ -4277,10 +4621,11 @@ button.data-row:active:not(:disabled) {
   color: var(--line-soft);
   white-space: nowrap;
 }
-/* ---------- Map quest detail (MapQuestDetailBody.jsx) — shared by the
-   overlay view opened from EventsMap.jsx and the standalone
-   /map/:seriesId page ---------- */
-.map-quest-hero {
+/* ---------- Quest detail hero (HeroCarousel.jsx) — shared by the map
+   quest detail (MapQuestDetailBody.jsx: the overlay view opened from
+   EventsMap.jsx and the standalone /map/:seriesId page) and the Explore
+   Quests detail (mobile/Quests.jsx's QuestDetailBody) ---------- */
+.quest-hero {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -4288,13 +4633,13 @@ button.data-row:active:not(:disabled) {
   overflow: hidden;
   background: var(--paper-well);
 }
-.map-quest-hero-img {
+.quest-hero-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-.map-quest-hero-fallback {
+.quest-hero-fallback {
   width: 100%;
   height: 100%;
   display: flex;
@@ -4306,7 +4651,8 @@ button.data-row:active:not(:disabled) {
    itself (a real lightbox close button, not one hanging in the padding
    above it), rather than the generic .photo-lightbox-close every other
    modal in this app uses (which floats relative to the whole bordered
-   card, not specifically the image at its top). */
+   card, not specifically the image at its top). Map-only: the Explore
+   Quests detail has no close/back button overlaying its hero. */
 .map-quest-hero-close {
   position: absolute;
   top: 10px;
@@ -4343,31 +4689,30 @@ button.data-row:active:not(:disabled) {
   z-index: 1;
 }
 
-/* Community-photos hero carousel (HeroCarousel, MapQuestDetailBody.jsx) —
-   a plain flex track of full-width slides, shifted with `transform:
-   translateX` to whichever slide is current; .map-quest-hero's own
-   `overflow: hidden` crops everything outside the active slide. Auto-
-   advances on a timer with no manual controls at all (by design — see the
-   component's own note), so the sliding transition is the only motion this
-   ever needs. */
-.map-quest-hero-carousel {
+/* Community-photos hero carousel (HeroCarousel.jsx) — a plain flex track
+   of full-width slides, shifted with `transform: translateX` to whichever
+   slide is current; .quest-hero's own `overflow: hidden` crops everything
+   outside the active slide. Auto-advances on a timer with no manual
+   controls at all (by design — see the component's own note), so the
+   sliding transition is the only motion this ever needs. */
+.quest-hero-carousel {
   width: 100%;
   height: 100%;
   overflow: hidden;
 }
-.map-quest-hero-carousel-track {
+.quest-hero-carousel-track {
   display: flex;
   width: 100%;
   height: 100%;
   transition: transform 0.6s ease;
 }
-.map-quest-hero-carousel-track .map-quest-hero-img {
+.quest-hero-carousel-track .quest-hero-img {
   flex: none;
   width: 100%;
   height: 100%;
 }
 @media (prefers-reduced-motion: reduce) {
-  .map-quest-hero-carousel-track {
+  .quest-hero-carousel-track {
     transition: none;
   }
 }
@@ -4411,10 +4756,13 @@ button.data-row:active:not(:disabled) {
   margin-bottom: 10px;
 }
 
-/* Reviews tab (MapQuestDetailBody.jsx) — one row per review, no enclosing
-   card/box (unlike .data-sublist elsewhere in the app), separated by a
-   thin divider instead, matching a real Google Maps review list rather
-   than the old flat bulleted-text version this replaced. */
+/* QuestReviewsList.jsx — shared by the map quest detail's Reviews tab,
+   the org's own quest dashboard, and the volunteer quest detail, all three
+   showing the same reviews for the same quest/series. One row per review,
+   no enclosing card/box (unlike .data-sublist elsewhere in the app),
+   separated by a thin divider instead, matching a real Google Maps review
+   list rather than the old flat bulleted-text/expand-toggle versions this
+   replaced. */
 .map-reviews-list {
   display: flex;
   flex-direction: column;
@@ -4705,14 +5053,40 @@ button.data-row:active:not(:disabled) {
 }
 
 /* The pending-feedback one-liner (see FeedbackStatus in Journal.jsx) —
-   corner-anchored like the close button/3-dot menu rather than sitting
-   inline, and hidden entirely while editing (see ExpandedJournalEntry) so
-   it never overlaps the Save/Cancel buttons in that same bottom area. */
-.journal-feedback-pending-corner {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  right: 56px;
+   sits in normal flow below the reflection now, same as the completed
+   .journal-feedback block below; hidden entirely while editing (see
+   ExpandedJournalEntry) so it never needs to dodge the Save/Cancel
+   buttons in that same area. */
+.journal-feedback-pending {
+  margin: 16px 0 0;
+  /* .data-stat's own white-space: nowrap suits a short stat, not this
+     full sentence. */
+  white-space: normal;
+}
+
+/* The completed-feedback block (FeedbackStatus in Journal.jsx) — sits
+   below the reflection, set off by its own divider + small heading so it
+   reads as a distinct "the organization said this" section rather than
+   more of the leader's own entry. summary/growthArea are natural-language
+   text generated server-side (see _generate_feedback_summary in
+   functions/main.py) — this never renders a raw number. */
+.journal-feedback {
+  margin-top: 20px;
+}
+.journal-feedback-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 16px;
+}
+/* The organization's own free-text note (entry.extraThoughts) — set off
+   as an actual quotation (their literal words, unedited) rather than
+   blending into the generated summary paragraph above it. */
+.journal-feedback-quote {
+  margin: 12px 0 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--accent);
+  color: var(--line-soft);
+  font-style: italic;
 }
 
 .journal-thumbnail-picker-grid {

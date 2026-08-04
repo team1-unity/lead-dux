@@ -398,15 +398,6 @@ export async function callSubmitFeedbackRequestResponse({ questId, uid, answers,
   return result.data;
 }
 
-// user: acknowledges the live "you got feedback" popup for one quest, so it
-// doesn't show again on a later page load. Doesn't affect the journal's
-// unread badge — see callMarkFeedbackRead for that.
-export async function callMarkFeedbackNotified(questId) {
-  const fn = httpsCallable(functions, 'mark_feedback_notified');
-  const result = await fn({ questId });
-  return result.data;
-}
-
 // user: marks a journal entry as read (opened), clearing its contribution
 // to the BottomNav badge count.
 export async function callMarkFeedbackRead(questId) {

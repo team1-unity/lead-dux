@@ -17,14 +17,21 @@ function formatEventDate(isoOrTimestamp) {
 // One line of copy per notification kind — see _notify_user in
 // functions/main.py for exactly when each of these gets written
 // (update_quest on a date change, delete_quest/delete_quest_series/
-// keep-only-this-date on a cancellation). Both explicitly say the app
-// doesn't touch any calendar entry someone may have already added — see
-// AddToCalendar.jsx's own note that it only ever generates a Google/
-// Outlook/.ics link, never anything this app could reach back into later.
+// keep-only-this-date on a cancellation, submit_feedback_request_response
+// once an organization answers a request). The reschedule/cancellation
+// copy explicitly says the app doesn't touch any calendar entry someone
+// may have already added — see AddToCalendar.jsx's own note that it only
+// ever generates a Google Calendar/.ics link, never anything this app
+// could reach back into later.
 function messageFor(notice) {
   const calendarNote = "This app can't remove or update anything you already added to your own calendar — please check it yourself.";
   if (notice.kind === 'quest_rescheduled') {
     return `This quest was rescheduled to ${formatEventDate(notice.newEventDate)}. Your RSVP was cleared — RSVP again if you'd still like to attend. ${calendarNote}`;
+  }
+  if (notice.kind === 'feedback_received') {
+    return notice.pointsAwarded > 0
+      ? `An organization left feedback on your journal entry for this quest, and you earned ${notice.pointsAwarded} points. View it in your Journal.`
+      : `An organization left feedback on your journal entry for this quest. View it in your Journal.`;
   }
   return `This quest was cancelled by the organizer. ${calendarNote}`;
 }

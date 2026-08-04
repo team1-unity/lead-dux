@@ -1254,11 +1254,36 @@ def seed_feedback_and_journal(completed_quests, user_uids):
     # Two completed feedback requests — Marcus Bell earned the bonus
     # (matches FEEDBACK_BONUS_RECIPIENTS' point bump in seed_users above),
     # Omar Haddad scored under FEEDBACK_SCORE_THRESHOLD and earned nothing.
+    # summary/growthArea are hand-written here (not generated) since
+    # seeding shouldn't depend on a live GEMINI_API_KEY — same shape
+    # _generate_feedback_summary in functions/main.py would actually
+    # produce for these answers, never a number among them.
     completed_feedback = [
-        ("Marcus Bell", cq_b, {"engagement": 9, "presence": 8, "involvement": 9, "initiative": 8, "attitude": 9}, "Genuinely one of our most reliable volunteers this month.", True),
-        ("Omar Haddad", cq_a, {"engagement": 5, "presence": 4, "involvement": 5, "initiative": 3, "attitude": 5}, "Showed up and did the work, but seemed distracted for most of the shift.", False),
+        (
+            "Marcus Bell", cq_b,
+            {"engagement": 9, "presence": 8, "involvement": 9, "initiative": 8, "attitude": 9},
+            "Genuinely one of our most reliable volunteers this month.", True,
+            "Marcus brought strong participation and engagement to every shift, staying actively "
+            "involved from start to finish. His presence and attentiveness were consistently "
+            "reliable, and his contributions helped keep the group on track throughout. He also "
+            "showed meaningful initiative, stepping in to help without needing to be asked. On top "
+            "of all that, his attitude and cooperation made him easy to work alongside — exactly "
+            "the kind of volunteer we hope to see again.",
+            "",
+        ),
+        (
+            "Omar Haddad", cq_a,
+            {"engagement": 5, "presence": 4, "involvement": 5, "initiative": 3, "attitude": 5},
+            "Showed up and did the work, but seemed distracted for most of the shift.", False,
+            "Omar showed up and engaged with the group throughout the quest, contributing to the "
+            "shared task alongside the rest of the team. His attitude stayed cooperative, and there "
+            "were moments where his presence added to the group's effort. There's room to grow in "
+            "how consistently he stays attentive and engaged throughout a full shift.",
+            "Building more consistent initiative — stepping up and helping without waiting to be "
+            "asked — would make the biggest difference next time.",
+        ),
     ]
-    for name, cq, answers, extra_thoughts, earns_bonus in completed_feedback:
+    for name, cq, answers, extra_thoughts, earns_bonus, summary, growth_area in completed_feedback:
         uid = name_to_uid[name]
         _ensure_attended(cq, uid)
         score = round(sum(answers.values()) / len(answers), 1)
@@ -1268,13 +1293,13 @@ def seed_feedback_and_journal(completed_quests, user_uids):
             "orgId": cq["org_uid"], "orgName": cq["org_name"],
             "questTitle": cq["title"], "eventDate": cq["event_date"], "requestedAt": NOW - timedelta(days=4),
             "expiresAt": NOW + timedelta(days=10), "status": "completed", "answers": answers,
-            "extraThoughts": extra_thoughts, "score": score, "pointsAwarded": points,
-            "completedAt": NOW - timedelta(days=2),
+            "extraThoughts": extra_thoughts, "score": score, "summary": summary, "growthArea": growth_area,
+            "pointsAwarded": points, "completedAt": NOW - timedelta(days=2),
         })
         main._journal_ref(db, uid, cq["quest_id"]).set({
             "requestStatus": "completed", "answers": answers, "extraThoughts": extra_thoughts,
-            "score": score, "pointsAwarded": points, "completedAt": NOW - timedelta(days=2),
-            "notified": False, "read": False,
+            "score": score, "summary": summary, "growthArea": growth_area, "pointsAwarded": points,
+            "completedAt": NOW - timedelta(days=2), "notified": False, "read": False,
         }, merge=True)
     print("  Completed feedback requests: Marcus Bell earned the bonus, Omar Haddad did not")
 
@@ -1379,6 +1404,51 @@ def seed_hero_journal_entries(completed_quests, user_uids):
         blank_cq = by_title[plan["blank"]]
         _ensure_attended(blank_cq, uid)
     print(f"  Hero journals: {len(HERO_JOURNALS)} users, {filled_count} reflections + matching photos, 1 blank entry each")
+
+    # Maria Ortiz's Thanksgiving Food Drive Sorting entry additionally gets
+    # a completed feedback response — a concrete "reflection already
+    # written, feedback arrives afterward" example for the Journal page
+    # (FeedbackStatus renders below the reflection body there, set off by
+    # its own divider), same shape as seed_feedback_and_journal's own
+    # completed_feedback cases above, just targeted at a specific named
+    # hero/quest instead of whichever completed_quests[0]/[1] happen to be.
+    maria_uid = name_to_uid["Maria Ortiz"]
+    maria_cq = by_title["Thanksgiving Food Drive Sorting"]
+    _ensure_attended(maria_cq, maria_uid)
+    maria_answers = {"engagement": 9, "presence": 9, "involvement": 8, "initiative": 8, "attitude": 10}
+    maria_score = round(sum(maria_answers.values()) / len(maria_answers), 1)
+    maria_points = main.FEEDBACK_BONUS_POINTS if maria_score >= main.FEEDBACK_SCORE_THRESHOLD else 0
+    maria_extra_thoughts = (
+        "Maria jumped right in without needing much direction, even as a first-timer — exactly "
+        "the energy we hope every new volunteer brings."
+    )
+    # Hand-written, not generated — seeding shouldn't depend on a live
+    # GEMINI_API_KEY. Every category is 8+ here, so growthArea stays empty
+    # per _generate_feedback_summary's own rule 7.
+    maria_summary = (
+        "You were actively engaged throughout the quest and consistently stayed focused on the "
+        "experience. Your contributions helped move the group forward, and you regularly stepped "
+        "up to help when opportunities arose. You maintained a positive, cooperative attitude that "
+        "made working together enjoyable, and your overall presence strengthened the team's "
+        "success. Keep bringing this level of energy and teamwork to future quests."
+    )
+    maria_growth_area = ""
+    main._feedback_request_ref(db, maria_cq["quest_id"], maria_uid).set({
+        "questId": maria_cq["quest_id"], "uid": maria_uid, "requesterName": "Maria Ortiz",
+        "orgId": maria_cq["org_uid"], "orgName": maria_cq["org_name"],
+        "questTitle": maria_cq["title"], "eventDate": maria_cq["event_date"],
+        "requestedAt": NOW - timedelta(days=3), "expiresAt": NOW + timedelta(days=11),
+        "status": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
+        "score": maria_score, "summary": maria_summary, "growthArea": maria_growth_area,
+        "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+    })
+    main._journal_ref(db, maria_uid, maria_cq["quest_id"]).set({
+        "requestStatus": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
+        "score": maria_score, "summary": maria_summary, "growthArea": maria_growth_area,
+        "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+        "notified": False, "read": False,
+    }, merge=True)
+    print(f"  Maria Ortiz completed feedback: Thanksgiving Food Drive Sorting, score {maria_score}")
 
 
 def seed_notifications(user_uids):
