@@ -57,6 +57,23 @@ const SOCIAL_LINK_FIELDS = [
   { key: 'youtube', label: 'YouTube' },
 ];
 
+// Same avatars/{uid}/ Storage path a leader's own profile picture upload
+// uses (see Profile.jsx's EditProfileModal) — storage.rules gates it on
+// request.auth.uid == uid alone, no role check, so an organization's own
+// uid works exactly the same way. logoUrl itself stays a plain string
+// field (update_organization_profile validates it as nothing more than
+// `isinstance(value, str)`), so this just fills that same field with a
+// real download URL instead of requiring someone to paste one in by hand.
+const LOGO_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const LOGO_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const LOGO_EXT_BY_CONTENT_TYPE = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
+
 // Logo URL + every social link are optional and, for most orgs, blank —
 // rather than a wall of empty rows, they only show once added via "+ Add a
 // property" (same pattern as CreateQuestForm's Capacity/Tags), with a
@@ -80,7 +97,10 @@ const OPTIONAL_FIELD_ITEMS = [{ key: 'logoUrl', label: 'Logo URL' }, ...SOCIAL_L
 // an internal approval detail with the org's own public bio — reverted to
 // admin-only; see functions/main.py's _SIMPLE_PROFILE_FIELDS.
 function AboutEditForm({ org, onSaved, onCancel }) {
+  const { user } = useAuth();
   const reduce = useReducedMotion();
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState('');
   const [fields, setFields] = useState({
     logoUrl: org.logoUrl || '',
     category: org.category || '',
@@ -117,6 +137,30 @@ function AboutEditForm({ org, onSaved, onCancel }) {
     setAddedFields((f) => ({ ...f, [key]: false }));
     if (key === 'logoUrl') setFields((f) => ({ ...f, logoUrl: '' }));
     else setSocial((s) => ({ ...s, [key]: '' }));
+  }
+
+  async function uploadLogo(file) {
+    setLogoError('');
+    if (!LOGO_CONTENT_TYPES.includes(file.type)) {
+      setLogoError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
+      return;
+    }
+    if (file.size > LOGO_MAX_SIZE_BYTES) {
+      setLogoError('Photo must be smaller than 10MB.');
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const ext = LOGO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+      const path = `avatars/${user.uid}/${Date.now()}.${ext}`;
+      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+      const url = await getDownloadURL(storageRef(storage, path));
+      setFields((f) => ({ ...f, logoUrl: url }));
+    } catch (err) {
+      setLogoError(err.message || 'Something went wrong uploading that photo.');
+    } finally {
+      setUploadingLogo(false);
+    }
   }
 
   async function save(e) {
@@ -287,6 +331,29 @@ function AboutEditForm({ org, onSaved, onCancel }) {
                 value={fields.logoUrl}
                 onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))}
               />
+              <div className="flex items-center gap-sm" style={{ marginTop: 8 }}>
+                {fields.logoUrl && (
+                  <img
+                    src={fields.logoUrl}
+                    alt=""
+                    style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', objectFit: 'cover' }}
+                  />
+                )}
+                <label className="field-optional" style={{ margin: 0 }}>
+                  {uploadingLogo ? 'Uploading...' : 'Or upload a photo'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                    disabled={uploadingLogo}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadLogo(file);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+              {logoError && <p className="box-danger">{logoError}</p>}
             </div>
           </motion.div>
         )}
@@ -446,11 +513,14 @@ function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
   );
 }
 
-function OrgQuestCard({ series }) {
+function OrgQuestCard({ series, orgId, orgName, orgLogoUrl }) {
   const { primary, occurrences } = series;
   const rsvpCount = (primary.rsvpd || []).length;
   return (
     <Link to={`/quests/${series.seriesId}`} className="ink-card org-quest-card">
+      <span className="quest-thumb" aria-hidden="true" style={{ marginBottom: 8 }}>
+        <OrgAvatar name={orgName} seed={orgId} logoUrl={series.coverPhotos?.[0] || orgLogoUrl} />
+      </span>
       <p className="quest-title">{primary.title}</p>
       {primary.location && (
         <p className="quest-meta-row">
@@ -650,7 +720,13 @@ export function OrganizationProfile() {
           ) : (
             <div className="org-quest-grid">
               {seriesList.map((series) => (
-                <OrgQuestCard key={series.seriesId} series={series} />
+                <OrgQuestCard
+                  key={series.seriesId}
+                  series={series}
+                  orgId={orgId}
+                  orgName={org.name}
+                  orgLogoUrl={org.logoUrl}
+                />
               ))}
             </div>
           )}
