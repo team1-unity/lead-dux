@@ -1881,6 +1881,7 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
         "qrToken": token,
         "createdAt": firestore.SERVER_TIMESTAMP,
     })
+    _record_quest_attended(db, uid, quest.get("tags") or [])
 
     return {"success": True, "alreadyCheckedIn": False, "pointsAwarded": base_points}
 
@@ -2140,6 +2141,7 @@ def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
                 "qrToken": None,
                 "createdAt": firestore.SERVER_TIMESTAMP,
             })
+            _record_quest_attended(db, submitter_uid, quest.get("tags") or [])
     else:
         total_points = PHOTO_BONUS_POINTS
 
@@ -2614,13 +2616,76 @@ def submit_feedback_request_response(req: https_fn.CallableRequest) -> dict:
 # AI-ranked ordering of organization quests on the Quests page — not a
 # client-callable itself; the frontend never asks for a fresh ranking, it
 # only ever reads whatever's already on the user doc (recommendedQuestOrder,
-# below). Triggered as a side effect of submit_onboarding/update_interests/
-# update_accommodation_needs, the three places that change what this
-# ranking is based on — see _refresh_quest_recommendations, which every
-# call site actually calls, since it never raises. Only ranks organization
-# quests: side quests are generic/tier-based, not location- or
-# org-specific, so they keep the plain client-side tag-overlap sort (see
-# relevanceScore in Quests.jsx) instead.
+# below). Only ranks organization quests: side quests are generic/tier-
+# based, not location- or org-specific, so they keep the plain client-side
+# tag-overlap sort (see relevanceScore in Quests.jsx) instead.
+#
+# What this used to be based on: a "user" manually curated an `interests`
+# list from Settings, and every single save re-ran this whole Gemini call
+# (see update_interests, now removed, and update_accommodation_needs, which
+# still does the same for the accessibility/location fields it owns).
+# That's gone for interests specifically — there's no Settings control for
+# it anymore, so it can't drift out of sync with actual behavior the way a
+# stated-once, rarely-revisited preference can, and it can't be used to
+# force a fresh (costly) Gemini call on demand either. `interests` itself
+# still exists as a field (set once at onboarding — see submit_onboarding)
+# and still rides along in the prompt below as a cold-start hint for a
+# brand-new "user" with no attendance history yet, but it's no longer the
+# headline signal or a refresh trigger.
+#
+# What actually triggers a refresh now: real quest attendance. Every
+# RECOMMENDATION_REFRESH_INTERVAL-th quest a "user" completes (see
+# _record_quest_attended, called from check_in_to_event and
+# approve_photo_submission — the only two places a NEW attendance record
+# gets created) re-runs this. Recommendations respond to what someone
+# actually did, not a preference they set once and maybe never revisit, and
+# a real LLM call happens for at most 1-in-N attended quests instead of on
+# every settings save — the actual point of counting attendance at all,
+# not just a side benefit.
+RECOMMENDATION_REFRESH_INTERVAL = 5
+
+
+# attendedTagCounts is a plain {tag: count} map, not a dotted-field-path
+# Increment — quest tags are free text (CreateQuestForm never restricts
+# them to a fixed vocabulary), so a tag containing a literal "." would
+# otherwise be misread as a nested-map path by a dotted update() key.
+# Reading, mutating, and rewriting the whole map inside this transaction
+# sidesteps that entirely: every key here is a plain dict key, never parsed
+# as a path.
+def _apply_quest_attended(transaction, user_ref, tags):
+    snap = user_ref.get(transaction=transaction)
+    data = snap.to_dict() if snap.exists else {}
+    count = data.get("questsAttended", 0) + 1
+    tag_counts = dict(data.get("attendedTagCounts") or {})
+    for tag in tags:
+        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    transaction.update(user_ref, {"questsAttended": count, "attendedTagCounts": tag_counts})
+    return count
+
+
+# Called from check_in_to_event/approve_photo_submission's own attendance-
+# doc-creation branches only — i.e. exactly once per genuinely NEW
+# attendance record, never on a repeat check-in or the org-quest +5 photo
+# bonus that follows a check-in already counted (see both call sites' own
+# notes on why attendance-doc existence, not points awarded, is what "new"
+# means here). Same atomic read-increment-write shape as _apply_points/
+# _award_points above, kept separate from that one since points get
+# awarded from places (the feedback-request bonus, add_submission_to_gallery)
+# that have nothing to do with completing a quest and shouldn't bump this.
+#
+# `tags` (the just-attended quest's own tags) feeds attendedTagCounts — a
+# running, frequency-weighted tally of what this person has actually done,
+# read both by _generate_quest_recommendations below (the AI call, gated to
+# every RECOMMENDATION_REFRESH_INTERVAL-th quest) and by the frontend's own
+# relevanceScore fallback (every quest, no gate at all — see
+# mobile/Quests.jsx) for whatever an AI refresh hasn't ranked yet.
+def _record_quest_attended(db, uid: str, tags: list) -> None:
+    count = firestore.transactional(_apply_quest_attended)(
+        db.transaction(), db.collection("users").document(uid), tags,
+    )
+    if count % RECOMMENDATION_REFRESH_INTERVAL == 0:
+        _refresh_quest_recommendations(db, uid)
+
 
 AI_RECOMMENDATION_CANDIDATE_LIMIT = 40  # keeps the prompt bounded regardless of catalog size
 
@@ -2678,12 +2743,13 @@ def _generate_quest_recommendations(db, uid: str) -> None:
     series_id_by_candidate_id = dict(zip((c["id"] for c in candidates), ranked_series_ids))
 
     # "Volunteer activity" signal — tags from quests this user has actually
-    # completed before, alongside their stated interests/profile.
-    attended_tags = set()
-    for doc in db.collection("attendance").where("userId", "==", uid).stream():
-        quest_snap = db.collection("quests").document(doc.to_dict()["eventId"]).get()
-        if quest_snap.exists:
-            attended_tags.update(quest_snap.to_dict().get("tags") or [])
+    # completed before, most-attended-first. The primary signal now (see the
+    # module note above RECOMMENDATION_REFRESH_INTERVAL): real behavior, not
+    # a stated-once preference. Reads the running attendedTagCounts tally
+    # (see _record_quest_attended) rather than re-scanning the whole
+    # attendance collection on every refresh — same data, far fewer reads.
+    attended_tag_counts = user.get("attendedTagCounts") or {}
+    attended_tags = sorted(attended_tag_counts, key=attended_tag_counts.get, reverse=True)
 
     candidate_lines = "\n".join(
         f'- questId "{c["id"]}": "{c.get("title")}" ({c.get("description")}) — '
@@ -2693,17 +2759,19 @@ def _generate_quest_recommendations(db, uid: str) -> None:
     )
     prompt = (
         "Rank the following volunteer quests for this specific person, most relevant first, based "
-        "on their profile below. Weigh their stated interests most heavily, then their experience "
-        "level, motivation, group preference, and leadership goal, and how well each quest's own "
-        "tags/description align with those.\n\n"
-        f"Interests: {user.get('interests') or []}\n"
+        "on their profile below. Weigh the tags from quests they've actually completed before most "
+        "heavily — that's real behavior, not a stated preference. Their onboarding interests are a "
+        "fallback for when they have little or no completed-quest history yet, not a primary signal. "
+        "After that, weigh their experience level, motivation, group preference, and leadership goal, "
+        "and how well each quest's own tags/description align with all of the above.\n\n"
+        f"Tags from quests they've completed before, most-attended first: {attended_tags or 'none yet'}\n"
+        f"Interests stated at onboarding (fallback only): {user.get('interests') or []}\n"
         f"Lives near: {user.get('location') or 'unspecified'}\n"
         f"Experience level: {user.get('experienceLevel') or 'unspecified'}\n"
         f"Motivation: {user.get('motivation') or 'unspecified'}\n"
         f"Group preference: {user.get('groupPreference') or 'unspecified'}\n"
         f"Leadership goal: {user.get('leaderGoal') or 'unspecified'}\n"
-        f"Accessibility needs: {user.get('accommodationNeeds') or []}\n"
-        f"Tags from quests they've completed before: {sorted(attended_tags) or 'none yet'}\n\n"
+        f"Accessibility needs: {user.get('accommodationNeeds') or []}\n\n"
         f"Quests to rank:\n{candidate_lines}\n\n"
         "Return every questId listed above exactly once, ordered most-to-least relevant, each with "
         "a brief (one sentence) reason."
@@ -3190,8 +3258,8 @@ def submit_review(req: https_fn.CallableRequest) -> dict:
 
 # Callable from the quest list — lets a member see their own review for
 # this specific occurrence (e.g. after navigating away and back), same
-# self-only shape as update_interests. No targetUid, so there's nothing to
-# escalate. Scoped to questId, not the whole series — a member who's
+# self-only shape as update_accommodation_needs. No targetUid, so there's
+# nothing to escalate. Scoped to questId, not the whole series — a member who's
 # reviewed one date but not another should still see the submission form
 # for the un-reviewed one.
 @https_fn.on_call()
@@ -3478,36 +3546,17 @@ def remove_organization_photo(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
-# Callable from Settings — lets an already-onboarded "user" change their
-# interests after the fact (onboarding only ever sets them once).
-@https_fn.on_call()
-def update_interests(req: https_fn.CallableRequest) -> dict:
-    _require_role(req, "user")
-
-    interests = req.data.get("interests")
-    if not isinstance(interests, list) or not interests:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "interests must be a non-empty list.",
-        )
-
-    db = firestore.client()
-    db.collection("users").document(req.auth.uid).update({
-        "interests": interests,
-        "updatedAt": firestore.SERVER_TIMESTAMP,
-    })
-    _refresh_quest_recommendations(db, req.auth.uid)
-    return {"success": True}
-
-
 # Callable from Profile — lets an already-onboarded "user" change their
 # accommodation needs and/or location after the fact (onboarding only ever
-# sets them once). Unlike update_interests, an empty accommodationNeeds list
-# is valid (it means "no needs anymore"), and location/placeId/lat/lng are
-# only touched when actually present in the request — see
-# update_organization_profile above for the same "present key = change it"
-# shape. Both feed _has_enough_accessible_org_quests, so keeping them
-# current matters for the side-quest-limit relaxation, not just display.
+# sets them once). An empty accommodationNeeds list is valid (it means "no
+# needs anymore"), and location/placeId/lat/lng are only touched when
+# actually present in the request — see update_organization_profile above
+# for the same "present key = change it" shape. Both feed
+# _has_enough_accessible_org_quests, so keeping them current matters for the
+# side-quest-limit relaxation, not just display. Interests has no equivalent
+# callable of its own anymore — see the module note above
+# _generate_quest_recommendations for why recommendations no longer change
+# in reaction to a settings edit at all.
 @https_fn.on_call()
 def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")

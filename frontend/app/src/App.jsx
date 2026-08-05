@@ -89,6 +89,7 @@ function PublicHome({ role }) {
           interests={profile?.interests || []}
           name={profile?.name}
           recommendedQuestOrder={profile?.recommendedQuestOrder}
+          attendedTagCounts={profile?.attendedTagCounts}
         />
       )}
     </PageMotion>
@@ -119,6 +120,7 @@ function QuestsPage() {
         interests={profile.interests || []}
         name={profile.name}
         recommendedQuestOrder={profile.recommendedQuestOrder}
+        attendedTagCounts={profile.attendedTagCounts}
       />
     </PageMotion>
   );

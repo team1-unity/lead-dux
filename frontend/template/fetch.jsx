@@ -479,14 +479,6 @@ export async function callRemoveOrganizationPhoto(storagePath) {
   return result.data;
 }
 
-// user: changes their interests after onboarding (onboarding only sets
-// them once).
-export async function callUpdateInterests({ interests }) {
-  const fn = httpsCallable(functions, 'update_interests');
-  const result = await fn({ interests });
-  return result.data;
-}
-
 // user: changes their accommodation needs and/or location after onboarding.
 // Only send the fields actually being changed — omitted keys are left
 // untouched server-side (location/placeId/lat/lng travel together or not
