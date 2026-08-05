@@ -1105,6 +1105,12 @@ nav {
     max-width: 260px;
   }
   .auth-card-form {
+    /* Own background, not the --paper-card inherited from .auth-card —
+       borderless inputs rely on --paper-card fill to read against the
+       page (--paper) behind them; without this override this panel WAS
+       --paper-card too, so its inputs were the exact same color as the
+       panel they sat on and became invisible. */
+    background: var(--paper);
     flex: 1;
     padding: 48px;
     display: flex;
