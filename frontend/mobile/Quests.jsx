@@ -1040,12 +1040,24 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
 };
 
-// Client-side relevance sort: count how many of a quest's tags overlap with
-// the user's own interests, sort descending. Fine at this data scale (a
-// handful of seeded quests) — a real recommendation engine or a
-// server-side scored query would replace this if the quest list grows.
-function relevanceScore(quest, interests) {
-  return (quest.tags || []).filter((tag) => interests.includes(tag)).length;
+// Client-side relevance sort — the free, no-AI counterpart to the server's
+// own attendedTagCounts-driven ranking (see functions/main.py's
+// _generate_quest_recommendations). Used for every side quest (never AI-
+// ranked at all) and for any org quest an AI refresh hasn't covered yet
+// (created since the last one, or before the account has attended enough
+// quests to trigger a first refresh) — so it's worth keeping in sync with
+// what the AI actually weighs: attendedTagCounts (real behavior) once
+// there is any, onboarding interests only as the same cold-start fallback
+// the AI prompt itself falls back to. Sums each matching tag's count
+// rather than a plain overlap boolean, so a tag from five attended quests
+// outweighs one from a single quest, same "most-attended first" weighting
+// _generate_quest_recommendations gives Gemini.
+function relevanceScore(quest, attendedTagCounts, interests) {
+  const tags = quest.tags || [];
+  if (attendedTagCounts && Object.keys(attendedTagCounts).length > 0) {
+    return tags.reduce((sum, tag) => sum + (attendedTagCounts[tag] || 0), 0);
+  }
+  return tags.filter((tag) => interests.includes(tag)).length;
 }
 
 // Side quests are gated two ways, independent of each other: a tier the
@@ -1269,7 +1281,7 @@ function MobileFilterSheet({ onClose, children }) {
   );
 }
 
-export function Quests({ interests, name, recommendedQuestOrder }) {
+export function Quests({ interests, name, recommendedQuestOrder, attendedTagCounts }) {
   const { user, role } = useAuth();
   const navigate = useNavigate();
   // Read once, as the initial state below — a one-time entry point (see
@@ -1390,7 +1402,10 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
               return rankA - rankB;
             }
           }
-          return relevanceScore(b.primary, interests) - relevanceScore(a.primary, interests);
+          return (
+            relevanceScore(b.primary, attendedTagCounts, interests) -
+            relevanceScore(a.primary, attendedTagCounts, interests)
+          );
         });
         setSeriesList(grouped);
       })
@@ -1399,7 +1414,7 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
       });
   }
 
-  useEffect(load, [interests, recommendedQuestOrder]);
+  useEffect(load, [interests, attendedTagCounts, recommendedQuestOrder]);
 
   // Only "user" accounts RSVP at all, so this is the only role that needs
   // to know which side quests are locked/at-limit. Reloaded after every
