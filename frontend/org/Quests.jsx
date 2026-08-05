@@ -135,6 +135,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         quests={[]}
         editingQuest={selected}
         canMakeRecurring={!isSeries}
+        seriesCoverPhotos={series.coverPhotos}
         onCreated={() => {
           setEditing(false);
           onChanged();

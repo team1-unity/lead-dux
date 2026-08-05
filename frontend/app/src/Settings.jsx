@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callDeleteAccount, callUpdateInterests, callUpdateAccommodationNeeds } from '@shared/fetch.jsx';
+import { callDeleteAccount, callUpdateAccommodationNeeds } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { TopBar } from '@shared/TopBar.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
@@ -13,7 +13,6 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
-import { INTEREST_OPTIONS } from '@shared/interests.js';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import { getStoredTheme, applyTheme } from '@shared/theme.js';
 
@@ -52,86 +51,13 @@ export function ThemePicker() {
   );
 }
 
-// Lets a "user" change the interests they picked during onboarding —
-// onboarding only ever sets them once, this is the only way back in.
-// Exported so desktop Profile.jsx can render it inline (see
-// .profile-settings-list there); on mobile it's still only reachable via
-// the Settings page, since it's a preference to tweak, not part of "who I
-// am."
-export function InterestsEditor() {
-  const { user } = useAuth();
-  const [interests, setInterests] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    getDoc(doc(db, 'users', user.uid)).then((snap) => {
-      setInterests(snap.exists() ? snap.data().interests || [] : []);
-    });
-  }, [user]);
-
-  function toggle(interest) {
-    setSaved(false);
-    setInterests((prev) =>
-      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest]
-    );
-  }
-
-  async function save() {
-    setError('');
-    if (interests.length === 0) {
-      setError('Pick at least one interest.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await callUpdateInterests({ interests });
-      setSaved(true);
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (interests === null) return <LoadingSpinner label="Loading interests…" />;
-
-  return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <h2 style={{ marginBottom: 0 }}>Interests</h2>
-      <p style={{ margin: 0 }}>These decide which quests show up first for you.</p>
-      <div className="flex flex-wrap gap-sm">
-        {INTEREST_OPTIONS.map((interest) => (
-          <TagStamp
-            key={interest}
-            tone={interest}
-            selectable
-            selected={interests.includes(interest)}
-            onClick={() => toggle(interest)}
-          >
-            {interest}
-          </TagStamp>
-        ))}
-      </div>
-      {error && <p className="box-danger">{error}</p>}
-      <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
-        {submitting ? 'Saving…' : saved ? 'Saved!' : 'Save interests'}
-      </StampButton>
-    </section>
-  );
-}
-
 // Lets a "user" change the accessibility needs and/or location they gave
 // during onboarding — onboarding only ever sets these once, and needs (or
 // where someone lives) can change afterward. Location doubles as the input
 // to the accommodation-based side-quest-limit relaxation check (see
 // rsvp_to_quest), so re-picking it here keeps that check current too, not
 // just the display. Re-picking a place is optional — location fields are
-// only sent to the server when the user actually changes them. Exported
-// for the same reason Interests is — desktop Profile.jsx renders it
-// inline; mobile only reaches it via Settings.
+// only sent to the server when the user actually changes them.
 export function AccommodationNeedsEditor() {
   const { user } = useAuth();
   const [needs, setNeeds] = useState(null);
@@ -333,15 +259,15 @@ export function DangerZone() {
   );
 }
 
-// App preferences, a "user" role's interests/accessibility (see
-// InterestsEditor/AccommodationNeedsEditor above — those used to live on
-// Profile, but they're preferences to tweak, not identity), signing out
-// (for every role except "user" — see LogoutSection's own comment), and
-// the one destructive account action. Identity and organization status
-// still live on Profile instead (see Profile.jsx). Not wrapped in narrow-
-// content: at desktop width each section spans the full dashboard-style
-// width rather than floating a mobile-width form in the middle of a wide
-// page.
+// App preferences — a "user" role's accessibility needs (see
+// AccommodationNeedsEditor above; interests has no editor here anymore,
+// see functions/main.py's module note above _generate_quest_recommendations
+// for why), signing out (for every role except "user" — see LogoutSection's
+// own comment), and the one destructive account action. Identity and
+// organization status still live on Profile instead (see Profile.jsx). Not
+// wrapped in narrow-content: at desktop width each section spans the full
+// dashboard-style width rather than floating a mobile-width form in the
+// middle of a wide page.
 export function Settings() {
   const { user, role, loading } = useAuth();
 
@@ -361,7 +287,6 @@ export function Settings() {
       <TopBar title="Settings" />
       <div className="settings-grid">
         <ThemePicker />
-        {role === 'user' && <InterestsEditor />}
         {role === 'user' && <AccommodationNeedsEditor />}
         {role !== 'user' && <LogoutSection />}
         <DangerZone />

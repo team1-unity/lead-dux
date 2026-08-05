@@ -182,6 +182,7 @@ class TestCheckInToEvent:
 
     def test_default_quest_awards_no_points(self, fake_firestore, make_request, call):
         token = self._seeded_quest_with_qr(fake_firestore, make_request, call, orgId=None, isDefault=True)
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
 
         result = call(main.check_in_to_event, make_request(
             data={"questId": "quest-1", "token": token}, uid="user-1", role="user",

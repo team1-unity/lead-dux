@@ -15,7 +15,13 @@ import {
   callRequestQuestFeedback,
 } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
-import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
+import {
+  groupBySeries,
+  attachSeriesRatings,
+  attachOrgLogos,
+  isUpcoming,
+  toDate,
+} from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
@@ -1037,11 +1043,19 @@ function QuestRow({ series, index, isDesktop, isActive, gate, onSelect }) {
               className='quest-thumb'
               aria-label={`View ${primary.orgName || 'organization'}'s profile`}
             >
-              <OrgAvatar name={primary.orgName} seed={primary.orgId} />
+              <OrgAvatar
+                name={primary.orgName}
+                seed={primary.orgId}
+                logoUrl={series.coverPhotos?.[0] || series.orgLogoUrl}
+              />
             </Link>
           ) : (
             <span className='quest-thumb' aria-hidden='true'>
-              <OrgAvatar name={primary.orgName} seed={series.seriesId} />
+              <OrgAvatar
+                name={primary.orgName}
+                seed={series.seriesId}
+                logoUrl={series.coverPhotos?.[0] || series.orgLogoUrl}
+              />
             </span>
           )}
           <div className='quest-card-titles'>
@@ -1055,12 +1069,24 @@ function QuestRow({ series, index, isDesktop, isActive, gate, onSelect }) {
   );
 }
 
-// Client-side relevance sort: count how many of a quest's tags overlap with
-// the user's own interests, sort descending. Fine at this data scale (a
-// handful of seeded quests) — a real recommendation engine or a
-// server-side scored query would replace this if the quest list grows.
-function relevanceScore(quest, interests) {
-  return (quest.tags || []).filter((tag) => interests.includes(tag)).length;
+// Client-side relevance sort — the free, no-AI counterpart to the server's
+// own attendedTagCounts-driven ranking (see functions/main.py's
+// _generate_quest_recommendations). Used for every side quest (never AI-
+// ranked at all) and for any org quest an AI refresh hasn't covered yet
+// (created since the last one, or before the account has attended enough
+// quests to trigger a first refresh) — so it's worth keeping in sync with
+// what the AI actually weighs: attendedTagCounts (real behavior) once
+// there is any, onboarding interests only as the same cold-start fallback
+// the AI prompt itself falls back to. Sums each matching tag's count
+// rather than a plain overlap boolean, so a tag from five attended quests
+// outweighs one from a single quest, same "most-attended first" weighting
+// _generate_quest_recommendations gives Gemini.
+function relevanceScore(quest, attendedTagCounts, interests) {
+  const tags = quest.tags || [];
+  if (attendedTagCounts && Object.keys(attendedTagCounts).length > 0) {
+    return tags.reduce((sum, tag) => sum + (attendedTagCounts[tag] || 0), 0);
+  }
+  return tags.filter((tag) => interests.includes(tag)).length;
 }
 
 // Side quests are gated two ways, independent of each other: a tier the
@@ -1218,7 +1244,7 @@ function FilterPanelContent({
   );
 }
 
-export function Quests({ interests, name, recommendedQuestOrder }) {
+export function Quests({ interests, name, recommendedQuestOrder, attendedTagCounts }) {
   const { user, role } = useAuth();
   const navigate = useNavigate();
   // Read once, as the initial state below — a one-time entry point (see
@@ -1311,13 +1337,21 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
 
   function load() {
     setLoadError(null);
-    Promise.all([getDocs(collection(db, 'quests')), getDocs(collection(db, 'questSeries'))])
-      .then(([questsSnap, seriesSnap]) => {
+    Promise.all([
+      getDocs(collection(db, 'quests')),
+      getDocs(collection(db, 'questSeries')),
+      getDocs(collection(db, 'organizations')),
+    ])
+      .then(([questsSnap, seriesSnap, orgsSnap]) => {
         const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setAllQuests(all);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         setSeriesRatingsById(seriesDocsById);
-        const grouped = attachSeriesRatings(groupBySeries(all.filter(isUpcoming)), seriesDocsById);
+        const logoByOrgId = new Map(orgsSnap.docs.map((d) => [d.id, d.data().logoUrl]));
+        const grouped = attachOrgLogos(
+          attachSeriesRatings(groupBySeries(all.filter(isUpcoming)), seriesDocsById),
+          logoByOrgId,
+        );
         grouped.sort((a, b) => {
           // Organization quests only — AI ranking is generated server-side
           // from interests/experience/volunteer history, see
@@ -1334,7 +1368,10 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
               return rankA - rankB;
             }
           }
-          return relevanceScore(b.primary, interests) - relevanceScore(a.primary, interests);
+          return (
+            relevanceScore(b.primary, attendedTagCounts, interests) -
+            relevanceScore(a.primary, attendedTagCounts, interests)
+          );
         });
         setSeriesList(grouped);
       })
@@ -1343,7 +1380,7 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
       });
   }
 
-  useEffect(load, [interests, recommendedQuestOrder]);
+  useEffect(load, [interests, attendedTagCounts, recommendedQuestOrder]);
 
   // Only "user" accounts RSVP at all, so this is the only role that needs
   // to know which side quests are locked/at-limit. Reloaded after every

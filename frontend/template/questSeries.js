@@ -48,13 +48,23 @@ export function groupBySeries(quests) {
   });
 }
 
-// Merges questSeries/{seriesId} aggregate docs (avgRating/reviewCount —
-// see submit_review in functions/main.py) onto each series group. Series
-// with no reviews yet have no questSeries doc at all, hence the fallbacks.
+// Merges questSeries/{seriesId} aggregate docs (avgRating/reviewCount — see
+// submit_review in functions/main.py; coverPhotos — see
+// add_quest_series_cover_photo) onto each series group. Series with neither
+// a review nor a cover photo yet have no questSeries doc at all, hence the
+// fallbacks. coverPhotos can hold any number of photos (an org adds as many
+// as it wants) — callers that just need one thumbnail (list cards) read
+// coverPhotos[0], falling back to the org's own logo the same way a single
+// cover photo already did.
 export function attachSeriesRatings(groups, seriesDocsById) {
   return groups.map((group) => {
     const agg = seriesDocsById.get(group.seriesId);
-    return { ...group, avgRating: agg?.avgRating ?? null, reviewCount: agg?.reviewCount ?? 0 };
+    return {
+      ...group,
+      avgRating: agg?.avgRating ?? null,
+      reviewCount: agg?.reviewCount ?? 0,
+      coverPhotos: agg?.coverPhotos ?? [],
+    };
   });
 }
 

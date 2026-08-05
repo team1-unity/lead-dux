@@ -159,6 +159,24 @@ export async function callUpdateQuest({
   return result.data;
 }
 
+// organization (own quests) or admin (any quest): adds one photo to a whole
+// quest series' cover-photo gallery (see add_quest_series_cover_photo) —
+// shared by every occurrence in the series, not just the one currently
+// being viewed/edited. No cap on how many an org can add.
+export async function callAddQuestSeriesCoverPhoto({ seriesId, coverPhotoUrl }) {
+  const fn = httpsCallable(functions, 'add_quest_series_cover_photo');
+  const result = await fn({ seriesId, coverPhotoUrl });
+  return result.data;
+}
+
+// organization (own quests) or admin (any quest): removes one photo from a
+// quest series' cover-photo gallery (see remove_quest_series_cover_photo).
+export async function callRemoveQuestSeriesCoverPhoto({ seriesId, coverPhotoUrl }) {
+  const fn = httpsCallable(functions, 'remove_quest_series_cover_photo');
+  const result = await fn({ seriesId, coverPhotoUrl });
+  return result.data;
+}
+
 // organization: creates a whole recurring series in one call — every
 // occurrence up to (and including) `until`, spaced by `frequency`
 // ('daily' | 'weekly' | 'monthly'). Returns { seriesId, questIds }. `tier`
@@ -319,10 +337,13 @@ export async function callSubmitQuestPhoto({ questId, storagePath, contentType, 
 }
 
 // organization (own quests) or admin (any quest): approves a pending photo
-// submission, awarding the submitter's +5 photo bonus.
-export async function callApprovePhotoSubmission({ questId, userId }) {
+// submission, awarding the submitter's +5 photo bonus. addToGallery is
+// org-quests-only (see approve_photo_submission's own note) — an org can opt
+// into adding this photo straight to its public gallery in the same step,
+// instead of a separate later call to callAddSubmissionToGallery.
+export async function callApprovePhotoSubmission({ questId, userId, addToGallery }) {
   const fn = httpsCallable(functions, 'approve_photo_submission');
-  const result = await fn({ questId, userId });
+  const result = await fn({ questId, userId, addToGallery });
   return result.data;
 }
 
@@ -331,6 +352,14 @@ export async function callApprovePhotoSubmission({ questId, userId }) {
 export async function callRejectPhotoSubmission({ questId, userId, reason }) {
   const fn = httpsCallable(functions, 'reject_photo_submission');
   const result = await fn({ questId, userId, reason });
+  return result.data;
+}
+
+// organization: promotes one of its own approved photo submissions into
+// its public "Community Photos" gallery (see add_organization_photo).
+export async function callAddSubmissionToGallery({ questId, userId }) {
+  const fn = httpsCallable(functions, 'add_submission_to_gallery');
+  const result = await fn({ questId, userId });
   return result.data;
 }
 
@@ -476,14 +505,6 @@ export async function callAddOrganizationPhoto(storagePath) {
 export async function callRemoveOrganizationPhoto(storagePath) {
   const fn = httpsCallable(functions, 'remove_organization_photo');
   const result = await fn({ storagePath });
-  return result.data;
-}
-
-// user: changes their interests after onboarding (onboarding only sets
-// them once).
-export async function callUpdateInterests({ interests }) {
-  const fn = httpsCallable(functions, 'update_interests');
-  const result = await fn({ interests });
   return result.data;
 }
 
