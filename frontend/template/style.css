@@ -1603,6 +1603,12 @@ nav {
     background-color 0.15s ease,
     scale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Previously had no hover feedback at all — the row's own background never
+   changed, only the (invisible) overlay button received :hover. Same
+   deepen-toward-line recipe used for input hover elsewhere. */
+.quest-content-col:hover {
+  background: color-mix(in srgb, var(--paper-card) 92%, var(--line) 8%);
+}
 /* The tap target for "open this quest" is .quest-card-overlay — a fully
    transparent, absolutely-positioned <button> stacked on top of this card
    (see the comment on .quest-card-overlay below) — so the universal
@@ -1790,9 +1796,14 @@ button.quest-card-head:hover:not(:disabled) {
   .quest-chevron {
     display: none;
   }
+  /* border-color here used to be dead — .ink-card's border is none, so it
+     never rendered. background is the one real cue, and it's a subtle one
+     (see the comment in :root's tag-rack section for why this palette can't
+     push much past ~1.7:1 without stopping being "accent-soft") — pushed as
+     far as it goes here since :hover above now also gives every row real
+     feedback either way. */
   .quest-content-col[data-active='true'] {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    background: color-mix(in srgb, var(--accent-soft) 84%, var(--line) 16%);
   }
 }
 
