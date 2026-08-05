@@ -271,6 +271,66 @@ class TestCreateRecurringQuest:
         assert exc_info.value.code == https_fn.FunctionsErrorCode.PERMISSION_DENIED
 
 
+class TestUpdateQuest:
+    # Regression test for a real bug: seed_quest's (and seed_demo_data.py's)
+    # eventDate carries real sub-minute precision (datetime.now() at
+    # whatever moment the doc was created), but the edit form can only ever
+    # round-trip a date down to whole-minute precision (see
+    # fullWallClockPartsInZone in naturalDate.js, which formats year/month/
+    # day/hour/minute — no seconds). Comparing raw datetimes meant editing
+    # *anything else* on a quest (title here) silently re-sent that same
+    # minute with its seconds zeroed out, which read as a genuine
+    # reschedule and wiped every existing RSVP with zero warning — see
+    # update_quest's own _truncate_to_minute note in main.py.
+    def test_editing_an_unrelated_field_does_not_clear_rsvps_over_sub_minute_precision(
+        self, fake_firestore, make_request, call,
+    ):
+        seed_quest(
+            fake_firestore, "quest-1", orgId="org-1",
+            eventDate=dt.datetime(2026, 7, 20, 14, 0, 37, 123456, tzinfo=dt.timezone.utc),
+            rsvpd=["user-1"],
+        )
+
+        result = call(main.update_quest, make_request(
+            data={
+                "questId": "quest-1",
+                "title": "Trail Cleanup (updated)",
+                "eventDate": "2026-07-20T14:00",
+                "timezone": "UTC",
+            },
+            uid="org-1", role="organization",
+        ))
+
+        assert result == {"success": True}
+        quest = fake_firestore.client().collection("quests").document("quest-1").get().to_dict()
+        assert quest["title"] == "Trail Cleanup (updated)"
+        assert quest["rsvpd"] == ["user-1"]
+        notifications = list(
+            fake_firestore.client().collection("users").document("user-1").collection("notifications").stream(),
+        )
+        assert notifications == []
+
+    def test_a_genuine_reschedule_still_clears_rsvps_and_notifies(self, fake_firestore, make_request, call):
+        seed_quest(
+            fake_firestore, "quest-1", orgId="org-1",
+            eventDate=dt.datetime(2026, 7, 20, 14, 0, 37, 123456, tzinfo=dt.timezone.utc),
+            rsvpd=["user-1"],
+        )
+
+        call(main.update_quest, make_request(
+            data={"questId": "quest-1", "eventDate": "2026-07-21T09:00", "timezone": "UTC"},
+            uid="org-1", role="organization",
+        ))
+
+        quest = fake_firestore.client().collection("quests").document("quest-1").get().to_dict()
+        assert quest["rsvpd"] == []
+        notifications = list(
+            fake_firestore.client().collection("users").document("user-1").collection("notifications").stream(),
+        )
+        assert len(notifications) == 1
+        assert notifications[0].to_dict()["kind"] == "quest_rescheduled"
+
+
 class TestMakeQuestRecurring:
     def test_converts_standalone_quest_and_generates_remaining_dates(self, fake_firestore, make_request, call):
         make_org(fake_firestore, "org-1")

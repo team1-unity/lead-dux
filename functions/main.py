@@ -328,6 +328,27 @@ def _parse_event_datetime(value, field_name: str, tz: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+# update_quest's own "did eventDate actually change" check needs this, not
+# raw equality — the org's edit form can only ever express/round-trip a
+# date down to whole-minute precision (see naturalDate.js's
+# fullWallClockPartsInZone, which formats year/month/day/hour/minute only,
+# no seconds), but a quest's *stored* eventDate can carry real sub-minute
+# precision (e.g. seed_demo_data.py's NOW = datetime.now(timezone.utc) —
+# whatever real seconds/microseconds happened to be on the clock when the
+# script ran). Comparing raw datetimes meant simply opening a seeded
+# quest's edit form and saving *any* unrelated field (description,
+# capacity, tags — nothing date-related) silently re-sent that same
+# minute with its seconds zeroed out, which read as a genuine reschedule
+# and wiped every existing RSVP with no warning — the frontend's own
+# "this will clear RSVPs" confirmation never fired either, since *it*
+# compares the same seconds-less display string before/after and saw no
+# change. Truncating both sides to the minute here is what the frontend
+# can actually promise to detect, so that's the only precision this
+# comparison should ever care about.
+def _truncate_to_minute(value):
+    return value.replace(second=0, microsecond=0) if value else value
+
+
 def _validate_timezone(value) -> str:
     if not isinstance(value, str) or not value:
         raise https_fn.HttpsError(
@@ -1446,7 +1467,7 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
             else None
         )
         old_event_date = quest.get("eventDate")
-        if new_event_date != old_event_date:
+        if _truncate_to_minute(new_event_date) != _truncate_to_minute(old_event_date):
             update["eventDate"] = new_event_date
             # Side quests can go from having a date to having none (or vice
             # versa) freely — create_default_quest already treats a missing
