@@ -3,7 +3,8 @@ import { useQuestSeriesActions } from './useQuestSeriesActions.js';
 import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
-import { IconShare, IconCheck } from './icons.jsx';
+import { LightboxBackdrop } from './LightboxBackdrop.jsx';
+import { IconShare, IconCheck, IconX } from './icons.jsx';
 
 export function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
@@ -38,41 +39,84 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
 // call needed to build it: every quest doc already carries its own
 // seriesId, so there's nothing to fetch that isn't already on hand here.
 //
-// Copies straight to the clipboard on click rather than opening a panel
-// with a copy button inside it — the click itself is the user gesture the
-// Clipboard API needs, so there's nothing a separate "Copy" button would
-// add except an extra step. `iconOnly` swaps the label for a small icon
-// button (used inline in org/Quests.jsx's icon trio) that flips to a
-// checkmark for the same 2s instead of changing text.
-export function ShareButton({ seriesId, iconOnly = false, disabled = false }) {
+// navigator.share() (the OS's own share sheet — Messages/Mail/whatever's
+// installed) when the platform supports it, same user gesture requirement
+// as the old direct-to-clipboard copy. Falls back to a modal with the
+// real link plus its own dedicated Copy button on desktop browsers that
+// don't implement the Web Share API at all. `iconOnly` swaps the label
+// for a small icon button (used inline in org/Quests.jsx's icon trio).
+// `questTitle` is passed straight through to navigator.share()'s own title
+// field — optional, since not every call site always has it on hand.
+export function ShareButton({ seriesId, questTitle, iconOnly = false, disabled = false }) {
+  const [modalOpen, setModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/share/${seriesId}`;
+
+  async function share() {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: questTitle, url });
+      } catch {
+        // AbortError from the user dismissing the share sheet — not a real
+        // failure, nothing to show for it.
+      }
+      return;
+    }
+    setModalOpen(true);
+  }
 
   async function copy() {
-    const url = `${window.location.origin}/share/${seriesId}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (iconOnly) {
-    return (
-      <button
-        type="button"
-        className="quest-icon-btn"
-        onClick={copy}
-        disabled={disabled}
-        aria-label={copied ? 'Link copied' : 'Copy share link'}
-        title={copied ? 'Copied!' : 'Share'}
-      >
-        {copied ? <IconCheck /> : <IconShare />}
-      </button>
-    );
-  }
-
   return (
-    <StampButton type="button" onClick={copy} disabled={disabled}>
-      {copied ? 'Copied!' : 'Share quest'}
-    </StampButton>
+    <>
+      {iconOnly ? (
+        <button
+          type="button"
+          className="quest-icon-btn"
+          onClick={share}
+          disabled={disabled}
+          aria-label="Share"
+          title="Share"
+        >
+          <IconShare />
+        </button>
+      ) : (
+        <StampButton type="button" onClick={share} disabled={disabled}>
+          Share quest
+        </StampButton>
+      )}
+      {modalOpen && (
+        <LightboxBackdrop onClose={() => setModalOpen(false)} label="Share quest">
+          <div className="detail-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="ink-card flex flex-col gap-md">
+              <h3 style={{ margin: 0 }}>Share {questTitle || 'this quest'}</h3>
+              <p style={{ wordBreak: 'break-all' }}>{url}</p>
+              <StampButton type="button" variant="primary" onClick={copy}>
+                {copied ? (
+                  <>
+                    <IconCheck width={16} height={16} /> Copied!
+                  </>
+                ) : (
+                  'Copy link'
+                )}
+              </StampButton>
+            </div>
+            <button
+              type="button"
+              className="photo-lightbox-close"
+              onClick={() => setModalOpen(false)}
+              aria-label="Close"
+            >
+              <IconX width={18} height={18} />
+            </button>
+          </div>
+        </LightboxBackdrop>
+      )}
+    </>
   );
 }
 
@@ -147,7 +191,9 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
           </StampButton>
         )}
-        {primary.orgId && <ShareButton seriesId={primary.seriesId} disabled={a.busy} />}
+        {primary.orgId && (
+          <ShareButton seriesId={primary.seriesId} questTitle={primary.title} disabled={a.busy} />
+        )}
         {/* Every quest created from now on already has a qrToken minted at
             creation time (see _quest_doc_fields) — "Generate" only ever
             shows for quests that predate that change. */}

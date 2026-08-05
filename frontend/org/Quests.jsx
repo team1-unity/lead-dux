@@ -12,6 +12,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
+import { VanishSearchInput } from '@shared/VanishSearchInput.jsx';
 import { Collapse } from '@shared/Collapse.jsx';
 import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
@@ -152,7 +153,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           text is actually gated on showTitle. */}
       <div style={{ position: 'relative', minHeight: 36 }}>
         <div className='quest-detail-icon-actions'>
-          <ShareButton seriesId={primary.seriesId} iconOnly disabled={a.busy} />
+          <ShareButton seriesId={primary.seriesId} questTitle={primary.title} iconOnly disabled={a.busy} />
           <button
             type='button'
             className='quest-icon-btn'
@@ -246,6 +247,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
             </label>
             <select
               id='org-quest-date-select'
+              className='quest-date-select'
               style={{ flex: 'none', maxWidth: 200 }}
               value={selectedId}
               onChange={(e) => a.switchDate(e.target.value)}
@@ -465,12 +467,18 @@ function compareSeriesForOrgList(a, b) {
   return toDate(bLast.eventDate) - toDate(aLast.eventDate);
 }
 
+// A handful of hints to rotate through — title first (the common case),
+// location second, so it's clear both fields are searchable even though
+// neither is spelled out in the placeholder text itself.
+const ORG_SEARCH_PLACEHOLDERS = ['Search your quests', 'Try a title', 'Try a location'];
+
 function OrgQuests({ creating, setCreating }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [quests, setQuests] = useState(null);
   const [seriesAggregates, setSeriesAggregates] = useState(new Map());
   const [openSeriesId, setOpenSeriesId] = useState(null);
+  const [search, setSearch] = useState('');
 
   async function load() {
     const [questsSnap, seriesSnap] = await Promise.all([
@@ -492,12 +500,25 @@ function OrgQuests({ creating, setCreating }) {
     [quests, seriesAggregates],
   );
 
+  // Title/location only — no tags, sort, or type picker here (unlike the
+  // volunteer-facing Explore Quests): an organization's own quest list is
+  // already just its own quests, so there's nothing to filter by category
+  // or ownership, only to find one specific quest by name or place.
+  const visibleSeriesList = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return seriesList;
+    return seriesList.filter((s) => {
+      const { title, location } = s.primary;
+      return [title, location].some((field) => (field || '').toLowerCase().includes(q));
+    });
+  }, [seriesList, search]);
+
   if (!quests) return <LoadingSpinner label='Loading your quests…' />;
 
   const activeSeriesId = isDesktop
-    ? (openSeriesId ?? seriesList[0]?.seriesId ?? null)
+    ? (openSeriesId ?? visibleSeriesList[0]?.seriesId ?? null)
     : openSeriesId;
-  const activeSeries = seriesList.find((s) => s.seriesId === activeSeriesId) || null;
+  const activeSeries = visibleSeriesList.find((s) => s.seriesId === activeSeriesId) || null;
 
   async function afterCreated() {
     setCreating(false);
@@ -529,11 +550,24 @@ function OrgQuests({ creating, setCreating }) {
           </AnimatePresence>
         )}
 
+        {seriesList.length > 0 && (
+          <div className='quest-search-row'>
+            <VanishSearchInput
+              value={search}
+              onChange={setSearch}
+              placeholders={ORG_SEARCH_PLACEHOLDERS}
+              ariaLabel='Search your quests'
+            />
+          </div>
+        )}
+
         {seriesList.length === 0 ? (
           <p>You haven't created any quests yet.</p>
+        ) : visibleSeriesList.length === 0 ? (
+          <p>Nothing matches that search.</p>
         ) : (
           <ul className='quest-list'>
-            {seriesList.map((series, index) => (
+            {visibleSeriesList.map((series, index) => (
               <QuestSeriesListItem
                 key={series.seriesId}
                 series={series}
@@ -594,7 +628,12 @@ export function Quests() {
         actions={
           // Open-only — once the form is open, closing it is exclusively the
           // form's own Cancel button's job, so this never flips to "Cancel".
-          <StampButton type='button' variant='primary' onClick={() => setCreating(true)}>
+          <StampButton
+            type='button'
+            variant='primary'
+            onClick={() => setCreating(true)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
             <IconPlus /> Create Quest
           </StampButton>
         }

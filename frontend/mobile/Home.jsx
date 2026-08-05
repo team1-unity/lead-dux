@@ -114,19 +114,19 @@ export function Home() {
         <ProgressCard />
       </div>
 
-      <div className='home-actions flex flex-col gap-md'>
-        <Link to='/check-in'>
+      <div className='home-actions'>
+        <Link to='/check-in' style={{ flex: 1 }}>
           <StampButton type='button' variant='primary' style={{ width: '100%' }}>
             Check in
           </StampButton>
         </Link>
-        <Link to='/quests?view=mine'>
+        <Link to='/quests?view=mine' style={{ flex: 1 }}>
           <StampButton type='button' style={{ width: '100%' }}>
             My quests
           </StampButton>
         </Link>
         {lastAttended && (
-          <Link to='/quests?view=past'>
+          <Link to='/quests?view=past' style={{ flex: 1 }}>
             <StampButton type='button' style={{ width: '100%' }}>
               Last quest
             </StampButton>

@@ -391,14 +391,10 @@ export function Profile() {
         <UserAvatar photoURL={photoURL} />
         {nameAndBadges}
         <p className='profile-meta'>{user.email}</p>
-        <StampButton type='button' style={{ width: '100%' }} onClick={handleLogout}>
+        <StampButton type='button' onClick={handleLogout}>
           Log out
         </StampButton>
-        <StampButton
-          type='button'
-          style={{ width: '100%' }}
-          onClick={() => setEditingProfile(true)}
-        >
+        <StampButton type='button' onClick={() => setEditingProfile(true)}>
           Edit Profile
         </StampButton>
       </section>

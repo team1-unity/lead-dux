@@ -322,34 +322,34 @@
 
     --tag-environment: #23422f;
     --tag-environment-ink: #a9e0bc;
-    --tag-community: #4a3d10;
+    --tag-community: #3c3c3c;
     --tag-community-ink: #f3d873;
     --tag-youth: #223651;
     --tag-youth-ink: #aecbf2;
     --tag-education: #1f3c46;
     --tag-education-ink: #a7dcee;
-    --tag-outdoors: #4a3319;
+    --tag-outdoors: #373737;
     --tag-outdoors-ink: #f0c290;
     --tag-technology: #1e3c38;
     --tag-technology-ink: #9fe0d6;
-    --tag-fitness: #452420;
+    --tag-fitness: #2d2d2d;
     --tag-fitness-ink: #f2b3a7;
-    --tag-food-security: #3c3a14;
+    --tag-food-security: #363636;
     --tag-food-security-ink: #e3dd8e;
     --tag-arts: #362949;
     --tag-arts-ink: #dcc4f0;
     --tag-verified: #23422f;
     --tag-verified-ink: #a9e0bc;
-    --tag-rejected: #3a2420;
+    --tag-rejected: #2a2a2a;
     --tag-rejected-ink: #e08a78;
 
     --rank-iron: #3a4147;
     --rank-iron-ink: #cdd3d6;
-    --rank-bronze: #4a3319;
+    --rank-bronze: #373737;
     --rank-bronze-ink: #edc79c;
     --rank-silver: #3d4348;
     --rank-silver-ink: #d6dadd;
-    --rank-gold: #4a3d10;
+    --rank-gold: #3c3c3c;
     --rank-gold-ink: #f3d873;
     --rank-diamond: #1c3c48;
     --rank-diamond-ink: #a6dcef;
@@ -378,34 +378,34 @@
 
   --tag-environment: #23422f;
   --tag-environment-ink: #a9e0bc;
-  --tag-community: #4a3d10;
+  --tag-community: #3c3c3c;
   --tag-community-ink: #f3d873;
   --tag-youth: #223651;
   --tag-youth-ink: #aecbf2;
   --tag-education: #1f3c46;
   --tag-education-ink: #a7dcee;
-  --tag-outdoors: #4a3319;
+  --tag-outdoors: #373737;
   --tag-outdoors-ink: #f0c290;
   --tag-technology: #1e3c38;
   --tag-technology-ink: #9fe0d6;
-  --tag-fitness: #452420;
+  --tag-fitness: #2d2d2d;
   --tag-fitness-ink: #f2b3a7;
-  --tag-food-security: #3c3a14;
+  --tag-food-security: #363636;
   --tag-food-security-ink: #e3dd8e;
   --tag-arts: #362949;
   --tag-arts-ink: #dcc4f0;
   --tag-verified: #23422f;
   --tag-verified-ink: #a9e0bc;
-  --tag-rejected: #3a2420;
+  --tag-rejected: #2a2a2a;
   --tag-rejected-ink: #e08a78;
 
   --rank-iron: #3a4147;
   --rank-iron-ink: #cdd3d6;
-  --rank-bronze: #4a3319;
+  --rank-bronze: #373737;
   --rank-bronze-ink: #edc79c;
   --rank-silver: #3d4348;
   --rank-silver-ink: #d6dadd;
-  --rank-gold: #4a3d10;
+  --rank-gold: #3c3c3c;
   --rank-gold-ink: #f3d873;
   --rank-diamond: #1c3c48;
   --rank-diamond-ink: #a6dcef;
@@ -511,6 +511,7 @@ body {
 body {
   margin: 0;
   font-family: var(--font-body);
+  font-weight: 500;
   background: var(--paper);
   color: var(--line);
   line-height: 1.55;
@@ -551,7 +552,7 @@ h1,
 h2,
 h3 {
   font-family: var(--font-heading);
-  font-weight: 700;
+  font-weight: 750;
   letter-spacing: 0;
   margin: 0 0 16px;
   /* Balances line lengths on short headings so a wrapped title never
@@ -675,6 +676,14 @@ textarea {
   resize: vertical;
 }
 
+/* The date-occurrence picker (mobile/Quests.jsx, org/Quests.jsx) — sits
+   inline next to a calendar icon/AddToCalendar link rather than in its own
+   labeled field, so the generic input/select padding above just pushed its
+   text away from that icon instead of reading as one unit. */
+.quest-date-select {
+  padding: 0;
+}
+
 fieldset {
   border: 2px solid var(--border);
   border-radius: var(--radius);
@@ -755,14 +764,23 @@ button,
 .stamp-btn {
   font: inherit;
   font-family: var(--font-heading);
-  font-weight: 600;
+  font-weight: 700;
   padding: 12px 24px;
   border-radius: var(--radius-full);
   border: none;
   background: var(--paper-well);
   color: var(--line);
   text-decoration: none;
-  display: inline-block;
+  /* inline-block relied on the browser's own default text-align: center
+     for plain-text buttons — fine for those, but an <Icon /> + label
+     button has two inline children with no such default, so they sat
+     left-aligned inside any button wider than its own content instead of
+     centered as a unit. justify-content: center here covers both cases
+     the same way (a single text child included). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
@@ -1784,14 +1802,13 @@ button.quest-card-head:hover:not(:disabled) {
   .quest-chevron {
     display: none;
   }
-  /* border-color here used to be dead — .ink-card's border is none, so it
-     never rendered. background is the one real cue, and it's a subtle one
-     (see the comment in :root's tag-rack section for why this palette can't
-     push much past ~1.7:1 without stopping being "accent-soft") — pushed as
-     far as it goes here since :hover above now also gives every row real
-     feedback either way. */
+  /* Pastel green fill (reusing the tag rack's own --tag-environment pair,
+     not a new color) plus a matching thin border — a teammate's suggestion
+     over the earlier brown/accent-soft treatment, which read too close to
+     the unselected fill. */
   .quest-content-col[data-active='true'] {
-    background: color-mix(in srgb, var(--accent-soft) 84%, var(--line) 16%);
+    background: var(--tag-environment);
+    border: 1px solid var(--tag-environment-ink);
   }
 }
 
@@ -2193,9 +2210,13 @@ button.quest-card-head:hover:not(:disabled) {
   font-size: 0.88rem;
   color: var(--line-soft);
 }
+/* Icon picks up color, text stays muted — a small point of color on an
+   otherwise plain info row (date/location/capacity). TRIAL: pastel green
+   (reusing --tag-environment-ink, same as the selected-quest state) in
+   place of accent yellow — playing with extending that green further. */
 .quest-meta-row svg {
   flex: none;
-  color: var(--line-soft);
+  color: var(--tag-environment-ink);
 }
 
 /* .quest-meta-row doubling as a clickable link/button (location → map,
@@ -2218,13 +2239,8 @@ button.quest-card-head:hover:not(:disabled) {
   box-shadow: none;
   transform: none;
 }
-/* .quest-meta-row svg pins the icon to --line-soft even inside a
-   .quest-meta-link, so without this the icon wouldn't follow the text's
-   hover color — making it read as a separate, non-interactive decoration
-   instead of part of the same clickable link. */
-.quest-meta-link:hover:not(:disabled) svg {
-  color: var(--line);
-}
+/* The icon stays accent-colored on hover too (see .quest-meta-row svg
+   above) — only the text darkens to show the hover state. */
 
 .quest-description {
   color: var(--line);
@@ -2413,23 +2429,6 @@ a.org-home-stat-tile:hover {
   margin-bottom: 14px;
 }
 
-.tag-filter-row {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  gap: 8px;
-  padding-bottom: 4px;
-  margin-bottom: 20px;
-  max-width: 640px;
-  /* Still scrolls horizontally when tags overflow — just without a visible
-     scrollbar track cluttering a row of pills. */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.tag-filter-row::-webkit-scrollbar {
-  display: none;
-}
-
 /* Themed thin scrollbar for the few places content genuinely scrolls
    inside its own box (a quest list and its sticky detail pane beside it) —
    a bare OS scrollbar there is a real signal there's more to see, unlike
@@ -2468,49 +2467,6 @@ a.org-home-stat-tile:hover {
 .quest-detail-pane::-webkit-scrollbar-thumb:hover {
   background: var(--line-soft);
 }
-.tag-filter-row .tag-stamp,
-.tag-filter-row .stamp-btn {
-  flex: none;
-}
-
-/* ScrollableTagRow (EventsMap.jsx) — a scroll-by-one-tap arrow at whichever
-   edge still has more tags past it, shown/hidden per the row's own actual
-   scroll position rather than always both. */
-.tag-filter-row-wrap {
-  position: relative;
-}
-.tag-filter-row-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--paper-card);
-  border: 2px solid var(--border);
-  box-shadow: none;
-  color: var(--line);
-}
-.tag-filter-row-arrow-left {
-  left: -6px;
-}
-.tag-filter-row-arrow-right {
-  right: -6px;
-}
-/* The global button:hover/:active lift (transform: translateY(-1px/0), see
-   the base button rule) would otherwise clobber this button's own
-   translateY(-50%) centering, snapping it up/down on hover/press — pin the
-   transform back to just the centering offset so it stays still. */
-.tag-filter-row-arrow:hover:not(:disabled),
-.tag-filter-row-arrow:active:not(:disabled) {
-  transform: translateY(-50%);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-}
-
 /* ---------- quest filters (Explore Quests) ---------- */
 /* Replaces the old standalone Side Quest toggle + sort <select> + always-
    visible tag row with one Filters icon button opening a panel (desktop:
@@ -2530,11 +2486,16 @@ a.org-home-stat-tile:hover {
 .quest-filter-btn {
   width: 48px;
   height: 48px;
+  /* Without this, the base button rule's padding: 12px 24px (24px each
+     side) alone consumes the entire fixed 48px box-sizing: border-box
+     width, squeezing the icon inside to 0px wide — invisible regardless
+     of its color. */
+  padding: 0;
   flex: none;
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
   background: var(--paper-card);
-  color: var(--line-soft);
+  color: var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2543,9 +2504,11 @@ a.org-home-stat-tile:hover {
   color: var(--line);
   background: var(--paper-well);
 }
+/* Border-only ring for "filters active/panel open" — the icon itself stays
+   brown (matching the border) rather than switching to accent yellow,
+   which read poorly at this size/stroke-weight against the pale panel. */
 .quest-filter-btn[data-filters-active='true'],
 .quest-filter-btn[aria-expanded='true'] {
-  color: var(--accent);
   border-color: var(--accent);
 }
 
@@ -2627,11 +2590,32 @@ a.org-home-stat-tile:hover {
   margin-bottom: 0;
 }
 .quest-filter-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 8px;
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.92rem;
-  color: var(--accent);
+  color: var(--line-soft);
+}
+/* The label's own icon is the one spot of color in an otherwise muted
+   row — text stays --line-soft (this is a label, not something selected),
+   the icon alone picks up color so Type/Activity/Sort each get a quick
+   visual anchor without competing with the pills themselves. TRIAL:
+   pastel green (--tag-environment-ink), same experiment as .quest-meta-row
+   svg above, in place of brown. */
+.quest-filter-group-label svg {
+  flex: none;
+  color: var(--tag-environment-ink);
+}
+/* Between Type/Activity/Sort — a plain <hr>, not another CSS-only border,
+   so it's real structural content between groups rather than decoration
+   glued to whichever one happens to render first. */
+.quest-filter-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 22px;
 }
 /* Type/Activity/Sort — the label sits beside its pill row, not stacked
    above it, so each group reads as one line rather than a heading-plus-
@@ -3844,6 +3828,17 @@ button.data-row:active:not(:disabled) {
   right: 12px;
   margin-left: 0;
 }
+/* Log out/Edit Profile — this card's own fill (--paper-card, via .ink-card)
+   is the exact same value as the base button's own resting fill
+   (--paper-well), so without a border here the two buttons have no visible
+   edge against the card at all. Matched to a shared fixed width (rather
+   than each sizing to its own label, or stretching to the full card) since
+   "Log out" and "Edit Profile" are different lengths — comfortably fits
+   the longer label. */
+.profile-identity-card .stamp-btn {
+  width: 70%;
+  border: 1.5px solid var(--border);
+}
 .profile-identity-card .profile-name-badges {
   justify-content: center;
 }
@@ -4291,25 +4286,26 @@ button.data-row:active:not(:disabled) {
   background: var(--accent);
 }
 
-/* Vertically centers Home's whole content block in the space between
-   #root's own top/bottom padding (24px top, nav-height + 32px bottom — see
-   #root above) instead of it sitting flush at the top of the page. */
 .home-page {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  min-height: calc(100vh - var(--nav-height) - 56px);
 }
 /* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
    1180px cap (see #root above), the greeting/rank-card/CTA buttons were
    stretching to fill nearly the whole content column. Capped to 40vw and
    centered instead, matching the same 860px breakpoint used everywhere
-   else in this file for desktop-only treatments. */
+   else in this file for desktop-only treatments. Vertical centering
+   (in the space between #root's own top/bottom padding — 24px top,
+   nav-height + 32px bottom, see #root above) is desktop-only too now — on
+   mobile it was what pushed the rank card down the page rather than
+   letting content simply start at the top. */
 @media (min-width: 860px) {
   .home-page {
     max-width: 40vw;
     width: 100%;
     margin: 0 auto;
+    justify-content: center;
+    min-height: calc(100vh - var(--nav-height) - 56px);
   }
 }
 
@@ -4334,17 +4330,36 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
 }
 
+/* Trimmed on mobile now that .home-page no longer vertically centers this
+   whole block (see above) — the old 48px top padding was compensating for
+   that centering by pushing the greeting down from an already-centered
+   start; without it, that same value just reads as dead space above the
+   duck. Back to the fuller value on desktop, where .home-page's own
+   centering still applies. */
 .home-greeting {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   text-align: center;
-  padding: 48px 20px 32px;
+  padding: 20px 20px 24px;
   margin-bottom: 16px;
 }
 .home-greeting h1 {
   margin: 12px 0 0;
+}
+@media (min-width: 860px) {
+  .home-greeting {
+    padding: 48px 20px 32px;
+  }
+}
+
+/* A row, not a stack — works the same with 2 buttons (no Last Quest yet)
+   or 3 (once there's a past quest to revisit), each an equal share of the
+   width rather than sized to its own label. */
+.home-actions {
+  display: flex;
+  gap: 16px;
 }
 
 .rank-milestones {
@@ -4650,15 +4665,8 @@ button.data-row:active:not(:disabled) {
     flex-direction: column;
     gap: 10px;
   }
-  .events-map-mobile-overlays .search-field {
-    max-width: none;
+  .events-map-mobile-overlays .quest-search-row {
     width: 100%;
-  }
-  .events-map-mobile-overlays .tag-filter-row {
-    max-width: none;
-  }
-  .events-map-mobile-overlays .tag-stamp {
-    box-shadow: none;
   }
   /* MobileSheet.jsx — a fixed-height sliver always instantiated at this
      same height regardless of collapsed/expanded; MobileSheet's own
@@ -4809,8 +4817,7 @@ button.data-row:active:not(:disabled) {
     flex: none;
     margin-bottom: 12px;
   }
-  .events-map-search-row .search-field {
-    max-width: none;
+  .events-map-search-row .quest-search-row {
     width: 100%;
   }
   .events-map-list-pane {
@@ -4840,16 +4847,6 @@ button.data-row:active:not(:disabled) {
   }
   .events-map-overlays .events-map-location-banner {
     margin-bottom: 0;
-  }
-  .events-map-overlays .tag-filter-row {
-    max-width: none;
-    margin-bottom: 0;
-  }
-  /* Individual pills get their own shadow here (unlike every other
-     .tag-stamp use in the app) — grounding for a row that's floating
-     directly over the map, not sitting on a page's plain background. */
-  .events-map-overlays .tag-stamp {
-    box-shadow: none;
   }
 }
 

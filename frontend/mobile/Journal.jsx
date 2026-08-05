@@ -666,7 +666,7 @@ export function Journal() {
   const columnCount = useColumnCount();
   const { offsets: columnOffsets } = useParallaxColumnOffsets(
     columnCount,
-    reduce || columnCount === 1,
+    reduce || columnCount === 1 || (entries?.length ?? 0) <= 1,
   );
 
   useEffect(() => {

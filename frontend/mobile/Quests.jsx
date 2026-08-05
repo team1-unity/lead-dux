@@ -31,14 +31,23 @@ import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 import { VanishSearchInput } from '@shared/VanishSearchInput.jsx';
+import { parseSearch } from '@shared/searchTags.js';
+import {
+  FilterPill,
+  FilterButton,
+  DesktopFilterPopover,
+  MobileFilterSheet,
+  useFilterPanel,
+} from '@shared/FilterPanel.jsx';
 import {
   IconCalendar,
   IconUsers,
   IconCheck,
   IconAlert,
-  IconFilter,
   IconLock,
   IconX,
+  IconGrid,
+  IconList,
 } from '@shared/icons.jsx';
 
 // Mirrors TIER_BASE_POINTS in functions/main.py — only side/neighborhood
@@ -685,13 +694,15 @@ export function QuestDetailBody({
           <p className='quest-title' style={{ fontSize: '1.25rem', margin: 0 }}>
             {primary.title}
           </p>
-          {!primary.isDefault && <ShareButton seriesId={primary.seriesId} iconOnly />}
+          {!primary.isDefault && (
+            <ShareButton seriesId={primary.seriesId} questTitle={primary.title} iconOnly />
+          )}
         </div>
       ) : (
         !primary.isDefault && (
           <div style={{ position: 'relative', minHeight: 36 }}>
             <div className='quest-detail-icon-actions'>
-              <ShareButton seriesId={primary.seriesId} iconOnly />
+              <ShareButton seriesId={primary.seriesId} questTitle={primary.title} iconOnly />
             </div>
           </div>
         )
@@ -738,6 +749,7 @@ export function QuestDetailBody({
             </label>
             <select
               id='quest-date-select'
+              className='quest-date-select'
               style={{ flex: 'none', maxWidth: 200 }}
               value={selectedId}
               onChange={(e) => {
@@ -1098,46 +1110,6 @@ const SORT_OPTIONS = [
   { value: 'soonest', label: 'Soonest' },
 ];
 
-// Tags used to have their own picker in the filter panel — now they're
-// searched straight from the search bar instead (see VanishSearchInput),
-// as one fewer group to juggle. A #token (e.g. "#wellness volunteer")
-// pulls tag(s) out of the raw search text; whatever's left over is still
-// matched against title/orgName/location the same as before (see
-// visibleSeries below). Multiple #tokens OR together, same as the old
-// picker's multi-select behavior.
-function parseSearch(raw) {
-  const tags = [];
-  const text = raw
-    .replace(/#([a-z0-9-]+)/gi, (_match, tag) => {
-      tags.push(tag.toLowerCase());
-      return '';
-    })
-    .trim();
-  return { tags, text };
-}
-
-// One selected/unselected pill look, reused for TYPE/SORT & ACTIVITY
-// below — just StampButton's own existing primary-vs-default variant, so
-// "selected" is the same accent-filled look every other pill toggle in
-// the app already has (see ThemePicker's theme-option row), not a new
-// style invented just for this panel. `disabled` is only ever used for
-// Soonest while Past Attended is active (see the Sort & Activity group
-// below) — a real <button disabled>, not just a color/opacity change, so
-// it's actually unclickable, not merely styled to look that way.
-function FilterPill({ selected, disabled, onClick, children }) {
-  return (
-    <StampButton
-      type='button'
-      variant={selected ? 'primary' : 'default'}
-      aria-pressed={selected}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </StampButton>
-  );
-}
-
 // The actual filter controls, identical on both surfaces (desktop popover
 // and mobile sheet — see DesktopFilterPopover/MobileFilterSheet below);
 // only the surrounding chrome differs. Activity (Past Attended/RSVP'd)
@@ -1188,7 +1160,9 @@ function FilterPanelContent({
       </div>
 
       <div className='quest-filter-group quest-filter-group-inline'>
-        <p className='quest-filter-group-label'>Type</p>
+        <p className='quest-filter-group-label'>
+          <IconGrid width={14} height={14} /> Type
+        </p>
         <div className='quest-filter-pill-row'>
           <FilterPill selected={segment === 'org'} onClick={() => onSelectSegment('org')}>
             Quests
@@ -1199,8 +1173,12 @@ function FilterPanelContent({
         </div>
       </div>
 
+      <hr className='quest-filter-divider' />
+
       <div className='quest-filter-group quest-filter-group-inline'>
-        <p className='quest-filter-group-label'>Activity</p>
+        <p className='quest-filter-group-label'>
+          <IconCheck width={14} height={14} /> Activity
+        </p>
         <div className='quest-filter-pill-row'>
           <FilterPill
             selected={activity === 'past'}
@@ -1217,8 +1195,12 @@ function FilterPanelContent({
         </div>
       </div>
 
+      <hr className='quest-filter-divider' />
+
       <div className='quest-filter-group quest-filter-group-inline'>
-        <p className='quest-filter-group-label'>Sort</p>
+        <p className='quest-filter-group-label'>
+          <IconList width={14} height={14} /> Sort
+        </p>
         <div className='quest-filter-pill-row'>
           {SORT_OPTIONS.map((opt) => (
             <FilterPill
@@ -1233,42 +1215,6 @@ function FilterPanelContent({
         </div>
       </div>
     </div>
-  );
-}
-
-// Desktop presentation: an anchored popover, not a full-screen modal — it
-// covers a corner of the page, not all of it, so (unlike
-// LightboxBackdrop's full-viewport dim) there's no backdrop at all here.
-// Closing on outside click/Escape is handled by the caller (see Quests()'s
-// own effect, which watches the whole wrapping .quest-filter-wrap element
-// this renders inside of — no ref of its own needed here).
-function DesktopFilterPopover({ children }) {
-  return (
-    <div className='quest-filter-popover' role='dialog' aria-label='Filters'>
-      {children}
-    </div>
-  );
-}
-
-// Mobile presentation: a centered modal card, the same full-viewport
-// backdrop every other modal in this app already uses (see
-// LightboxBackdrop — backdrop tap/Escape-to-close, and its default
-// centered layout, come for free from there, no override needed), same
-// treatment as Attendees/QR/EditProfile's own modals rather than a bottom
-// sheet (a sheet flush against the screen edges read as a clipped/cut-off
-// box, not a deliberate surface). Filtering itself is already live/instant
-// (all client-side, no network re-query), so "Done" is only a dismiss
-// action, not a gate on when selections take effect.
-function MobileFilterSheet({ onClose, children }) {
-  return (
-    <LightboxBackdrop onClose={onClose} label='Filters'>
-      <div className='quest-filter-sheet' onClick={(e) => e.stopPropagation()}>
-        {children}
-        <StampButton type='button' variant='primary' style={{ width: '100%' }} onClick={onClose}>
-          Done
-        </StampButton>
-      </div>
-    </LightboxBackdrop>
   );
 }
 
@@ -1324,11 +1270,14 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
   const [activity, setActivity] = useState(
     initialView === 'past' || initialView === 'mine' ? initialView : null,
   );
-  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const filterWrapRef = useRef(null);
-  const filterBtnRef = useRef(null);
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
+  const {
+    open: filterPanelOpen,
+    setOpen: setFilterPanelOpen,
+    wrapRef: filterWrapRef,
+    btnRef: filterBtnRef,
+  } = useFilterPanel(isDesktop);
 
   // Attendance docs are the only record of which quests someone actually
   // checked into (vs. just RSVP'd) — same query BadgesPreview uses (see
@@ -1408,38 +1357,6 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
       .catch(() => {});
   }
   useEffect(loadSideQuestStatus, [role]);
-
-  // Closes the filter popover on an outside click or Escape — only wired
-  // up on desktop; the mobile sheet gets the same behavior for free from
-  // LightboxBackdrop (backdrop tap / Escape), which also handles its own
-  // scroll lock, so it doesn't need this effect at all.
-  useEffect(() => {
-    if (!filterPanelOpen || !isDesktop) return undefined;
-    function onPointerDown(e) {
-      if (filterWrapRef.current && !filterWrapRef.current.contains(e.target)) {
-        setFilterPanelOpen(false);
-      }
-    }
-    function onKeyDown(e) {
-      if (e.key === 'Escape') setFilterPanelOpen(false);
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [filterPanelOpen, isDesktop]);
-
-  // Restores focus to the trigger button whenever the panel closes, by
-  // whichever path closed it (its own button, outside click, Escape, the
-  // mobile sheet's Done/backdrop) — not just the ones triggered directly
-  // by that button.
-  const wasOpenRef = useRef(false);
-  useEffect(() => {
-    if (wasOpenRef.current && !filterPanelOpen) filterBtnRef.current?.focus();
-    wasOpenRef.current = filterPanelOpen;
-  }, [filterPanelOpen]);
 
   function clearAllFilters() {
     setSort('recommended');
@@ -1696,18 +1613,12 @@ export function Quests({ interests, name, recommendedQuestOrder }) {
               search bar itself instead (see #tag in VanishSearchInput's
               placeholder hints and parseSearch above). */}
           <div className='quest-filter-wrap' ref={filterWrapRef}>
-            <button
-              ref={filterBtnRef}
-              type='button'
-              className='quest-filter-btn'
-              aria-haspopup='dialog'
-              aria-expanded={filterPanelOpen}
-              aria-label={`Filters, ${activeFilterCount} active`}
-              data-filters-active={activeFilterCount > 0 ? 'true' : undefined}
-              onClick={() => setFilterPanelOpen((o) => !o)}
-            >
-              <IconFilter width={22} height={22} />
-            </button>
+            <FilterButton
+              btnRef={filterBtnRef}
+              open={filterPanelOpen}
+              onToggle={() => setFilterPanelOpen((o) => !o)}
+              activeCount={activeFilterCount}
+            />
             {filterPanelOpen && isDesktop && (
               <DesktopFilterPopover>
                 <FilterPanelContent
