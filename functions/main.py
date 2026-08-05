@@ -1486,6 +1486,92 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# Shared by add_quest_series_cover_photo/remove_quest_series_cover_photo
+# below — a series has no single "owner" doc of its own to check ownership
+# against (questSeries/{seriesId} only exists once someone's added a review
+# or a cover photo), so ownership is checked against any one occurrence in
+# the series instead.
+def _require_owning_org_or_admin_for_series(db, series_id: str, req: https_fn.CallableRequest):
+    quest_snap = next(iter(db.collection("quests").where("seriesId", "==", series_id).limit(1).stream()), None)
+    if quest_snap is None:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, f"No quest series {series_id}.")
+    quest = quest_snap.to_dict()
+
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and quest.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only edit your own organization's quests.",
+        )
+
+
+# Callable from CreateQuestForm.jsx — adds one photo to a quest series' own
+# cover-photo gallery. Lives on questSeries/{seriesId} rather than duplicated
+# across every occurrence's own quests/{id} doc: a series' cover photos are
+# one shared set, the same level reviews already aggregate at (see
+# submit_review's own note on this doc), not something that could ever drift
+# between dates the way per-occurrence fields (capacity, RSVPs) legitimately
+# can. An org can add as many as it wants — no cap here, same as
+# organizations.photos (add_organization_photo) has none either.
+#
+# coverPhotos holds resolved download URLs, not Storage paths — same "store
+# the plain URL" choice organizations.logoUrl already made (see
+# update_organization_profile), since every reader here (questSeries.js's
+# attachSeriesRatings) needs to render the first one synchronously across a
+# whole list of quests, not resolve a path per card. merge=True since a
+# series with no reviews or cover photos yet has no questSeries doc at all
+# (same reasoning as submit_review's own merge=True there) — set() would
+# otherwise fail outright on a series that's never been rated.
+@https_fn.on_call()
+def add_quest_series_cover_photo(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    series_id = req.data.get("seriesId")
+    cover_photo_url = req.data.get("coverPhotoUrl")
+    if not series_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "seriesId is required.",
+        )
+    if not isinstance(cover_photo_url, str) or not cover_photo_url:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "coverPhotoUrl is required.",
+        )
+
+    db = firestore.client()
+    _require_owning_org_or_admin_for_series(db, series_id, req)
+
+    db.collection("questSeries").document(series_id).set(
+        {"coverPhotos": firestore.ArrayUnion([cover_photo_url])}, merge=True,
+    )
+    return {"success": True}
+
+
+# Callable from CreateQuestForm.jsx — removes one photo from a quest
+# series' cover-photo gallery (see add_quest_series_cover_photo above).
+@https_fn.on_call()
+def remove_quest_series_cover_photo(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    series_id = req.data.get("seriesId")
+    cover_photo_url = req.data.get("coverPhotoUrl")
+    if not series_id or not cover_photo_url:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "seriesId and coverPhotoUrl are required.",
+        )
+
+    db = firestore.client()
+    _require_owning_org_or_admin_for_series(db, series_id, req)
+
+    db.collection("questSeries").document(series_id).set(
+        {"coverPhotos": firestore.ArrayRemove([cover_photo_url])}, merge=True,
+    )
+    return {"success": True}
+
+
 # Callable from the org dashboard (own quests only) and the admin dashboard
 # (any quest, including default neighborhood ones). Deletes just this one
 # occurrence — see delete_quest_series to remove an entire recurring series
@@ -2170,6 +2256,22 @@ def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
         journal_snap = journal_ref.get()
         if journal_snap.exists and not journal_snap.to_dict().get("thumbnailUrl"):
             journal_ref.update({"thumbnailUrl": submission["storagePath"]})
+
+    # Optional "keep this for my gallery" choice, made right here at
+    # approval time instead of requiring a second trip to the approved-
+    # submissions list (see add_submission_to_gallery, which still exists
+    # for exactly that later-decision case). Org-owned quests only — a side
+    # quest's orgId is always None, and admin review of one never carries
+    # this flag from the frontend anyway (see PendingPhotoSubmissions.jsx's
+    # allowGalleryKeep), but the orgId/role/ownership check here is what
+    # actually enforces it, not just frontend intent.
+    if (
+        bool(req.data.get("addToGallery"))
+        and quest.get("orgId")
+        and req.auth.token.get("role") == "organization"
+        and quest.get("orgId") == req.auth.uid
+    ):
+        _promote_submission_to_gallery(ref, submission, req.auth.uid)
 
     return {"success": True}
 

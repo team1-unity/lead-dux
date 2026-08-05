@@ -36,6 +36,7 @@ import { PhotoSubmissions as OrgPhotoSubmissions } from '@org/PhotoSubmissions.j
 import { FeedbackRequests as OrgFeedbackRequests } from '@org/FeedbackRequests.jsx';
 import { Journal as OrgJournal } from '@org/Journal.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
+import { OrgOnboarding } from '@org/OrgOnboarding.jsx';
 import { Dashboard as AdminDashboard } from '@admin/Dashboard.jsx';
 import '@shared/style.css';
 
@@ -181,6 +182,7 @@ function AppShell() {
       </RouteErrorBoundary>
       {showNav && <BottomNav />}
       <WelcomeTour />
+      <OrgOnboarding />
     </>
   );
 }

@@ -15,7 +15,13 @@ import {
   callRequestQuestFeedback,
 } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
-import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
+import {
+  groupBySeries,
+  attachSeriesRatings,
+  attachOrgLogos,
+  isUpcoming,
+  toDate,
+} from '@shared/questSeries.js';
 import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
@@ -999,11 +1005,19 @@ function QuestRow({ series, isDesktop, isActive, gate, onSelect }) {
               className='quest-thumb'
               aria-label={`View ${primary.orgName || 'organization'}'s profile`}
             >
-              <OrgAvatar name={primary.orgName} seed={primary.orgId} />
+              <OrgAvatar
+                name={primary.orgName}
+                seed={primary.orgId}
+                logoUrl={series.coverPhotos?.[0] || series.orgLogoUrl}
+              />
             </Link>
           ) : (
             <span className='quest-thumb' aria-hidden='true'>
-              <OrgAvatar name={primary.orgName} seed={series.seriesId} />
+              <OrgAvatar
+                name={primary.orgName}
+                seed={series.seriesId}
+                logoUrl={series.coverPhotos?.[0] || series.orgLogoUrl}
+              />
             </span>
           )}
           <div className='quest-card-titles'>
@@ -1357,13 +1371,21 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
 
   function load() {
     setLoadError(null);
-    Promise.all([getDocs(collection(db, 'quests')), getDocs(collection(db, 'questSeries'))])
-      .then(([questsSnap, seriesSnap]) => {
+    Promise.all([
+      getDocs(collection(db, 'quests')),
+      getDocs(collection(db, 'questSeries')),
+      getDocs(collection(db, 'organizations')),
+    ])
+      .then(([questsSnap, seriesSnap, orgsSnap]) => {
         const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setAllQuests(all);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         setSeriesRatingsById(seriesDocsById);
-        const grouped = attachSeriesRatings(groupBySeries(all.filter(isUpcoming)), seriesDocsById);
+        const logoByOrgId = new Map(orgsSnap.docs.map((d) => [d.id, d.data().logoUrl]));
+        const grouped = attachOrgLogos(
+          attachSeriesRatings(groupBySeries(all.filter(isUpcoming)), seriesDocsById),
+          logoByOrgId,
+        );
         grouped.sort((a, b) => {
           // Organization quests only — AI ranking is generated server-side
           // from interests/experience/volunteer history, see
