@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 
 import pytest
 from firebase_functions import https_fn
@@ -8,6 +9,13 @@ from tests.helpers import seed_attendance, seed_feedback_request, seed_journal_e
 
 VALID_ANSWERS = {"engagement": 8, "presence": 8, "involvement": 8, "initiative": 8, "attitude": 8}  # avg 8.0
 
+# What _generate_feedback_summary expects back from Gemini — every test
+# that reaches submit_feedback_request_response's completion path queues
+# this via fake_genai so it exercises the real code path (parse the
+# response, fall through to the fallback on a bad/missing one) without an
+# actual network call.
+FAKE_SUMMARY_JSON = json.dumps({"summary": "Great work out there.", "growthArea": ""})
+
 
 def get_request(fake_firestore, quest_id, uid):
     return main._feedback_request_ref(fake_firestore.client(), quest_id, uid).get().to_dict()
@@ -15,6 +23,11 @@ def get_request(fake_firestore, quest_id, uid):
 
 def get_journal_entry(fake_firestore, uid, quest_id):
     return main._journal_ref(fake_firestore.client(), uid, quest_id).get().to_dict()
+
+
+def get_notifications(fake_firestore, uid):
+    docs = fake_firestore.client().collection("users").document(uid).collection("notifications").stream()
+    return [d.to_dict() for d in docs]
 
 
 class TestRequestQuestFeedback:
@@ -124,9 +137,10 @@ class TestSubmitFeedbackRequestResponse:
         seed_journal_entry(fake_firestore, "user-1", "quest-1", requestStatus="pending")
         return seed_feedback_request(fake_firestore, "quest-1", "user-1", **overrides)
 
-    def test_awards_points_when_score_clears_threshold(self, fake_firestore, make_request, call):
+    def test_awards_points_when_score_clears_threshold(self, fake_firestore, make_request, call, fake_genai):
         self._seed_pending(fake_firestore)
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        fake_genai.queue_response(FAKE_SUMMARY_JSON)
 
         result = call(main.submit_feedback_request_response, make_request(
             data={"questId": "quest-1", "uid": "user-1", "answers": VALID_ANSWERS, "extraThoughts": "Great work!"},
@@ -146,12 +160,19 @@ class TestSubmitFeedbackRequestResponse:
         entry = get_journal_entry(fake_firestore, "user-1", "quest-1")
         assert entry["requestStatus"] == "completed"
         assert entry["score"] == 8.0
-        assert entry["notified"] is False
+        assert entry["summary"] == "Great work out there."
+        assert entry["growthArea"] == ""
         assert entry["read"] is False
 
-    def test_no_points_when_score_is_below_threshold(self, fake_firestore, make_request, call):
+        notifications = get_notifications(fake_firestore, "user-1")
+        assert len(notifications) == 1
+        assert notifications[0]["kind"] == "feedback_received"
+        assert notifications[0]["pointsAwarded"] == main.FEEDBACK_BONUS_POINTS
+
+    def test_no_points_when_score_is_below_threshold(self, fake_firestore, make_request, call, fake_genai):
         self._seed_pending(fake_firestore)
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        fake_genai.queue_response(FAKE_SUMMARY_JSON)
         low_answers = {"engagement": 6, "presence": 6, "involvement": 6, "initiative": 5, "attitude": 6}  # avg 5.8
 
         result = call(main.submit_feedback_request_response, make_request(
@@ -164,9 +185,10 @@ class TestSubmitFeedbackRequestResponse:
         user = fake_firestore.client().collection("users").document("user-1").get().to_dict()
         assert user.get("points", 0) == 0
 
-    def test_exact_threshold_score_awards_points(self, fake_firestore, make_request, call):
+    def test_exact_threshold_score_awards_points(self, fake_firestore, make_request, call, fake_genai):
         self._seed_pending(fake_firestore)
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        fake_genai.queue_response(FAKE_SUMMARY_JSON)
         threshold_answers = {"engagement": 6, "presence": 6, "involvement": 6, "initiative": 6, "attitude": 6}
 
         result = call(main.submit_feedback_request_response, make_request(
@@ -214,9 +236,10 @@ class TestSubmitFeedbackRequestResponse:
             ))
         assert exc_info.value.code == https_fn.FunctionsErrorCode.PERMISSION_DENIED
 
-    def test_admin_can_respond_on_behalf_of_the_owning_org(self, fake_firestore, make_request, call):
+    def test_admin_can_respond_on_behalf_of_the_owning_org(self, fake_firestore, make_request, call, fake_genai):
         self._seed_pending(fake_firestore)
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        fake_genai.queue_response(FAKE_SUMMARY_JSON)
 
         result = call(main.submit_feedback_request_response, make_request(
             data={"questId": "quest-1", "uid": "user-1", "answers": VALID_ANSWERS},
@@ -270,16 +293,56 @@ class TestSubmitFeedbackRequestResponse:
             ))
         assert exc_info.value.code == https_fn.FunctionsErrorCode.INVALID_ARGUMENT
 
+    def test_falls_back_to_a_generic_summary_when_gemini_errors(
+        self, fake_firestore, make_request, call, fake_genai,
+    ):
+        self._seed_pending(fake_firestore)
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        fake_genai.queue_error(RuntimeError("Gemini is unavailable"))
+
+        # The request still completes — and still scores/awards points
+        # correctly — even though the summary generation itself failed.
+        result = call(main.submit_feedback_request_response, make_request(
+            data={"questId": "quest-1", "uid": "user-1", "answers": VALID_ANSWERS},
+            uid="org-1", role="organization",
+        ))
+        assert result["score"] == 8.0
+        assert result["pointsAwarded"] == main.FEEDBACK_BONUS_POINTS
+
+        entry = get_journal_entry(fake_firestore, "user-1", "quest-1")
+        assert entry["summary"]
+        assert entry["growthArea"] == ""
+        # Never the raw prompt/error text leaking through as the summary.
+        assert "Gemini" not in entry["summary"]
+
+    def test_falls_back_when_gemini_returns_unparseable_json(
+        self, fake_firestore, make_request, call, fake_genai,
+    ):
+        self._seed_pending(fake_firestore)
+        seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        fake_genai.queue_response("not valid json")
+
+        result = call(main.submit_feedback_request_response, make_request(
+            data={"questId": "quest-1", "uid": "user-1", "answers": VALID_ANSWERS},
+            uid="org-1", role="organization",
+        ))
+        assert result["pointsAwarded"] == main.FEEDBACK_BONUS_POINTS
+
+        entry = get_journal_entry(fake_firestore, "user-1", "quest-1")
+        assert entry["summary"]
+        assert entry["growthArea"] == ""
+
 
 class TestMonthlyCapBypassFix:
     def test_completing_a_fourth_request_this_month_withholds_points_but_still_records_the_score(
-        self, fake_firestore, make_request, call,
+        self, fake_firestore, make_request, call, fake_genai,
     ):
         seed_quest(fake_firestore, "quest-1", orgId="org-1")
         seed_attendance(fake_firestore, "quest-1", "user-1")
         seed_journal_entry(fake_firestore, "user-1", "quest-1", requestStatus="pending")
         seed_feedback_request(fake_firestore, "quest-1", "user-1", status="pending")
         seed_user(fake_firestore, "user-1", "Alex", "alex@example.com")
+        fake_genai.queue_response(FAKE_SUMMARY_JSON)
 
         # 3 other requests already completed earlier this month — the cap
         # is maxed out before this one is even answered, even though this
@@ -324,8 +387,7 @@ class TestCheckInCreatesJournalEntry:
         assert entry["requestStatus"] is None
         assert entry["orgId"] == "org-1"
         # Never defaulted — see the module note in check_in_to_event for
-        # why FeedbackToast/BottomNav's `==false` queries rely on this.
-        assert "notified" not in entry
+        # why BottomNav's `==false` query relies on this.
         assert "read" not in entry
 
     def test_side_quest_check_in_creates_no_journal_entry(self, fake_firestore, make_request, call):

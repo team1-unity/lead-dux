@@ -165,7 +165,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             {a.recurring ? 'Cancel' : 'Make recurring'}
           </StampButton>
         )}
-        {primary.orgId && <AddToCalendar quest={selected} />}
+        {primary.orgId && <AddToCalendar quest={selected} dateLabel={formatEventDate(selected.eventDate)} />}
         <StampButton
           type="button"
           variant="danger"

@@ -565,6 +565,37 @@ def photo_url(slug, n):
     return f"https://picsum.photos/seed/{slug}-{n}/800/600"
 
 
+# One real (curl-verified against images.unsplash.com as of this writing)
+# photo per completed quest title, reused by every hero who journals about
+# that quest — same real-world event, same photo, rather than a different
+# generic stock image per attendee. Deliberately per-quest-*title*, not per
+# tag/category: two quests under the same org (e.g. the two JC Community
+# Kitchen ones below) still get visibly different photos. Only completed
+# quests need one — nobody journals about a quest that hasn't happened
+# yet. If any of these ever 404, swap in a fresh id from unsplash.com
+# rather than leaving a broken <img> in a live demo.
+JOURNAL_QUEST_PHOTOS = {
+    "Thanksgiving Food Drive Sorting": "https://images.unsplash.com/photo-1593113646773-028c64a8f1b8?auto=format&fit=crop&w=800&q=60",
+    "Weekend Meal Prep & Serve": "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=60",
+    "Weeknight Dinner Service": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=60",
+    "Civic Leadership Roundtable": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=800&q=60",
+    "Public Speaking Workshop for Teens": "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=800&q=60",
+    "Native Plant Restoration Day": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=800&q=60",
+    "Third River Park Cleanup": "https://images.unsplash.com/photo-1618477388954-7852f32655ec?auto=format&fit=crop&w=800&q=60",
+    "Pollinator Garden Planting": "https://images.unsplash.com/photo-1471193945509-9ad0617afabf?auto=format&fit=crop&w=800&q=60",
+    "Shelter Deep-Clean & Enrichment Day": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=800&q=60",
+    "Adoption Fair Volunteer Day": "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=800&q=60",
+    "Resume & Interview Workshop": "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=60",
+    "Mentor Match Night": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=60",
+    "Tech Help Desk for Seniors": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=60",
+    "Grocery Run for Seniors": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=60",
+    "Compost Bin Build Day": "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=800&q=60",
+    "Fall Harvest Volunteer Day": "https://images.unsplash.com/photo-1567306301408-9b74779a11af?auto=format&fit=crop&w=800&q=60",
+    "Flag Football Jamboree Volunteer Day": "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?auto=format&fit=crop&w=800&q=60",
+    "Fall Soccer Coaching Clinic": "https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&w=800&q=60",
+}
+
+
 def get_or_create_user(email, password, display_name):
     try:
         return auth.get_user_by_email(email)
@@ -1223,11 +1254,36 @@ def seed_feedback_and_journal(completed_quests, user_uids):
     # Two completed feedback requests — Marcus Bell earned the bonus
     # (matches FEEDBACK_BONUS_RECIPIENTS' point bump in seed_users above),
     # Omar Haddad scored under FEEDBACK_SCORE_THRESHOLD and earned nothing.
+    # summary/growthArea are hand-written here (not generated) since
+    # seeding shouldn't depend on a live GEMINI_API_KEY — same shape
+    # _generate_feedback_summary in functions/main.py would actually
+    # produce for these answers, never a number among them.
     completed_feedback = [
-        ("Marcus Bell", cq_b, {"engagement": 9, "presence": 8, "involvement": 9, "initiative": 8, "attitude": 9}, "Genuinely one of our most reliable volunteers this month.", True),
-        ("Omar Haddad", cq_a, {"engagement": 5, "presence": 4, "involvement": 5, "initiative": 3, "attitude": 5}, "Showed up and did the work, but seemed distracted for most of the shift.", False),
+        (
+            "Marcus Bell", cq_b,
+            {"engagement": 9, "presence": 8, "involvement": 9, "initiative": 8, "attitude": 9},
+            "Genuinely one of our most reliable volunteers this month.", True,
+            "Marcus brought strong participation and engagement to every shift, staying actively "
+            "involved from start to finish. His presence and attentiveness were consistently "
+            "reliable, and his contributions helped keep the group on track throughout. He also "
+            "showed meaningful initiative, stepping in to help without needing to be asked. On top "
+            "of all that, his attitude and cooperation made him easy to work alongside — exactly "
+            "the kind of volunteer we hope to see again.",
+            "",
+        ),
+        (
+            "Omar Haddad", cq_a,
+            {"engagement": 5, "presence": 4, "involvement": 5, "initiative": 3, "attitude": 5},
+            "Showed up and did the work, but seemed distracted for most of the shift.", False,
+            "Omar showed up and engaged with the group throughout the quest, contributing to the "
+            "shared task alongside the rest of the team. His attitude stayed cooperative, and there "
+            "were moments where his presence added to the group's effort. There's room to grow in "
+            "how consistently he stays attentive and engaged throughout a full shift.",
+            "Building more consistent initiative — stepping up and helping without waiting to be "
+            "asked — would make the biggest difference next time.",
+        ),
     ]
-    for name, cq, answers, extra_thoughts, earns_bonus in completed_feedback:
+    for name, cq, answers, extra_thoughts, earns_bonus, summary, growth_area in completed_feedback:
         uid = name_to_uid[name]
         _ensure_attended(cq, uid)
         score = round(sum(answers.values()) / len(answers), 1)
@@ -1237,15 +1293,162 @@ def seed_feedback_and_journal(completed_quests, user_uids):
             "orgId": cq["org_uid"], "orgName": cq["org_name"],
             "questTitle": cq["title"], "eventDate": cq["event_date"], "requestedAt": NOW - timedelta(days=4),
             "expiresAt": NOW + timedelta(days=10), "status": "completed", "answers": answers,
-            "extraThoughts": extra_thoughts, "score": score, "pointsAwarded": points,
-            "completedAt": NOW - timedelta(days=2),
+            "extraThoughts": extra_thoughts, "score": score, "summary": summary, "growthArea": growth_area,
+            "pointsAwarded": points, "completedAt": NOW - timedelta(days=2),
         })
         main._journal_ref(db, uid, cq["quest_id"]).set({
             "requestStatus": "completed", "answers": answers, "extraThoughts": extra_thoughts,
-            "score": score, "pointsAwarded": points, "completedAt": NOW - timedelta(days=2),
-            "notified": False, "read": False,
+            "score": score, "summary": summary, "growthArea": growth_area, "pointsAwarded": points,
+            "completedAt": NOW - timedelta(days=2), "notified": False, "read": False,
         }, merge=True)
     print("  Completed feedback requests: Marcus Bell earned the bonus, Omar Haddad did not")
+
+
+# A curated set of "hero" demo accounts (a couple per rank tier) with a
+# real, individually-written journal — reflections + a matching background
+# picture on most entries, so anyone logging in as one of these during a
+# live demo sees a populated, personal-feeling Journal rather than the
+# blank-reflection/no-picture default every other seeded attendance leaves
+# behind. Deliberately NOT every demo user — writing this much unique copy
+# for all 25 would either take forever or read as obviously templated;
+# better to go deep on a few than shallow on everyone.
+#
+# Journal depth scales with rank (2 entries for a brand-new Iron member up
+# to 5 for a veteran Diamond one) — both more realistic than uniform
+# coverage and a better demo arc, since it lets the team show a thin,
+# just-starting-out journal next to a rich, years-of-activity one. Every
+# hero keeps exactly one attended entry with no reflection/picture at all,
+# so the demo can also show (or live-fill) the "tap to reflect" empty
+# state rather than presenting an unrealistically perfect account.
+HERO_JOURNALS = {
+    "Maria Ortiz": {
+        "filled": [
+            ("Thanksgiving Food Drive Sorting", "This was my very first quest and I had no idea what to expect. Turns out sorting canned goods for three hours with total strangers is a great way to make friends fast — we packed something like 40 family boxes by the end of the shift."),
+        ],
+        "blank": "Weekend Meal Prep & Serve",
+    },
+    "Sofia Ramirez": {
+        # She already has a reflection on Thanksgiving Food Drive Sorting
+        # from seed_feedback_and_journal above — these add to that, not
+        # replace it.
+        "filled": [
+            ("Shelter Deep-Clean & Enrichment Day", "Not exactly the community cause I expected to end up at, but scrubbing kennels next to people who clearly do this every week without complaint was humbling. Made me want to say yes to more things outside my usual lane."),
+        ],
+        "blank": "Adoption Fair Volunteer Day",
+    },
+    "Amara Okafor": {
+        "filled": [
+            ("Civic Leadership Roundtable", "Got to sit across from an actual city council member and ask her what she wished she'd known before running for office. Her answer — \"that the boring meetings are where the real work happens\" — has stuck with me since."),
+            ("Public Speaking Workshop for Teens", "I went in assuming I'd just be helping teens with eye contact and pacing, but half of them gave feedback on MY sample speech that was sharper than anything I'd have caught myself. Left more prepared than I arrived."),
+        ],
+        "blank": "Mentor Match Night",
+    },
+    "Ethan Walsh": {
+        "filled": [
+            ("Native Plant Restoration Day", "Learned the hard way that 'native plant' doesn't mean 'easy to plant' — half our seedlings needed a specific soil depth I was definitely eyeballing wrong for the first hour. Got better by the end."),
+            ("Third River Park Cleanup", "Filled eleven contractor bags along maybe a quarter mile of trail. Kept thinking about how none of that litter blows in from nowhere — it's just what gets left behind, one piece at a time, by people who probably meant to pick it up later."),
+        ],
+        "blank": "Pollinator Garden Planting",
+    },
+    "Grace Nguyen": {
+        "filled": [
+            ("Weekend Meal Prep & Serve", "Thirteen of us on the line and it still felt like we were racing the clock right up until the doors opened. Worth it the second I saw the first family go back for seconds."),
+            ("Weeknight Dinner Service", "Weeknight shifts hit differently than the weekend ones — smaller crew, faster pace, less time to think. I like it more, honestly. Less room to hang back."),
+        ],
+        "blank": "Fall Harvest Volunteer Day",
+    },
+    "Marcus Bell": {
+        "filled": [
+            ("Flag Football Jamboree Volunteer Day", "Ran the scoreboard table for six straight games and somehow still don't know all the rules of flag football. The kids did not let me forget a single missed flag pull."),
+            ("Fall Soccer Coaching Clinic", "Picked up more from watching the actual coaches manage twelve overtired ten-year-olds at once than from anything I've read about leadership. Patience is a coachable skill, apparently."),
+            ("Civic Leadership Roundtable", "Went to support a friend who was presenting and ended up staying for the whole thing. Didn't expect a room of teenagers to ask harder questions than most adults I know."),
+        ],
+        "blank": "Public Speaking Workshop for Teens",
+    },
+    "Omar Haddad": {
+        "filled": [
+            ("Tech Help Desk for Seniors", "Spent forty-five minutes helping one man video call his granddaughter for the first time. He teared up. I did too, a little, and I'm not going to pretend otherwise."),
+            ("Resume & Interview Workshop", "Reviewed six resumes back to back and gave the same piece of advice five times: cut the objective statement, nobody reads it. Small fix, real difference in how each one read afterward."),
+            ("Mentor Match Night", "Matched with a student who wants to go into the exact field I do. Strange, good kind of pressure to suddenly be someone's example of what that path can look like."),
+        ],
+        "blank": "Grocery Run for Seniors",
+    },
+    "Hannah Cohen": {
+        "filled": [
+            ("Shelter Deep-Clean & Enrichment Day", "Years of doing this kind of work and I still forget how much of it is just repetition — clean, refill, repeat — until one dog leans into your hand mid-scrub and you remember exactly why you keep coming back."),
+            ("Compost Bin Build Day", "Built three bins with a crew that had never used a drill before today. Watching someone go from nervous to confident over one afternoon is most of why I keep signing up for build days specifically."),
+            ("Civic Leadership Roundtable", "Sat in on this one as a mentor rather than a participant for the first time. Strange to realize I had more to offer just by staying quiet and letting the teens actually run the discussion."),
+            ("Grocery Run for Seniors", "Same resident I've been paired with for three months now, and this was the first time she asked about my week before I could ask about hers. That's the whole point, really."),
+        ],
+        "blank": "Fall Harvest Volunteer Day",
+    },
+}
+
+
+def seed_hero_journal_entries(completed_quests, user_uids):
+    name_to_uid = {row["name"]: row["uid"] for row in user_uids}
+    by_title = {cq["title"]: cq for cq in completed_quests}
+    filled_count = 0
+
+    for name, plan in HERO_JOURNALS.items():
+        uid = name_to_uid[name]
+        for i, (title, reflection) in enumerate(plan["filled"]):
+            cq = by_title[title]
+            _ensure_attended(cq, uid)
+            db.collection("users").document(uid).collection("journal").document(cq["quest_id"]).set({
+                "reflectionBody": reflection,
+                "reflectionUpdatedAt": firestore.SERVER_TIMESTAMP,
+                "thumbnailUrl": JOURNAL_QUEST_PHOTOS.get(title),
+            }, merge=True)
+            filled_count += 1
+        blank_cq = by_title[plan["blank"]]
+        _ensure_attended(blank_cq, uid)
+    print(f"  Hero journals: {len(HERO_JOURNALS)} users, {filled_count} reflections + matching photos, 1 blank entry each")
+
+    # Maria Ortiz's Thanksgiving Food Drive Sorting entry additionally gets
+    # a completed feedback response — a concrete "reflection already
+    # written, feedback arrives afterward" example for the Journal page
+    # (FeedbackStatus renders below the reflection body there, set off by
+    # its own divider), same shape as seed_feedback_and_journal's own
+    # completed_feedback cases above, just targeted at a specific named
+    # hero/quest instead of whichever completed_quests[0]/[1] happen to be.
+    maria_uid = name_to_uid["Maria Ortiz"]
+    maria_cq = by_title["Thanksgiving Food Drive Sorting"]
+    _ensure_attended(maria_cq, maria_uid)
+    maria_answers = {"engagement": 9, "presence": 9, "involvement": 8, "initiative": 8, "attitude": 10}
+    maria_score = round(sum(maria_answers.values()) / len(maria_answers), 1)
+    maria_points = main.FEEDBACK_BONUS_POINTS if maria_score >= main.FEEDBACK_SCORE_THRESHOLD else 0
+    maria_extra_thoughts = (
+        "Maria jumped right in without needing much direction, even as a first-timer — exactly "
+        "the energy we hope every new volunteer brings."
+    )
+    # Hand-written, not generated — seeding shouldn't depend on a live
+    # GEMINI_API_KEY. Every category is 8+ here, so growthArea stays empty
+    # per _generate_feedback_summary's own rule 7.
+    maria_summary = (
+        "You were actively engaged throughout the quest and consistently stayed focused on the "
+        "experience. Your contributions helped move the group forward, and you regularly stepped "
+        "up to help when opportunities arose. You maintained a positive, cooperative attitude that "
+        "made working together enjoyable, and your overall presence strengthened the team's "
+        "success. Keep bringing this level of energy and teamwork to future quests."
+    )
+    maria_growth_area = ""
+    main._feedback_request_ref(db, maria_cq["quest_id"], maria_uid).set({
+        "questId": maria_cq["quest_id"], "uid": maria_uid, "requesterName": "Maria Ortiz",
+        "orgId": maria_cq["org_uid"], "orgName": maria_cq["org_name"],
+        "questTitle": maria_cq["title"], "eventDate": maria_cq["event_date"],
+        "requestedAt": NOW - timedelta(days=3), "expiresAt": NOW + timedelta(days=11),
+        "status": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
+        "score": maria_score, "summary": maria_summary, "growthArea": maria_growth_area,
+        "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+    })
+    main._journal_ref(db, maria_uid, maria_cq["quest_id"]).set({
+        "requestStatus": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
+        "score": maria_score, "summary": maria_summary, "growthArea": maria_growth_area,
+        "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+        "notified": False, "read": False,
+    }, merge=True)
+    print(f"  Maria Ortiz completed feedback: Thanksgiving Food Drive Sorting, score {maria_score}")
 
 
 def seed_notifications(user_uids):
@@ -1359,6 +1562,9 @@ def main_seed():
 
     print("\nSeeding leader-requested feedback + journal reflections...")
     seed_feedback_and_journal(completed_quests, user_uids)
+
+    print("\nSeeding hero-account journal reflections + background photos...")
+    seed_hero_journal_entries(completed_quests, user_uids)
 
     print("\nSeeding notification-banner demo data...")
     seed_notifications(user_uids)

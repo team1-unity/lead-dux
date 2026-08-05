@@ -1,55 +1,41 @@
-import { useEffect, useRef, useState } from 'react';
-import { loadPlacesLibrary } from './googleMaps.js';
-import { normalizeSuggestion } from './placeCombobox.js';
+import { useEffect, useId, useRef, useState } from 'react';
+import { fetchPlaceSuggestions } from './placeCombobox.js';
 
 const DEBOUNCE_MS = 250;
 const MIN_CHARS = 2;
 
-// A from-scratch replacement for PlaceAutocompleteInput.jsx, built for
-// exactly one reason: google.maps.places.PlaceAutocompleteElement is a
-// closed pre-built widget — Google renders its own input, search icon, and
-// dropdown inside a shadow DOM, and only exposes a few color/font
-// variables for theming, not full control. There's no supported way to
-// remove its icon or match it exactly to a borderless surrounding form.
+// The one shared address/place picker used everywhere in the app — real
+// markup we fully control (a plain <input> + our own dropdown), styled by
+// whatever surrounding CSS each caller's other fields already use, no
+// special framing needed of its own.
 //
-// This uses the *data-only* half of the same API instead —
-// AutocompleteSuggestion.fetchAutocompleteSuggestions() returns just
-// suggestion predictions, no UI attached — so every pixel here (the input,
-// the dropdown, the icon-less look) is our own real markup, styled by the
-// same CSS every other row in this form already uses.
+// This used to be two separate implementations: this component (built for
+// CreateQuestForm.jsx's borderless look) plus PlaceAutocompleteInput.jsx (a
+// wrapper around Google's google.maps.places.PlaceAutocompleteElement, a
+// closed shadow-DOM widget Register.jsx/Settings.jsx/Onboarding.jsx used
+// instead specifically because Google's widget couldn't be restyled to
+// match those forms). Now that address search comes from Geoapify's plain
+// REST API instead — no pre-built widget, nothing to work around — that
+// split has no reason to exist; PlaceAutocompleteInput.jsx is now just a
+// re-export of this component.
 //
-// Not a drop-in replacement for PlaceAutocompleteInput.jsx elsewhere
-// (Register.jsx/Onboarding.jsx) — those keep the simpler pre-built widget,
-// which is a fine trade there. This is deliberately scoped to
-// org/CreateQuestForm.jsx's Where row, the one place a fully custom look
-// was actually asked for.
+// `id` is optional — CreateQuestForm.jsx passes an explicit one (its
+// label sits in a separate element, paired via htmlFor), but the other
+// three callers just wrap this directly in a <label> and never needed
+// one, so this falls back to a generated id rather than requiring every
+// caller to invent one.
 export function PlaceCombobox({ onSelect, placeholder, ariaLabel, id }) {
-  const [placesLib, setPlacesLib] = useState(null);
+  const generatedId = useId();
+  const inputId = id || generatedId;
   const [inputText, setInputText] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  // One token per "search session" (Google's billing unit) — created on
-  // the first keystroke of a fresh search, reused across every keystroke
-  // and the eventual fetchFields() call, then cleared so the next search
-  // (after a selection, or after clearing the field) starts a new one.
-  const sessionTokenRef = useRef(null);
-  const listboxId = `${id}-listbox`;
+  const listboxId = `${inputId}-listbox`;
 
   useEffect(() => {
-    let cancelled = false;
-    loadPlacesLibrary().then((lib) => {
-      if (!cancelled) setPlacesLib(lib);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!placesLib) return undefined;
     const text = inputText.trim();
     if (text.length < MIN_CHARS) {
       setOpen(false);
@@ -65,18 +51,9 @@ export function PlaceCombobox({ onSelect, placeholder, ariaLabel, id }) {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        if (!sessionTokenRef.current) {
-          sessionTokenRef.current = new placesLib.AutocompleteSessionToken();
-        }
-        const { suggestions: results } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: text,
-          sessionToken: sessionTokenRef.current,
-        });
+        const results = await fetchPlaceSuggestions(text);
         if (cancelled) return;
-        const mapped = (results || [])
-          .filter((s) => s.placePrediction)
-          .map((s) => ({ ...normalizeSuggestion(s.placePrediction), prediction: s.placePrediction }));
-        setSuggestions(mapped);
+        setSuggestions(results);
         setActiveIndex(-1);
       } catch {
         if (!cancelled) {
@@ -92,23 +69,18 @@ export function PlaceCombobox({ onSelect, placeholder, ariaLabel, id }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [inputText, placesLib]);
+  }, [inputText]);
 
-  async function selectSuggestion(suggestion) {
-    const place = suggestion.prediction.toPlace();
-    await place.fetchFields({ fields: ['formattedAddress', 'location'] });
+  function selectSuggestion(suggestion) {
     onSelect({
-      location: place.formattedAddress || '',
-      placeId: place.id,
-      lat: place.location?.lat(),
-      lng: place.location?.lng(),
+      location: suggestion.formatted,
+      placeId: suggestion.id,
+      lat: suggestion.lat,
+      lng: suggestion.lng,
     });
-    setInputText(place.formattedAddress || '');
+    setInputText(suggestion.formatted);
     setOpen(false);
     setSuggestions([]);
-    // The session that started with the first keystroke ends here — the
-    // next search (editing this field again) is billed as a new one.
-    sessionTokenRef.current = null;
   }
 
   function onKeyDown(e) {
@@ -136,7 +108,7 @@ export function PlaceCombobox({ onSelect, placeholder, ariaLabel, id }) {
   return (
     <div style={{ position: 'relative' }}>
       <input
-        id={id}
+        id={inputId}
         type="text"
         role="combobox"
         aria-expanded={open}

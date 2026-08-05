@@ -23,7 +23,7 @@ const THEME_OPTIONS = [
   { value: 'system', label: 'System' },
 ];
 
-function ThemePicker() {
+export function ThemePicker() {
   const [theme, setTheme] = useState(getStoredTheme());
 
   function choose(value) {
@@ -53,10 +53,12 @@ function ThemePicker() {
 }
 
 // Lets a "user" change the interests they picked during onboarding —
-// onboarding only ever sets them once, this is the only way back in. Lives
-// on Settings (not Profile — see Profile.jsx) since it's a preference to
-// tweak, not part of "who I am."
-function InterestsEditor() {
+// onboarding only ever sets them once, this is the only way back in.
+// Exported so desktop Profile.jsx can render it inline (see
+// .profile-settings-list there); on mobile it's still only reachable via
+// the Settings page, since it's a preference to tweak, not part of "who I
+// am."
+export function InterestsEditor() {
   const { user } = useAuth();
   const [interests, setInterests] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -127,10 +129,10 @@ function InterestsEditor() {
 // to the accommodation-based side-quest-limit relaxation check (see
 // rsvp_to_quest), so re-picking it here keeps that check current too, not
 // just the display. Re-picking a place is optional — location fields are
-// only sent to the server when the user actually changes them. Lives on
-// Settings (not Profile — see Profile.jsx) for the same reason Interests
-// does.
-function AccommodationNeedsEditor() {
+// only sent to the server when the user actually changes them. Exported
+// for the same reason Interests is — desktop Profile.jsx renders it
+// inline; mobile only reaches it via Settings.
+export function AccommodationNeedsEditor() {
   const { user } = useAuth();
   const [needs, setNeeds] = useState(null);
   const [location, setLocation] = useState('');
@@ -227,11 +229,13 @@ function AccommodationNeedsEditor() {
   );
 }
 
-// The full Account section — Profile.jsx also has a quiet "Log out" link
-// of its own now (one tap closer, since Settings itself is a second tap
-// past the gear icon), but this stays the canonical place for it, first in
-// the list rather than buried under Theme/Interests/Accommodation.
-function LogoutSection() {
+// Settings is "how the app looks/whether I keep my account," so signing
+// out used to live only here — a "user" role's own Profile.jsx identity
+// card now has its own quick "Log out" button directly on it, so this
+// section is skipped for that role (see Settings() below) to avoid
+// offering the exact same action twice; other roles (organization/admin/
+// pending_org/onboarding_org) still reach it here, same as before.
+export function LogoutSection() {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -254,7 +258,7 @@ function LogoutSection() {
 // typed confirmation rather than a single click or a plain window.confirm
 // — the cascade wording below tells the caller exactly what they're about
 // to lose before they can even reach the confirm button.
-function DangerZone() {
+export function DangerZone() {
   const { role, logout } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [confirmText, setConfirmText] = useState('');
@@ -331,12 +335,13 @@ function DangerZone() {
 
 // App preferences, a "user" role's interests/accessibility (see
 // InterestsEditor/AccommodationNeedsEditor above — those used to live on
-// Profile, but they're preferences to tweak, not identity), signing out,
-// and the one destructive account action. Identity and organization status
-// still live on Profile instead (see Profile.jsx). Not wrapped in
-// narrow-content: at desktop width each section spans the full
-// dashboard-style width rather than floating a mobile-width form in the
-// middle of a wide page.
+// Profile, but they're preferences to tweak, not identity), signing out
+// (for every role except "user" — see LogoutSection's own comment), and
+// the one destructive account action. Identity and organization status
+// still live on Profile instead (see Profile.jsx). Not wrapped in narrow-
+// content: at desktop width each section spans the full dashboard-style
+// width rather than floating a mobile-width form in the middle of a wide
+// page.
 export function Settings() {
   const { user, role, loading } = useAuth();
 
@@ -355,10 +360,10 @@ export function Settings() {
       />
       <TopBar title="Settings" />
       <div className="settings-grid">
-        <LogoutSection />
         <ThemePicker />
         {role === 'user' && <InterestsEditor />}
         {role === 'user' && <AccommodationNeedsEditor />}
+        {role !== 'user' && <LogoutSection />}
         <DangerZone />
       </div>
     </PageMotion>

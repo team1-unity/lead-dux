@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
+import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { ConfirmBox, ShareButton, formatEventDate, formatStars } from '@shared/QuestSeriesRow.jsx';
@@ -14,16 +13,18 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { Collapse } from '@shared/Collapse.jsx';
+import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
+import { OrgAvatar } from '@shared/OrgAvatar.jsx';
+import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
+import { LocationLink } from '@shared/LocationLink.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
 import {
   IconPlus,
   IconEdit,
   IconTrash,
   IconChevron,
-  IconCalendar,
-  IconPin,
   IconUsers,
   IconX,
 } from '@shared/icons.jsx';
@@ -39,6 +40,11 @@ function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, childr
   const { primary } = series;
   const eventDate = formatEventDate(primary.eventDate);
   const reduce = useReducedMotion();
+  // Dimmed rather than hidden or removed — same treatment sideQuestGate's
+  // own gated rows get (see .quest-content-col[data-gated] in style.css):
+  // still fully clickable/expandable so reviews/attendance for a finished
+  // series stay reachable, just visually pushed behind what's still active.
+  const isPast = !nextOccurrence(series);
   return (
     <motion.li
       className='quest-row'
@@ -47,7 +53,12 @@ function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, childr
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1], delay: Math.min(index, 5) * 0.04 }}
     >
-      <div className='ink-card quest-content-col' data-active={isActive ? 'true' : undefined}>
+      <div
+        className='ink-card quest-content-col'
+        data-active={isActive ? 'true' : undefined}
+        data-past={isPast ? 'true' : undefined}
+      >
+
         <button
           type='button'
           className='quest-card-head'
@@ -223,7 +234,13 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           // intact; the select itself sizes to its content/maxWidth rather
           // than stretching the full row width.
           <>
-            <IconCalendar style={{ flex: 'none' }} />
+            <AddToCalendar
+              quest={selected}
+              dateLabel={formatEventDate(selected.eventDate)}
+              showLabel={false}
+              className='quest-meta-row quest-meta-link'
+              style={{ flex: 'none', display: 'inline-flex', alignItems: 'center' }}
+            />
             <label className='visually-hidden' htmlFor='org-quest-date-select'>
               Date
             </label>
@@ -242,33 +259,31 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           </>
         ) : (
           formatEventDate(selected.eventDate) && (
-            <p className='quest-meta-row' style={{ margin: 0 }}>
-              <IconCalendar /> {formatEventDate(selected.eventDate)}
-            </p>
+            <AddToCalendar
+              quest={selected}
+              dateLabel={formatEventDate(selected.eventDate)}
+              className='quest-meta-row quest-meta-link'
+            />
           )
         )}
-        <AddToCalendar quest={selected} style={{ padding: '4px 10px', fontSize: '0.8rem' }} />
       </div>
-      {selected.location && (
-        <Link to={`/map?seriesId=${primary.seriesId}`} className='quest-meta-row quest-meta-link'>
-          <IconPin /> {selected.location}
-        </Link>
-      )}
+      {/* Same as the quest's own map detail (MapQuestDetailBody.jsx) — this
+          used to link to this app's own /map view instead, but an org
+          checking their own quest's location wants driving directions
+          there, not a re-pan of the in-app map. */}
+      <LocationLink location={selected.location} lat={selected.lat} lng={selected.lng} />
       <div className='flex items-center gap-sm' style={{ flexWrap: 'wrap' }}>
-        <p className='quest-meta-row' style={{ margin: 0 }}>
+        <button
+          type='button'
+          onClick={a.toggleAttendees}
+          disabled={a.busy}
+          className='quest-meta-row quest-meta-link'
+        >
           <IconUsers />{' '}
           {selected.capacity
             ? `${rsvpCount} / ${selected.capacity} spots filled`
             : `${rsvpCount} RSVP'd`}
-        </p>
-        <StampButton
-          type='button'
-          onClick={a.toggleAttendees}
-          disabled={a.busy}
-          style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-        >
-          View Attendees
-        </StampButton>
+        </button>
       </div>
       <p className='quest-description'>{primary.description}</p>
 
@@ -363,18 +378,38 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
 
       {a.attendeesOpen && a.attendees && (
         <LightboxBackdrop onClose={a.toggleAttendees} label='Attendees'>
-          <div className='ink-card detail-modal-content' onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Attendees</h3>
-            <ul className='data-sublist'>
-              {a.attendees.length === 0 && <li>No RSVPs yet.</li>}
-              {a.attendees.map((att) => (
-                <li key={att.uid}>
-                  {att.name || 'Unnamed'} — {att.email}
-                  {' — '}
-                  {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
-                </li>
-              ))}
-            </ul>
+          <div
+            className='ink-card detail-modal-content quest-attendees-modal'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 18px' }}>Attendees</h3>
+            {a.attendees.length === 0 ? (
+              <p className='field-optional'>No RSVPs yet.</p>
+            ) : (
+              // A grid of centered cards rather than QuestReviewsList's own
+              // left-aligned rows (see .map-review-* in style.css) — that
+              // row layout left a lot of dead space once this modal grew
+              // wider than the shared .detail-modal-content default (see
+              // .quest-attendees-modal); a name/email/status pill has no
+              // long body text underneath it the way a review does, so a
+              // compact centered card reads faster at a glance and actually
+              // uses the extra width instead of just padding a single
+              // column out.
+              <div className='attendee-grid'>
+                {a.attendees.map((att) => (
+                  <div key={att.uid} className='attendee-card'>
+                    <div className='attendee-card-avatar'>
+                      <OrgAvatar name={att.name || 'Unnamed'} seed={att.uid} />
+                    </div>
+                    <p className='attendee-card-name'>{att.name || 'Unnamed'}</p>
+                    {att.email && <p className='attendee-card-email'>{att.email}</p>}
+                    <StatusStamp tone='environment' muted={att.status !== 'checked_in'}>
+                      {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
+                    </StatusStamp>
+                  </div>
+                ))}
+              </div>
+            )}
             <button
               type='button'
               className='photo-lightbox-close'
@@ -387,32 +422,47 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
         </LightboxBackdrop>
       )}
 
-      <div className='quest-expand-section'>
-        <button
-          type='button'
-          className='quest-card-head'
-          style={{ padding: '10px 0' }}
-          onClick={a.toggleReviews}
-          disabled={a.busy}
-          aria-expanded={a.reviewsOpen}
-        >
-          <span className='quest-card-titles'>View Reviews</span>
-          <IconChevron className='quest-chevron' data-open={a.reviewsOpen ? 'true' : 'false'} />
-        </button>
-        <Collapse open={Boolean(a.reviewsOpen && a.reviews)}>
-          <ul className='data-sublist'>
-            {a.reviews?.length === 0 && <li>No reviews yet.</li>}
-            {a.reviews?.map((r) => (
-              <li key={`${r.uid}-${r.eventDate}`}>
-                {formatStars(r.rating)} — {r.name || 'Unnamed'}
-                {r.eventDate ? ` (${formatEventDate(r.eventDate)})` : ''}: {r.body}
-              </li>
-            ))}
-          </ul>
-        </Collapse>
-      </div>
+      {/* Hidden entirely with nothing to show — matches the quest's own map
+          detail (MapQuestDetailBody.jsx), which gates its Reviews tab the
+          same way. No expand/collapse toggle otherwise: shown inline,
+          same as the volunteer-facing detail (mobile/Quests.jsx), all
+          three sharing QuestReviewsList. */}
+      {series.reviewCount > 0 && (
+        <div className='quest-expand-section' style={{ paddingTop: 12 }}>
+          <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
+          <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
+        </div>
+      )}
     </div>
   );
+}
+
+// The soonest occurrence in a series that hasn't happened yet, or null if
+// every occurrence has already passed — `series.occurrences` is already
+// sorted ascending by eventDate (see groupBySeries), so the first upcoming
+// one found is the soonest. A recurring series can have some occurrences
+// past and others still upcoming; this is what "is this series still
+// active" actually means for one, not just checking its `primary` (the
+// earliest occurrence), which could be long past for an ongoing series.
+function nextOccurrence(series) {
+  return series.occurrences.find(isUpcoming) || null;
+}
+
+// Active/upcoming series first (soonest next occurrence first — what the
+// org needs to act on next), then past series after them, most recently
+// finished first — a past series someone might still want to check in on
+// (reviews, attendance) stays reachable rather than disappearing, just
+// pushed to the end and (see QuestSeriesListItem's data-past) rendered
+// de-emphasized like sideQuestGate's own dimmed-but-still-clickable rows.
+function compareSeriesForOrgList(a, b) {
+  const aNext = nextOccurrence(a);
+  const bNext = nextOccurrence(b);
+  if (aNext && bNext) return toDate(aNext.eventDate) - toDate(bNext.eventDate);
+  if (aNext) return -1;
+  if (bNext) return 1;
+  const aLast = a.occurrences[a.occurrences.length - 1];
+  const bLast = b.occurrences[b.occurrences.length - 1];
+  return toDate(bLast.eventDate) - toDate(aLast.eventDate);
 }
 
 function OrgQuests({ creating, setCreating }) {
@@ -436,7 +486,9 @@ function OrgQuests({ creating, setCreating }) {
   }, [user]);
 
   const seriesList = useMemo(
-    () => (quests ? attachSeriesRatings(groupBySeries(quests), seriesAggregates) : []),
+    () => (quests
+      ? attachSeriesRatings(groupBySeries(quests), seriesAggregates).sort(compareSeriesForOrgList)
+      : []),
     [quests, seriesAggregates],
   );
 

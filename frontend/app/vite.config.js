@@ -13,4 +13,14 @@ export default defineConfig({
       '@mobile': fileURLToPath(new URL('../mobile', import.meta.url)),
     },
   },
+  optimizeDeps: {
+    // maplibre-gl loads its vector-tile decoding logic in a web worker
+    // (a separate bundle, maplibre-gl-worker.mjs) — Vite's default dev-time
+    // dependency pre-bundling mishandles that worker file (a known
+    // Vite+maplibre-gl integration issue), so the worker 404s at runtime
+    // and tiles silently never render past the base style/sprite. Excluding
+    // it from pre-bundling lets Vite serve the package's own files as-is
+    // instead.
+    exclude: ['maplibre-gl'],
+  },
 })

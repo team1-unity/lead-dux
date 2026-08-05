@@ -7,7 +7,6 @@ import { db } from '@shared/firebaseapp.jsx';
 import { BottomNav } from '@shared/BottomNav.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
-import { FeedbackToast } from '@shared/FeedbackToast.jsx';
 import { WelcomeTour } from '@shared/WelcomeTour.jsx';
 import { RouteErrorBoundary } from '@shared/RouteErrorBoundary.jsx';
 import { SmoothScroll } from '@shared/SmoothScroll.jsx';
@@ -84,7 +83,6 @@ function PublicHome({ role }) {
   return (
     <PageMotion>
       {role === 'pending_org' && <PendingBanner />}
-      <FeedbackToast />
       {role === 'user' ? (
         <HomeScreen />
       ) : (
