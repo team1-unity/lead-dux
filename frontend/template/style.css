@@ -206,51 +206,45 @@
      image), so this stays pure black regardless of theme. */
   --image-outline: rgba(0, 0, 0, 0.1);
 
-  /* tag rack — TRIAL v3: the extended "meadow/pond/golden/coral" sticker
-     set (v2) was still vivid-saturated, left over from before the accent
-     softened to a muted duck-yellow — it no longer matched the rest of
-     the now-muted palette. Re-muted every hue down to the same "soft,
-     worn-cozy" saturation as the accent/surfaces, each solved against its
-     ink for a real ≥4.6:1 (dark ink #4a3728 for the lighter/cooler hues,
-     cream ink #fffdf8 for the deeper/warmer ones). */
-  --tag-environment: #78b668;
-  --tag-environment-ink: #4a3728;
-  --tag-community: #9f663d;
-  --tag-community-ink: #fffdf8;
-  --tag-youth: #7baec7;
-  --tag-youth-ink: #4a3728;
-  --tag-education: #4a65b5;
-  --tag-education-ink: #fffdf8;
-  --tag-outdoors: #9c682d;
-  --tag-outdoors-ink: #fffdf8;
-  --tag-technology: #64b5ae;
-  --tag-technology-ink: #4a3728;
-  --tag-fitness: #b85546;
-  --tag-fitness-ink: #fffdf8;
-  --tag-food-security: #8f6d3e;
-  --tag-food-security-ink: #fffdf8;
-  --tag-arts: #bc9bcc;
-  --tag-arts-ink: #4a3728;
-  --tag-verified: #78b668;
-  --tag-verified-ink: #4a3728;
-  --tag-rejected: #b85546;
-  --tag-rejected-ink: #fffdf8;
+  /* tag rack — restored to main's original pastel palette (the RIPE pass
+     had re-muted these into deeper/more saturated tones; the paper/
+     paper-card/paper-well cream surfaces above are the only part of that
+     pass being kept). */
+  --tag-environment: #dcefdc;
+  --tag-environment-ink: #3f7a49;
+  --tag-community: #f2edc7;
+  --tag-community-ink: #8f7f1e;
+  --tag-youth: #d7e4f7;
+  --tag-youth-ink: #1e3a73;
+  --tag-education: #d6ecf7;
+  --tag-education-ink: #1b4e66;
+  --tag-outdoors: #f7e4cf;
+  --tag-outdoors-ink: #b06d26;
+  --tag-technology: #cfe9e6;
+  --tag-technology-ink: #15574f;
+  --tag-fitness: #f6d6d0;
+  --tag-fitness-ink: #7a2c22;
+  --tag-food-security: #e7e4b0;
+  --tag-food-security-ink: #52480a;
+  --tag-arts: #e3d6f0;
+  --tag-arts-ink: #48276e;
+  --tag-verified: #dcefdc;
+  --tag-verified-ink: #3f7a49;
+  --tag-rejected: #f8e6e3;
+  --tag-rejected-ink: #c0402f;
 
-  /* rank ladder — TRIAL: exact values from the reference doc's own
-     Iron/Bronze/Silver/Gold/Diamond spec (fill = their dot color, ink =
-     their dot border color). Revert target: iron #a8a89e/#3f3f38, bronze
-     #c97d3e/#4a2a10, silver #c3c7c2/#3d3d38, gold #dba52e/#5c4108,
-     diamond #4fb3c4/#0d3d42. */
-  --rank-iron: #9aa5ae;
-  --rank-iron-ink: #7c8791;
-  --rank-bronze: #c97c4b;
-  --rank-bronze-ink: #a6613a;
-  --rank-silver: #afc0ce;
-  --rank-silver-ink: #8fa4b5;
-  --rank-gold: #f2b94b;
-  --rank-gold-ink: #d89a1f;
-  --rank-diamond: #8fd9e8;
-  --rank-diamond-ink: #5fbbce;
+  /* rank ladder — restored to main's original pastel palette, same reasoning
+     as the tag rack above. */
+  --rank-iron: #dfe3e6;
+  --rank-iron-ink: #454c52;
+  --rank-bronze: #ecd2b3;
+  --rank-bronze-ink: #6b3d10;
+  --rank-silver: #e6e9ec;
+  --rank-silver-ink: #454c52;
+  --rank-gold: #f7e8a8;
+  --rank-gold-ink: #6b4e05;
+  --rank-diamond: #d3ecf5;
+  --rank-diamond-ink: #144a63;
 
   /* semantic — TRIAL: golden accent + dark ink text (matching the
      reference's "Accept Quest" button: bg #F0B23F, text #4A3728) — a
@@ -326,39 +320,39 @@
     --accent: var(--brand-green);
     --accent-contrast: var(--brand-green-ink);
 
-    --tag-environment: #2e3d24;
-    --tag-environment-ink: #b9d9a0;
-    --tag-community: #3d3620;
-    --tag-community-ink: #e0d089;
-    --tag-youth: #232d47;
-    --tag-youth-ink: #a8bce8;
-    --tag-education: #1f3245;
-    --tag-education-ink: #9dc0e0;
-    --tag-outdoors: #453322;
-    --tag-outdoors-ink: #e8b787;
-    --tag-technology: #1e3838;
-    --tag-technology-ink: #9ad6d6;
-    --tag-fitness: #452724;
-    --tag-fitness-ink: #e8a29c;
-    --tag-food-security: #402c24;
-    --tag-food-security-ink: #dba996;
-    --tag-arts: #332a45;
-    --tag-arts-ink: #c3aee0;
-    --tag-verified: #2e3d24;
-    --tag-verified-ink: #b9d9a0;
-    --tag-rejected: #452824;
-    --tag-rejected-ink: #e8a29c;
+    --tag-environment: #23422f;
+    --tag-environment-ink: #a9e0bc;
+    --tag-community: #4a3d10;
+    --tag-community-ink: #f3d873;
+    --tag-youth: #223651;
+    --tag-youth-ink: #aecbf2;
+    --tag-education: #1f3c46;
+    --tag-education-ink: #a7dcee;
+    --tag-outdoors: #4a3319;
+    --tag-outdoors-ink: #f0c290;
+    --tag-technology: #1e3c38;
+    --tag-technology-ink: #9fe0d6;
+    --tag-fitness: #452420;
+    --tag-fitness-ink: #f2b3a7;
+    --tag-food-security: #3c3a14;
+    --tag-food-security-ink: #e3dd8e;
+    --tag-arts: #362949;
+    --tag-arts-ink: #dcc4f0;
+    --tag-verified: #23422f;
+    --tag-verified-ink: #a9e0bc;
+    --tag-rejected: #3a2420;
+    --tag-rejected-ink: #e08a78;
 
-    --rank-iron: #3a3830;
-    --rank-iron-ink: #c9c6ba;
-    --rank-bronze: #402f1c;
-    --rank-bronze-ink: #e0bd8e;
-    --rank-silver: #3d3d36;
-    --rank-silver-ink: #d4d3c9;
-    --rank-gold: #403619;
-    --rank-gold-ink: #f0d98a;
-    --rank-diamond: #1e3438;
-    --rank-diamond-ink: #9adde8;
+    --rank-iron: #3a4147;
+    --rank-iron-ink: #cdd3d6;
+    --rank-bronze: #4a3319;
+    --rank-bronze-ink: #edc79c;
+    --rank-silver: #3d4348;
+    --rank-silver-ink: #d6dadd;
+    --rank-gold: #4a3d10;
+    --rank-gold-ink: #f3d873;
+    --rank-diamond: #1c3c48;
+    --rank-diamond-ink: #a6dcef;
 
     --accent-soft: #3d3520;
     --secondary-ink: #a8bce8;
@@ -382,39 +376,39 @@
   --accent: var(--brand-green);
   --accent-contrast: var(--brand-green-ink);
 
-  --tag-environment: #2e3d24;
-  --tag-environment-ink: #b9d9a0;
-  --tag-community: #3d3620;
-  --tag-community-ink: #e0d089;
-  --tag-youth: #232d47;
-  --tag-youth-ink: #a8bce8;
-  --tag-education: #1f3245;
-  --tag-education-ink: #9dc0e0;
-  --tag-outdoors: #453322;
-  --tag-outdoors-ink: #e8b787;
-  --tag-technology: #1e3838;
-  --tag-technology-ink: #9ad6d6;
-  --tag-fitness: #452724;
-  --tag-fitness-ink: #e8a29c;
-  --tag-food-security: #402c24;
-  --tag-food-security-ink: #dba996;
-  --tag-arts: #332a45;
-  --tag-arts-ink: #c3aee0;
-  --tag-verified: #2e3d24;
-  --tag-verified-ink: #b9d9a0;
-  --tag-rejected: #452824;
-  --tag-rejected-ink: #e8a29c;
+  --tag-environment: #23422f;
+  --tag-environment-ink: #a9e0bc;
+  --tag-community: #4a3d10;
+  --tag-community-ink: #f3d873;
+  --tag-youth: #223651;
+  --tag-youth-ink: #aecbf2;
+  --tag-education: #1f3c46;
+  --tag-education-ink: #a7dcee;
+  --tag-outdoors: #4a3319;
+  --tag-outdoors-ink: #f0c290;
+  --tag-technology: #1e3c38;
+  --tag-technology-ink: #9fe0d6;
+  --tag-fitness: #452420;
+  --tag-fitness-ink: #f2b3a7;
+  --tag-food-security: #3c3a14;
+  --tag-food-security-ink: #e3dd8e;
+  --tag-arts: #362949;
+  --tag-arts-ink: #dcc4f0;
+  --tag-verified: #23422f;
+  --tag-verified-ink: #a9e0bc;
+  --tag-rejected: #3a2420;
+  --tag-rejected-ink: #e08a78;
 
-  --rank-iron: #3a3830;
-  --rank-iron-ink: #c9c6ba;
-  --rank-bronze: #402f1c;
-  --rank-bronze-ink: #e0bd8e;
-  --rank-silver: #3d3d36;
-  --rank-silver-ink: #d4d3c9;
-  --rank-gold: #403619;
-  --rank-gold-ink: #f0d98a;
-  --rank-diamond: #1e3438;
-  --rank-diamond-ink: #9adde8;
+  --rank-iron: #3a4147;
+  --rank-iron-ink: #cdd3d6;
+  --rank-bronze: #4a3319;
+  --rank-bronze-ink: #edc79c;
+  --rank-silver: #3d4348;
+  --rank-silver-ink: #d6dadd;
+  --rank-gold: #4a3d10;
+  --rank-gold-ink: #f3d873;
+  --rank-diamond: #1c3c48;
+  --rank-diamond-ink: #a6dcef;
 
   --accent-soft: #3d3520;
   --secondary-ink: #a8bce8;
@@ -444,40 +438,40 @@
   --accent: #f0e0a0;
   --accent-contrast: #4a3728;
 
-  --tag-environment: #78b668;
-  --tag-environment-ink: #4a3728;
-  --tag-community: #9f663d;
-  --tag-community-ink: #fffdf8;
-  --tag-youth: #7baec7;
-  --tag-youth-ink: #4a3728;
-  --tag-education: #4a65b5;
-  --tag-education-ink: #fffdf8;
-  --tag-outdoors: #9c682d;
-  --tag-outdoors-ink: #fffdf8;
-  --tag-technology: #64b5ae;
-  --tag-technology-ink: #4a3728;
-  --tag-fitness: #b85546;
-  --tag-fitness-ink: #fffdf8;
-  --tag-food-security: #8f6d3e;
-  --tag-food-security-ink: #fffdf8;
-  --tag-arts: #bc9bcc;
-  --tag-arts-ink: #4a3728;
-  --tag-verified: #78b668;
-  --tag-verified-ink: #4a3728;
-  --tag-rejected: #b85546;
-  --tag-rejected-ink: #fffdf8;
+  --tag-environment: #dcefdc;
+  --tag-environment-ink: #3f7a49;
+  --tag-community: #f2edc7;
+  --tag-community-ink: #8f7f1e;
+  --tag-youth: #d7e4f7;
+  --tag-youth-ink: #1e3a73;
+  --tag-education: #d6ecf7;
+  --tag-education-ink: #1b4e66;
+  --tag-outdoors: #f7e4cf;
+  --tag-outdoors-ink: #b06d26;
+  --tag-technology: #cfe9e6;
+  --tag-technology-ink: #15574f;
+  --tag-fitness: #f6d6d0;
+  --tag-fitness-ink: #7a2c22;
+  --tag-food-security: #e7e4b0;
+  --tag-food-security-ink: #52480a;
+  --tag-arts: #e3d6f0;
+  --tag-arts-ink: #48276e;
+  --tag-verified: #dcefdc;
+  --tag-verified-ink: #3f7a49;
+  --tag-rejected: #f8e6e3;
+  --tag-rejected-ink: #c0402f;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
-  --rank-iron: #9aa5ae;
-  --rank-iron-ink: #7c8791;
-  --rank-bronze: #c97c4b;
-  --rank-bronze-ink: #a6613a;
-  --rank-silver: #afc0ce;
-  --rank-silver-ink: #8fa4b5;
-  --rank-gold: #f2b94b;
-  --rank-gold-ink: #d89a1f;
-  --rank-diamond: #8fd9e8;
-  --rank-diamond-ink: #5fbbce;
+  --rank-iron: #dfe3e6;
+  --rank-iron-ink: #454c52;
+  --rank-bronze: #ecd2b3;
+  --rank-bronze-ink: #6b3d10;
+  --rank-silver: #e6e9ec;
+  --rank-silver-ink: #454c52;
+  --rank-gold: #f7e8a8;
+  --rank-gold-ink: #6b4e05;
+  --rank-diamond: #d3ecf5;
+  --rank-diamond-ink: #144a63;
 
   --accent-soft: #e6dacb;
   --secondary-ink: #2e4e8a;
