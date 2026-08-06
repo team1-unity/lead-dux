@@ -50,6 +50,16 @@ export function IconPerson(props) {
   );
 }
 
+export function IconLogout(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" />
+      <path d="M15 8l4 4-4 4" />
+      <path d="M19 12H9" />
+    </svg>
+  );
+}
+
 export function IconPlus(props) {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" {...props}>
@@ -187,6 +197,20 @@ export function IconJournal(props) {
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
       <path d="M12 6.2c-1.6-1.3-3.6-2-6-2v13.6c2.4 0 4.4.7 6 2 1.6-1.3 3.6-2 6-2V4.2c-2.4 0-4.4.7-6 2Z" />
       <path d="M12 6.2v13.6" />
+    </svg>
+  );
+}
+
+// A clock face with a counter-clockwise sweep — "history/last visited",
+// for Home.jsx's quick-actions "Last quest" slot rather than a plain
+// directional arrow, which read as generic "back" instead of "the quest
+// you were just at".
+export function IconHistory(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M4 10a8 8 0 1 1 1.5 6.5" />
+      <path d="M4 4.5v5.5h5.5" />
+      <path d="M12 8v4.3l3 2" />
     </svg>
   );
 }

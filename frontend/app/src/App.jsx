@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
@@ -9,6 +9,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { WelcomeTour } from '@shared/WelcomeTour.jsx';
 import { RouteErrorBoundary } from '@shared/RouteErrorBoundary.jsx';
+import { PreviousPathProvider } from '@shared/PreviousPathContext.jsx';
 import { SmoothScroll } from '@shared/SmoothScroll.jsx';
 import { EventsMap } from '@shared/EventsMap.jsx';
 import { Landing } from './Landing.jsx';
@@ -177,15 +178,30 @@ function AppShell() {
   const { role } = useAuth();
   const location = useLocation();
   const showNav = location.pathname !== '/' || (role && role !== 'onboarding_user');
+
+  // Tracks the pathname one hop back, for Settings/Badges' dynamic "Back to
+  // X" link (see PreviousPathContext.jsx). A layout effect, not a plain
+  // effect — it fires synchronously before paint, so the corrected value is
+  // in place before the browser ever shows a frame, rather than flashing a
+  // stale one-hop-further-back path for a frame first.
+  const [previousPath, setPreviousPath] = useState(null);
+  const currentPathRef = useRef(location.pathname);
+  useLayoutEffect(() => {
+    if (currentPathRef.current !== location.pathname) {
+      setPreviousPath(currentPathRef.current);
+      currentPathRef.current = location.pathname;
+    }
+  }, [location.pathname]);
+
   return (
-    <>
+    <PreviousPathProvider value={previousPath}>
       <RouteErrorBoundary resetKey={location.pathname}>
         <Outlet />
       </RouteErrorBoundary>
       {showNav && <BottomNav />}
       <WelcomeTour />
       <OrgOnboarding />
-    </>
+    </PreviousPathProvider>
   );
 }
 

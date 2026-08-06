@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, limit, query, where } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
-import { StampButton } from '@shared/StampButton.jsx';
 import { DuckMark } from '@shared/Logo.jsx';
 import { ProgressCard } from '@shared/ProgressCard.jsx';
 import { NotificationBanner } from '@shared/NotificationBanner.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
+import { IconQrCode, IconList, IconHistory } from '@shared/icons.jsx';
 
 // A small rotating set rather than one fixed line — Home is the one screen
 // in the app someone opens several times a day, so a single static caption
@@ -28,6 +28,39 @@ function homeCaption() {
 
 function toMillis(value) {
   return (value.toDate ? value.toDate() : new Date(value)).getTime();
+}
+
+// A floating quick-actions HUD, not inline buttons. Mobile: a deliberate
+// game-UI treatment (bordered slot, hard offset shadow, lift-on-hover)
+// rather than this app's usual flat StampButton, icon-only and stacked in
+// the top-right corner. Desktop: a plain list panel instead — icon +
+// label rows divided by hairlines, floating along the right edge (see
+// .home-quick-action in style.css for the breakpoint). "My quests" only
+// appears once there's an actual RSVP'd quest to jump to (see
+// useHasRsvpdQuest above); "Last quest" only once there's a past quest to
+// revisit (see useLastAttendedQuest above) — an empty destination isn't
+// worth a slot on a HUD this small.
+function HomeQuickActions({ hasRsvpd, lastAttended }) {
+  const actions = [
+    { to: '/check-in', icon: IconQrCode, label: 'Check in' },
+    ...(hasRsvpd ? [{ to: '/quests?view=mine', icon: IconList, label: 'My quests' }] : []),
+    ...(lastAttended
+      ? [{ to: '/quests?view=past', icon: IconHistory, label: 'Last quest' }]
+      : []),
+  ];
+
+  return (
+    <nav className="home-quick-actions" aria-label="Quick actions">
+      {actions.map((a) => (
+        <Link key={a.to} to={a.to} className="home-quick-action" aria-label={a.label} title={a.label}>
+          <span className="home-quick-action-icon">
+            <a.icon />
+          </span>
+          <span className="home-quick-action-label">{a.label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
 }
 
 // A quick way back to the quest someone most recently checked into —
@@ -70,6 +103,32 @@ function useLastAttendedQuest(user) {
   return quest;
 }
 
+// Whether "My quests" (quest.rsvpd array-contains the caller — same field
+// Quests.jsx's own view=mine filter checks, see its activity==='mine'
+// branch) has anything to show at all — null while loading, so the quick-
+// actions HUD doesn't flash the button on then immediately hide it once
+// this resolves to false.
+function useHasRsvpdQuest(user) {
+  const [hasRsvpd, setHasRsvpd] = useState(null);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    getDocs(query(collection(db, 'quests'), where('rsvpd', 'array-contains', user.uid), limit(1)))
+      .then((snap) => {
+        if (!cancelled) setHasRsvpd(!snap.empty);
+      })
+      .catch(() => {
+        if (!cancelled) setHasRsvpd(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  return hasRsvpd;
+}
+
 // The new landing screen for the `user` role (see BottomNav's PRIMARY_BY_ROLE
 // and App.jsx's PublicHome) — a quick greeting plus Check in (the
 // wireframe's other primary action, search a quest, is one tap away via
@@ -87,6 +146,7 @@ export function Home() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const lastAttended = useLastAttendedQuest(user);
+  const hasRsvpd = useHasRsvpdQuest(user);
 
   useEffect(() => {
     if (!user) return;
@@ -101,38 +161,27 @@ export function Home() {
   const firstName = profile.name ? profile.name.split(' ')[0] : null;
 
   return (
-    <PageMotion className="home-page">
-      <NotificationBanner />
+    <>
+      {/* Outside PageMotion deliberately — PageMotion's motion.div always
+          carries a `filter` value (even blur(0px) at rest, see
+          PageMotion.jsx), and any filter (like transform) establishes a
+          new containing block for position:fixed descendants. Nested
+          inside it, this HUD would anchor to PageMotion's own narrow
+          centered box instead of the true viewport edge. */}
+      <HomeQuickActions hasRsvpd={hasRsvpd} lastAttended={lastAttended} />
+      <PageMotion className="home-page">
+        <NotificationBanner />
 
-      <div className='home-greeting'>
-        <DuckMark size={140} />
-        <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
-        <p className="duck-caption">{homeCaption()}</p>
-      </div>
+        <div className='home-greeting'>
+          <DuckMark size={140} />
+          <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
+          <p className="duck-caption">{homeCaption()}</p>
+        </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <ProgressCard />
-      </div>
-
-      <div className='home-actions'>
-        <Link to='/check-in' style={{ flex: 1 }}>
-          <StampButton type='button' variant='primary' style={{ width: '100%' }}>
-            Check in
-          </StampButton>
-        </Link>
-        <Link to='/quests?view=mine' style={{ flex: 1 }}>
-          <StampButton type='button' style={{ width: '100%' }}>
-            My quests
-          </StampButton>
-        </Link>
-        {lastAttended && (
-          <Link to='/quests?view=past' style={{ flex: 1 }}>
-            <StampButton type='button' style={{ width: '100%' }}>
-              Last quest
-            </StampButton>
-          </Link>
-        )}
-      </div>
-    </PageMotion>
+        <div style={{ marginBottom: 16 }}>
+          <ProgressCard />
+        </div>
+      </PageMotion>
+    </>
   );
 }

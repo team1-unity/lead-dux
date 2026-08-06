@@ -326,7 +326,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
             {a.qrBusy ? 'Generating…' : 'Generate QR Code'}
           </StampButton>
         ) : (
-          <StampButton type='button' onClick={a.viewQr} disabled={a.qrBusy}>
+          <StampButton type='button' variant='primary' onClick={a.viewQr} disabled={a.qrBusy}>
             {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
           </StampButton>
         )}

@@ -7,6 +7,8 @@ import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
+import { usePreviousPath } from '@shared/PreviousPathContext.jsx';
+import { labelForPath } from '@shared/routeLabels.js';
 import { TopBar } from '@shared/TopBar.jsx';
 import { callMarkBadgesSeen } from '@shared/fetch.jsx';
 import { computeBadges, getLocallySeenBadgeIds, markBadgesSeenLocally } from '@shared/badges.js';
@@ -149,6 +151,8 @@ export function Badges() {
   const [badges, setBadges] = useState(null);
   const [newIds, setNewIds] = useState(() => new Set());
   const isDesktop = useIsDesktop();
+  const previousPath = usePreviousPath();
+  const previousLabel = labelForPath(previousPath);
 
   useEffect(() => {
     if (!user) return;
@@ -199,7 +203,10 @@ export function Badges() {
 
   return (
     <PageMotion>
-      <BackLink to="/profile" label="Profile" />
+      <BackLink
+        to={previousLabel ? previousPath : '/profile'}
+        label={previousLabel || 'Profile'}
+      />
       {isDesktop ? (
         <BadgesDesktop earned={earned} inProgress={inProgress} undiscovered={undiscovered} newIds={newIds} />
       ) : (

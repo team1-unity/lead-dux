@@ -6,23 +6,22 @@ import { callAddSubmissionToGallery } from './fetch.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconChevron, IconX } from './icons.jsx';
+import { IconX } from './icons.jsx';
 
-// Mirrors PendingPhotoSubmissions.jsx's grouped-by-quest shape, but for
-// submissions an org has already approved — the only action here is
+// For submissions an org has already approved — the only action here is
 // "Add to gallery" (see add_submission_to_gallery in functions/main.py),
 // not approve/reject. Org-only: side-quest submissions (reviewed by an
 // admin, no owning org) never have anywhere to add to, so this is only
 // ever mounted from frontend/org/PhotoSubmissions.jsx.
-function groupByQuest(rows) {
-  const map = new Map();
-  rows.forEach((r) => {
-    if (!map.has(r.questId)) map.set(r.questId, { questId: r.questId, questTitle: r.questTitle, items: [] });
-    map.get(r.questId).items.push(r);
-  });
-  return [...map.values()];
-}
-
+//
+// One flat grid across every approved quest, not grouped/collapsible by
+// quest the way the pending queue used to render (and the way
+// PendingPhotoSubmissions.jsx still does for the admin dashboard) — an org
+// deciding what to add to its own public gallery is picking individual
+// photos it likes, not working through one quest's approvals at a time, so
+// there's no reason to make it drill into a per-quest section first. The
+// quest title still shows on each card (see ApprovedCard below) so that
+// context isn't lost, it's just not a grouping/sort key anymore.
 function ApprovedCard({ submission, url, busy, onAdd }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const added = Boolean(submission.addedToGallery);
@@ -30,6 +29,11 @@ function ApprovedCard({ submission, url, busy, onAdd }) {
   return (
     <div className="ink-card submission-card">
       <p className="submission-card-name">{submission.userName || 'Unnamed'}</p>
+      {/* The quest title used to be the group heading these cards sat
+          under (see this file's own module note) — now that every
+          approved photo sits in one flat grid regardless of quest, it
+          shows here instead so that context isn't lost. */}
+      <p className="data-stat" style={{ marginTop: -2, marginBottom: 4 }}>{submission.questTitle}</p>
       {url ? (
         <button
           type="button"
@@ -65,38 +69,6 @@ function ApprovedCard({ submission, url, busy, onAdd }) {
         </LightboxBackdrop>
       )}
     </div>
-  );
-}
-
-function QuestApprovedGroup({ group, urls, busyId, onAdd }) {
-  const [open, setOpen] = useState(true);
-
-  return (
-    <section className="ink-card">
-      <button
-        type="button"
-        className="quest-card-head"
-        style={{ padding: 0 }}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <div className="quest-card-titles">
-          <h3 style={{ marginBottom: 0 }}>{group.questTitle}</h3>
-          <p className="data-stat" style={{ marginTop: 4 }}>
-            {group.items.length} approved photo{group.items.length === 1 ? '' : 's'}
-          </p>
-        </div>
-        <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
-      </button>
-
-      {open && (
-        <div className="submission-grid" style={{ marginTop: 12 }}>
-          {group.items.map((s) => (
-            <ApprovedCard key={s.id} submission={s} url={urls[s.id]} busy={busyId === s.id} onAdd={() => onAdd(s)} />
-          ))}
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -141,17 +113,15 @@ export function ApprovedPhotoSubmissions({ orgId, title = 'Approved — add to y
 
   if (!submissions) return <LoadingSpinner label="Loading approved photos..." />;
 
-  const groups = groupByQuest(submissions);
-
   return (
     <section style={{ marginBottom: 24 }}>
       <h2>{title}</h2>
-      {groups.length === 0 ? (
+      {submissions.length === 0 ? (
         <p>No approved photos yet.</p>
       ) : (
-        <div className="flex flex-col gap-md">
-          {groups.map((group) => (
-            <QuestApprovedGroup key={group.questId} group={group} urls={urls} busyId={busyId} onAdd={add} />
+        <div className="submission-grid">
+          {submissions.map((s) => (
+            <ApprovedCard key={s.id} submission={s} url={urls[s.id]} busy={busyId === s.id} onAdd={() => add(s)} />
           ))}
         </div>
       )}

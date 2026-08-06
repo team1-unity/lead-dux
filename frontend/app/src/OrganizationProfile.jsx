@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -30,7 +30,6 @@ import {
   IconPin,
   IconChevron,
   IconEdit,
-  IconGear,
   IconInstagram,
   IconFacebook,
   IconX,
@@ -430,7 +429,7 @@ const ORG_PHOTO_EXT_BY_CONTENT_TYPE = {
 // QuestPhotoSubmission.jsx) — resolved to download URLs here via
 // getDownloadURL rather than the Cloud Function returning them, so there's
 // nothing to keep in sync if the bucket's URL-signing scheme ever changes.
-function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
+function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
   const [urls, setUrls] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -495,7 +494,7 @@ function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
 
   return (
     <>
-      {isOwner && (
+      {canEdit && (
         <label className="quest-form-ghost-btn stamp-btn" style={{ marginBottom: 12, display: 'inline-block' }}>
           {uploading ? 'Uploading…' : '+ Add photo'}
           <input
@@ -508,7 +507,7 @@ function OrgPhotoGallery({ orgId, paths, isOwner, onPathsChange }) {
         </label>
       )}
       {error && <p className="box-danger">{error}</p>}
-      <PhotoGallery photos={urls} onDelete={isOwner ? handleDelete : undefined} />
+      <PhotoGallery photos={urls} onDelete={canEdit ? handleDelete : undefined} />
     </>
   );
 }
@@ -545,18 +544,34 @@ function OrgQuestCard({ series, orgId, orgName, orgLogoUrl }) {
 // approved; quests are read the same direct-client-query way the main
 // Quests page already reads them.
 //
-// `isOwner` (the signed-in organization viewing its own profile) gets extras
-// a visitor never sees: a pencil on About toggling AboutEditForm (moved here
-// from Profile.jsx — editing now happens on this same page instead of a
-// separate one, and both backend calls it needs — callUpdateOrganizationProfile
-// and callUpdateOrganizationTags — are submitted together as one save) and a
-// compact Active Quests preview linking to the real management page
-// (/org/quests) instead of the full browsable grid, which stays for
-// visitors deciding whether to attend.
+// View and Edit are the same page and the same content — "View profile"
+// and "Edit profile" (BottomNav.jsx's nav avatar menu) both land here,
+// differing only in whether editMode (see below) is on. In View, an
+// organization sees the exact same thing a visitor does; edit mode adds
+// nothing but a handful of small controls on top of that same content —
+// a pencil on About toggling AboutEditForm (editing happens on this same
+// page, not a separate one; both backend calls it needs —
+// callUpdateOrganizationProfile and callUpdateOrganizationTags — are
+// submitted together as one save), a "manage quests" link next to Active
+// Quests, and the photo gallery's add/delete controls. This used to be
+// gated on isOwner alone, which meant "View profile" showed every one of
+// those owner-only controls too, indistinguishable from Edit.
 export function OrganizationProfile() {
   const { orgId } = useParams();
   const { role, user } = useAuth();
+  const location = useLocation();
+  // isOwner is pure identity ("is this your org") — it still decides the
+  // BackLink destination below, but no longer gates any owner-only
+  // control by itself. editMode is the actual view/edit distinction: only
+  // reachable via the nav avatar menu's "Edit profile" link (see
+  // BottomNav.jsx), which is the one thing that sets this state flag —
+  // "View profile," a stale back-navigation, or landing here any other
+  // way (e.g. clicking the org's own name from a quest card) all leave it
+  // unset, so the page renders identically to what any other visitor
+  // sees. There's no page-level toggle back into edit mode by design —
+  // the nav menu is the only door in.
   const isOwner = role === 'organization' && user?.uid === orgId;
+  const editMode = isOwner && Boolean(location.state?.editMode);
   const [org, setOrg] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [seriesList, setSeriesList] = useState(null);
@@ -606,11 +621,10 @@ export function OrganizationProfile() {
             {org.category && <TagStamp tone={hashTone(org.category)}>{org.category}</TagStamp>}
           </div>
         </div>
-        {isOwner && (
-          <Link to="/settings" className="profile-settings-link" aria-label="Settings" title="Settings">
-            <IconGear />
-          </Link>
-        )}
+        {/* No Settings shortcut here anymore — it's already one click away
+            from the same nav avatar menu "Edit profile" is reached from
+            (see BottomNav.jsx), so this was a redundant second door to the
+            same place. */}
       </div>
       {getTrustStatus(org.reviewCount || 0, org.avgRating || 0) === 'under_review' && (
         <p className="box-danger">
@@ -623,7 +637,7 @@ export function OrganizationProfile() {
         <section className="ink-card">
           <div className="flex justify-between items-center">
             <h2 style={{ margin: 0 }}>About</h2>
-            {isOwner && !editingAbout && (
+            {editMode && !editingAbout && (
               <button
                 type="button"
                 className="quest-icon-btn"
@@ -694,7 +708,11 @@ export function OrganizationProfile() {
         <section className="ink-card">
           <div className="flex justify-between items-center">
             <h2 style={{ margin: 0 }}>Active Quests</h2>
-            {isOwner && (
+            {/* Same content either way now (see module note) — this link
+                to the real management dashboard is the one addition edit
+                mode gets here, not a different summary in place of the
+                grid below. */}
+            {editMode && (
               <Link to="/org/quests" aria-label="Manage your quests">
                 <IconChevron style={{ transform: 'rotate(-90deg)' }} />
               </Link>
@@ -702,19 +720,6 @@ export function OrganizationProfile() {
           </div>
           {seriesList === null ? (
             <LoadingSpinner label="Loading quests…" />
-          ) : isOwner ? (
-            <>
-              <p className="data-stat" style={{ marginTop: 10 }}>
-                {seriesList.length === 0 ? 'No active quests right now' : `${seriesList.length} active`}
-              </p>
-              {seriesList.length > 0 && (
-                <ul className="data-sublist" style={{ marginTop: 10 }}>
-                  {seriesList.slice(0, 3).map((series) => (
-                    <li key={series.seriesId}>{series.primary.title}</li>
-                  ))}
-                </ul>
-              )}
-            </>
           ) : seriesList.length === 0 ? (
             <p className="data-stat">No active quests right now.</p>
           ) : (
@@ -738,7 +743,7 @@ export function OrganizationProfile() {
         <OrgPhotoGallery
           orgId={orgId}
           paths={org.photos || []}
-          isOwner={isOwner}
+          canEdit={editMode}
           onPathsChange={(photos) => setOrg((prev) => ({ ...prev, photos }))}
         />
       </section>

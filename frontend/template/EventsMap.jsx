@@ -17,6 +17,7 @@ import { VanishSearchInput } from './VanishSearchInput.jsx';
 import { parseSearch } from './searchTags.js';
 import { FilterPill, FilterButton, DesktopFilterPopover, MobileFilterSheet, useFilterPanel } from './FilterPanel.jsx';
 import { IconList } from './icons.jsx';
+import { IS_NATIVE_APP } from './platform.js';
 
 // How tall the sheet's own peeking sliver is when collapsed — handle bar +
 // label, plus enough extra to preview the first quest card's title/org
@@ -101,6 +102,14 @@ function MobileSheet({ expanded, onExpandedChange, children }) {
     <motion.div
       ref={sheetRef}
       className="events-map-sheet"
+      // Shorter by default (see .events-map-sheet[data-native] in
+      // style.css) — a mobile *web* browser already has its own address
+      // bar/chrome eating into the viewport, so this sheet doesn't need to
+      // reach as high as it does inside the installed Capacitor app, which
+      // has the full screen to itself. peekOffset above is measured off
+      // this element's real rendered height either way, so nothing else
+      // here needs to know which case it is.
+      data-native={IS_NATIVE_APP ? 'true' : undefined}
       style={{ y }}
       animate={{ y: expanded ? 0 : peekOffset }}
       transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 34 }}
@@ -473,7 +482,19 @@ export function EventsMap() {
     // element is just an absolutely-positioned DOM node, so a plain CSS
     // z-index on it works the same way and keeps this one on top of quest
     // pins even after the marker-rebuild effect above re-runs later.
-    el.style.zIndex = '999';
+    //
+    // Deliberately a small value, not 999 — .events-map-pane (this
+    // marker's containing map element) has no z-index of its own, so it
+    // never establishes its own stacking context; a very high z-index
+    // here doesn't stay contained to "above the quest pins," it escapes
+    // upward and gets compared directly against the app's own UI chrome
+    // stacked above the whole map (.events-map-sheet at 5, its own
+    // .events-map-detail-slot at 2) — which is exactly what made this
+    // blue dot render on top of the quest detail sheet on mobile. Quest
+    // pins have no z-index of their own at all (plain DOM order), so any
+    // small positive value already sits above them; this only needs to
+    // stay safely under 2.
+    el.style.zIndex = '1';
     userMarkerRef.current = new Marker({ element: el })
       .setLngLat([userPos.lng, userPos.lat])
       .addTo(mapObjRef.current);

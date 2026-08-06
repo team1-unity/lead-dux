@@ -8,6 +8,8 @@ import { callDeleteAccount, callUpdateAccommodationNeeds } from '@shared/fetch.j
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { TopBar } from '@shared/TopBar.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
+import { usePreviousPath } from '@shared/PreviousPathContext.jsx';
+import { labelForPath } from '@shared/routeLabels.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
@@ -270,20 +272,28 @@ export function DangerZone() {
 // middle of a wide page.
 export function Settings() {
   const { user, role, loading } = useAuth();
+  const previousPath = usePreviousPath();
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
 
+  // Settings is reachable from almost anywhere (the nav's avatar dropdown
+  // works on every page), so "back" means wherever the caller actually
+  // came from, not a single fixed parent — falls back to Profile (an
+  // organization's own public profile page, not the generic member
+  // Profile.jsx — see OrganizationProfile.jsx) when there's no previous
+  // in-app page to reflect, e.g. a direct link or a page refresh.
+  const previousLabel = labelForPath(previousPath);
+  const backTo = previousLabel
+    ? previousPath
+    : role === 'organization'
+      ? `/organizations/${user.uid}`
+      : '/profile';
+  const backLabel = previousLabel || 'Profile';
+
   return (
     <PageMotion>
-      {/* An organization's "profile" is its own public profile page
-          (editable in place there — see OrganizationProfile.jsx), not the
-          generic member Profile.jsx, since that's where its avatar/gear now
-          point (see BottomNav.jsx). */}
-      <BackLink
-        to={role === 'organization' ? `/organizations/${user.uid}` : '/profile'}
-        label="Profile"
-      />
+      <BackLink to={backTo} label={backLabel} />
       <TopBar title="Settings" />
       <div className="settings-grid">
         <ThemePicker />

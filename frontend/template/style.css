@@ -293,6 +293,10 @@
   --radius-button: 14px;
   --nav-height: 64px;
   --nav-height-desktop: 60px;
+  /* TRIAL: desktop sidebar nav (was a horizontal topbar) — quick
+     experiment, see .bottom-nav's own desktop media query. */
+  --sidebar-width-desktop: 240px;
+  --sidebar-width-desktop-collapsed: 76px;
   --bp-wide: 860px;
 }
 
@@ -538,7 +542,13 @@ body {
 @media (min-width: 860px) {
   #root:has(.bottom-nav) {
     max-width: 1180px;
-    padding: calc(var(--nav-height-desktop) + 40px) 48px 48px;
+    /* Left padding always reserves only the COLLAPSED width — content
+       never reflows when the sidebar expands. The sidebar is `position:
+       fixed` (see .bottom-nav) with its own z-index above the page, so an
+       expanded sidebar overlays on top of this reserved strip instead of
+       pushing it over, the same way .events-map-page already anchors to
+       the collapsed width and lets the sidebar sit above it. */
+    padding: 48px 48px 48px calc(var(--sidebar-width-desktop-collapsed) + 48px);
   }
 }
 
@@ -1248,7 +1258,85 @@ nav {
   .bottom-nav-brand {
     display: flex;
     align-items: center;
-    margin-right: 20px;
+    margin-right: 0;
+    /* On desktop this renders as a <button> (it's the sidebar's own
+       expand/collapse toggle, not a link home — see BottomNav.jsx) —
+       these reset the button chrome an anchor never had, harmless on the
+       mobile <Link> variant since this rule only applies at this
+       breakpoint. */
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  /* The global button:hover:not(:disabled) rule (style.css ~line 800) beats
+     a plain .bottom-nav-brand:hover on specificity (type+2 pseudo-classes
+     vs. class+pseudo-class) — the `button` type selector here matches it
+     so this wins instead of the duck picking up the generic grey hover
+     fill every other button gets. */
+  button.bottom-nav-brand:hover,
+  button.bottom-nav-brand:active {
+    background: none;
+  }
+  .bottom-nav-brand-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    /* Left padding matches .bottom-nav-item's own 14px (its icon sits
+       inside that inset) so the duck lines up with the Home/Quests/Map
+       icons below it instead of sitting 10px further left. */
+    padding: 0 4px 0 14px;
+  }
+  /* Collapsed: icon-only rail — labels, the brand wordmark, and the
+     avatar panel's name/email hide; everything centers instead of
+     left-aligning since there's no label to align it against anymore. */
+  .bottom-nav[data-expanded='false'] {
+    width: var(--sidebar-width-desktop-collapsed);
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-brand-row {
+    /* Reset to symmetric padding — the 14px/4px split above exists only
+       to align with the expanded item icons; centering against that same
+       asymmetric padding would land the duck 10px off true-center here. */
+    padding: 0;
+    justify-content: center;
+  }
+  .bottom-nav[data-expanded='false'] .lq-logo-word {
+    display: none;
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-item {
+    justify-content: center;
+    padding: 10px;
+  }
+  /* :not(.bottom-nav-icon) — the icon itself sits in a wrapping <span> too
+     (see .bottom-nav-icon above, for the unread-count badge's positioning),
+     so a bare "span" selector here was hiding the icon along with the
+     label instead of just the label. */
+  .bottom-nav[data-expanded='false'] .bottom-nav-item > span:not(.bottom-nav-icon) {
+    display: none;
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-avatar-link {
+    justify-content: center;
+    padding: 4px;
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-org-name {
+    display: none;
+  }
+  /* Expanded: the link isn't a flex item of anything (its parent,
+     .bottom-nav-avatar-wrap, is a plain block div, not a flex container),
+     so it only ever shrink-to-fits its content by default — giving it the
+     sidebar's full row width here is what gives .bottom-nav-org-name an
+     actual bound to truncate against below, instead of just growing the
+     row to fit a long name and overflowing the sidebar's own edge. */
+  .bottom-nav-avatar-link {
+    width: 100%;
+    min-width: 0;
+  }
+  .bottom-nav-org-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -1274,24 +1362,31 @@ nav {
   z-index: 10;
 }
 @media (min-width: 860px) {
-  /* Same component, flipped to a horizontal topbar — icon + label always
-     visible, no collapse/expand. A long label crowding a narrow vertical
-     rail was the reason to collapse it; that constraint doesn't exist once
-     the bar runs the full window width instead. */
+  /* TRIAL: same component, flipped to a left sidebar instead of a
+     horizontal topbar — full window height, items stacked vertically
+     (see .bottom-nav-item's own desktop override below), avatar/profile
+     panel pinned to the bottom (see .bottom-nav-avatar-wrap) rather than
+     floating at the top-right. Revert target: left:0, right:0, top:0,
+     bottom:auto, width:auto, height:var(--nav-height-desktop),
+     flex-direction:row, justify-content:flex-start, align-items:center,
+     gap:10px, padding:0 32px, border-top:none, border-bottom:none,
+     border-right:none. */
   .bottom-nav {
     left: 0;
-    right: 0;
+    right: auto;
     top: 0;
-    bottom: auto;
-    width: auto;
-    height: var(--nav-height-desktop);
-    flex-direction: row;
+    bottom: 0;
+    width: var(--sidebar-width-desktop);
+    height: 100%;
+    flex-direction: column;
+    align-items: stretch;
     justify-content: flex-start;
-    align-items: center;
-    gap: 10px;
-    padding: 0 32px;
+    gap: 4px;
+    padding: 24px 16px;
     border-top: none;
     border-bottom: none;
+    border-right: 2px solid var(--border);
+    transition: width 0.2s ease;
   }
 }
 .bottom-nav-item {
@@ -1328,12 +1423,17 @@ nav {
   pointer-events: none;
 }
 @media (min-width: 860px) {
+  /* TRIAL: full-width sidebar row (icon + left-aligned label) instead of a
+     compact horizontal-topbar pill. Revert target: justify-content:center,
+     width:auto, padding:8px 16px, border-radius unset (falls back to the
+     base rule's var(--radius-full)). */
   .bottom-nav-item {
     flex-direction: row;
-    justify-content: center;
-    gap: 9px;
-    width: auto;
-    padding: 8px 16px;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
   }
   .bottom-nav-item svg {
     width: 22px;
@@ -1427,29 +1527,41 @@ nav {
   background: transparent;
 }
 
-/* A top-right avatar, desktop only, that opens a Profile/Settings dropdown
-   instead of two separate nav pills (see BottomNav.jsx's avatarOnDesktop).
-   Only rendered at >=860px; mobile keeps the normal Profile/Settings tabs. */
+/* Desktop only — opens a Profile/Settings dropdown instead of two separate
+   nav pills (see BottomNav.jsx's avatarOnDesktop). Only rendered at
+   >=860px; mobile keeps the normal Profile/Settings tabs. TRIAL:
+   margin-top: auto pins it to the bottom of the sidebar's vertical flex
+   column (Discord's own user-panel-at-the-bottom shape) — margin-left:
+   auto was the horizontal-topbar equivalent, pushing it to the bar's far
+   right end instead. */
 .bottom-nav-avatar-wrap {
   position: relative;
-  margin-left: auto;
+  margin-left: 0;
+  margin-top: auto;
 }
 .bottom-nav-avatar-link {
   display: flex;
-  align-items: center;
+  /* align-items: center; */
+  justify-content: flex-start;
   gap: 10px;
-  padding: 4px 4px 4px 0;
+  /* Padding and radius match .bottom-nav-item's own desktop row exactly
+     (10px 14px, var(--radius)) — same reasoning as the left-inset fix
+     above, but for the whole row's shape: this button was still using its
+     original pill padding/radius (4px, radius-full), so it read as a
+     visually different control from Home/Quests/Map/Journal above it
+     instead of one more row in the same list. */
+  padding: 10px 14px;
   border: none;
   background: none;
   font: inherit;
   cursor: pointer;
-  border-radius: var(--radius-full);
-  /* This renders as a plain <a> now for user/organization (straight to
-     Profile, no dropdown) — the global `a { color: var(--link) }` rule
-     doesn't reset text-decoration, so without this the initials show a
-     default underline a <button> version of this never had. */
+  border-radius: var(--radius);
   text-decoration: none;
   color: inherit;
+  transition: background-color 0.15s ease;
+}
+.bottom-nav-avatar-link:hover {
+  background: var(--paper-well);
 }
 .bottom-nav-org-name {
   font-family: var(--font-body);
@@ -1484,10 +1596,17 @@ nav {
   background: var(--paper-card);
   color: var(--line);
 }
+/* TRIAL: opens upward now, anchored to the bottom-left — the avatar it's
+   attached to sits at the bottom of a sidebar now (see
+   .bottom-nav-avatar-wrap), so popping down off the bottom edge of the
+   screen would clip it. Revert target: top: calc(100% + 10px), right: 0,
+   bottom: auto, left: auto. */
 .bottom-nav-avatar-menu {
   position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  bottom: calc(100% + 10px);
+  left: 0;
+  top: auto;
+  right: auto;
   z-index: 11;
   display: flex;
   flex-direction: column;
@@ -1498,27 +1617,123 @@ nav {
   border-radius: var(--radius);
   box-shadow: none;
 }
-.bottom-nav-avatar-menu a {
+/* button included alongside a — Log out is an action, not a route, so it
+   renders as a plain <button role="menuitem">, not a <Link>; same look
+   either way. */
+.bottom-nav-avatar-menu a,
+.bottom-nav-avatar-menu button {
   display: flex;
   align-items: center;
+  /* The global `button { justify-content: center }` base rule (style.css,
+     the icon+label centering fix) otherwise centers Log out — the only
+     real <button> in this menu, since Settings/Edit profile render as
+     <a> and were never affected by that rule. */
+  justify-content: flex-start;
   gap: 10px;
   padding: 9px 12px;
   border-radius: calc(var(--radius) - 4px);
+  width: 100%;
+  background: none;
+  border: none;
+  box-shadow: none;
   color: var(--line);
   text-decoration: none;
+  text-align: left;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.9rem;
 }
 .bottom-nav-avatar-menu a:hover,
+.bottom-nav-avatar-menu button:hover,
 .bottom-nav-avatar-menu a[aria-current='page'] {
   background: var(--accent-soft);
-  color: var(--accent);
 }
-.bottom-nav-avatar-menu a svg {
+.bottom-nav-avatar-menu a svg,
+.bottom-nav-avatar-menu button svg {
   flex: none;
   width: 18px;
   height: 18px;
+}
+/* The badges link sits inline inside the name line (see
+   .bottom-nav-avatar-menu-name), not as its own full-width menu row — the
+   generic `.bottom-nav-avatar-menu a` rule above (display:flex, width:100%,
+   padding) would otherwise stretch it the same as Settings/Edit
+   profile/Log out. Two classes beats that rule's one-class-plus-type
+   specificity, so this wins regardless of source order. */
+.bottom-nav-avatar-menu .bottom-nav-avatar-menu-badges {
+  display: inline-flex;
+  width: auto;
+  padding: 0;
+  gap: 4px !important;
+  border-radius: var(--radius-full);
+}
+.bottom-nav-avatar-menu .bottom-nav-avatar-menu-badges:hover {
+  background: none;
+}
+
+/* Google-account-menu look for the "user" role's dropdown — wider, no
+   border (a soft shadow carries the "floating card" read instead, same
+   elevation-over-outline language Google's own account switcher uses),
+   room for the header below. Only this modifier gets a shadow — the base
+   .bottom-nav-avatar-menu above (pending_org) keeps its plain border,
+   untouched. */
+.bottom-nav-avatar-menu-google {
+  min-width: 260px;
+  padding: 8px;
+  border: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+.bottom-nav-avatar-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 14px;
+}
+/* Compound selector (not a separate .bottom-nav-avatar-menu-photo rule) —
+   .user-avatar's own 64px width/height has equal specificity to a plain
+   class selector, so a same-specificity override here would just lose to
+   whichever rule happens to sit later in the file. */
+.user-avatar.bottom-nav-avatar-menu-photo {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+.bottom-nav-avatar-menu-identity {
+  min-width: 0;
+}
+.bottom-nav-avatar-menu-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--line);
+}
+.bottom-nav-avatar-menu-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bottom-nav-avatar-menu-badges {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: none;
+}
+.bottom-nav-avatar-menu-email {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--line-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bottom-nav-avatar-menu-divider {
+  border-top: 1px solid var(--border);
+  margin: 0 0 6px;
 }
 
 /* Generic page heading block (title + subtitle) — shared by any top-level
@@ -2678,11 +2893,17 @@ a.org-home-stat-tile:hover {
      greeting/toolbar/tag-filters stay put at natural height, and .quest-list
      (below) becomes the one thing that scrolls internally as more quests
      are added, rather than pushing the whole page taller. */
+  /* TRIAL: no more var(--nav-height-desktop) in these two height calcs —
+     that was reserving vertical space for the old horizontal topbar, which
+     doesn't take any vertical space at all now that BottomNav is a left
+     sidebar (see .bottom-nav's own desktop media query). Left as-is, the
+     pane was a flat 60px shorter than the viewport actually available,
+     cropping its own bottom edge. */
   .quest-feed-main {
     max-width: none;
     display: flex;
     flex-direction: column;
-    height: calc(100vh - var(--nav-height-desktop) - 80px);
+    height: calc(100vh - 80px);
   }
   .quest-list {
     max-width: none;
@@ -2693,7 +2914,7 @@ a.org-home-stat-tile:hover {
   }
   .quest-detail-pane {
     position: sticky;
-    top: calc(var(--nav-height-desktop) + 40px);
+    top: 40px;
     /* Fills the viewport below the header at all times, however short its
        own content is — never leaves blank page background showing
        underneath. Capped at that same height (not just a minimum) with its
@@ -2701,7 +2922,7 @@ a.org-home-stat-tile:hover {
        detail (e.g. a quest with reviews) would otherwise grow the whole
        page tall enough to scroll the sticky list out of view entirely,
        rather than just scrolling its own content. */
-    height: calc(100vh - var(--nav-height-desktop) - 80px);
+    height: calc(100vh - 80px);
     overflow-y: auto;
   }
 }
@@ -4389,9 +4610,18 @@ button.data-row:active:not(:disabled) {
 /* A must-dismiss popup notice (NotificationBanner.jsx) — a quest RSVP'd to
    was rescheduled or cancelled. Sits above the greeting, not inside its
    card, so it reads as an interruption rather than part of the normal
-   layout. */
+   layout. z-index here specifically has to clear .home-quick-actions'
+   own 5 (a position:fixed HUD floating in the same top area of the
+   mobile Home screen, see style.css's own note there) — without an
+   explicit z-index, this banner (position:relative with no z-index of
+   its own) painted as plain in-flow content, letting that fixed, higher-
+   stacking HUD render over it whenever they visually overlapped. This
+   should always win against ordinary page-level floating widgets, but
+   still stays well under real modals/lightboxes (30-60 elsewhere in this
+   file). */
 .notification-banner {
   position: relative;
+  z-index: 20;
   margin-bottom: 16px;
 }
 .notification-banner-close {
@@ -4431,12 +4661,124 @@ button.data-row:active:not(:disabled) {
   }
 }
 
-/* A row, not a stack — works the same with 2 buttons (no Last Quest yet)
-   or 3 (once there's a past quest to revisit), each an equal share of the
-   width rather than sized to its own label. */
-.home-actions {
+/* A floating quick-actions HUD (Check in / My quests / Last quest).
+   Mobile: icon-only game-UI quick-slots (bordered, hard offset shadow,
+   gold accent glow + press-down feedback) stacked top-right — top bar is
+   a bottom tab bar here, so that corner is free. Desktop (see the
+   breakpoint below) trades that for a plain list panel instead: a
+   bordered/shadowed card holding all three rows divided by hairlines,
+   since there's room for icon+label to just read on its own rather than
+   needing a slot to pop at a glance. Both float independent of scroll
+   (position:fixed) rather than sitting inline in the page flow. */
+.home-quick-actions {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 10px;
+}
+.home-quick-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--paper-card);
+  color: var(--line);
+  text-decoration: none;
+  box-shadow: 0 3px 0 var(--border);
+  transition:
+    transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+.home-quick-action-icon {
+  display: flex;
+  flex: none;
+}
+.home-quick-action-label {
+  display: none;
+}
+.home-quick-action:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-contrast);
+  background: var(--accent);
+  box-shadow: 0 5px 0 var(--accent-contrast);
+}
+.home-quick-action:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-quick-action {
+    transition:
+      box-shadow 0.15s ease,
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .home-quick-action:hover,
+  .home-quick-action:active {
+    transform: none;
+  }
+}
+@media (min-width: 860px) {
+  /* Desktop swaps the mobile icon-only quick-slots for a floaty list
+     panel — no outer border or shadow, just a soft fill and hairline
+     dividers between rows, rather than three separate chunky buttons;
+     there's room here for labels to just sit readable next to their icon
+     instead of needing a game-HUD slot to read at a glance. */
+  .home-quick-actions {
+    top: 50%;
+    right: -10%;
+    transform: translateY(-50%);
+    gap: 0;
+    min-width: auto;
+    border-radius: var(--radius-lg);
+    background-color: var(--accent-soft);
+    padding: 6px;
+  }
+  .home-quick-action {
+    width: auto;
+    height: auto;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    transform: none;
+  }
+  .home-quick-action:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+  /* The base (mobile) :hover/:active rules above set their own box-shadow
+     and transform for the game-HUD slot look — same selector, same
+     specificity, so without explicitly zeroing those two properties here
+     they'd still win (a later rule only overrides the properties it
+     actually declares, not the whole previous rule), leaving the flat
+     desktop list panel with a leftover chunky-button lift/shadow on
+     hover/press. */
+  .home-quick-action:hover,
+  .home-quick-action:active {
+    box-shadow: none;
+    transform: none;
+  }
+  .home-quick-action:hover {
+    background: var(--accent-soft);
+  }
+  .home-quick-action-label {
+    display: inline;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
 }
 
 .rank-milestones {
@@ -4754,7 +5096,12 @@ button.data-row:active:not(:disabled) {
     left: 0;
     right: 0;
     bottom: 0;
-    height: 95vh;
+    /* Shorter by default — a mobile *web* browser (see EventsMap.jsx's own
+       data-native, driven by Capacitor.isNativePlatform()) already has its
+       own address bar/chrome eating into the viewport, so this doesn't
+       need to reach as high there. The installed app gets the full 95vh
+       back below, unchanged from before this existed. */
+    height: 85vh;
     /* Matches --bottom-nav (var(--paper)), not --paper-card — same fix as
        the desktop sidebar above. */
     background: var(--paper);
@@ -4763,6 +5110,9 @@ button.data-row:active:not(:disabled) {
     z-index: 5;
     display: flex;
     flex-direction: column;
+  }
+  .events-map-sheet[data-native='true'] {
+    height: 95vh;
   }
   .events-map-sheet-handle {
     flex: none;
@@ -4845,32 +5195,24 @@ button.data-row:active:not(:disabled) {
   .events-map-page {
     display: flex;
     flex-direction: column;
-    /* border-box (global reset): height includes padding-top below, so
-       this is the box's true total height — top edge lands at the real
-       viewport top (see the negative margin) and bottom edge lands at the
-       real viewport bottom (no fixed bottom nav to clear at this
-       breakpoint, unlike mobile). */
-    height: 100vh;
-    /* The classic "break out of a centered max-width container" trick —
-       #root itself caps at 1180px and centers via margin:0 auto (see its
-       own rule), unlike every other page in the app, this one page needs
-       to reach the TRUE viewport edges on a wider screen, not just
-       #root's own (still page-padding-cancelling) box. width:auto with
-       matching negative left/right margins naturally resolves to exactly
-       100vw regardless of #root's own width; explicit width:100vw backs
-       that up rather than relying on the margin math alone. */
-    width: 100vw;
-    margin-left: calc(-50vw + 50%);
-    margin-right: calc(-50vw + 50%);
-    margin-top: calc(-1 * (var(--nav-height-desktop) + 40px));
-    margin-bottom: -48px;
-    /* Without this, the sidebar's search row and the map's floating
-       overlays rendered right under the fixed desktop topbar (.bottom-nav,
-       position:fixed;top:0) instead of clearing it — the negative margin
-       above cancels ALL of #root's reserved top space, so this puts back
-       just enough (the nav's own height, not the full original padding)
-       to stay visible below it. */
-    padding-top: var(--nav-height-desktop);
+    /* FIXED: the negative-margin breakout trick (width:100vw +
+       margin-left/right: calc(-50vw + 50%)) assumes #root has symmetric
+       left/right padding. #root's padding is asymmetric now (a large
+       padding-left reserved for the sidebar, a small padding-right — see
+       #root:has(.bottom-nav)), so the % in those margin calcs resolved
+       against a skewed containing-block width and landed the page's left
+       edge ~38px past the sidebar's real right edge. position:fixed
+       anchors straight to the viewport instead, independent of #root's
+       padding entirely. Anchored to the sidebar's collapsed width, not
+       its expanded one — the sidebar is a fixed overlay above this page
+       (see .bottom-nav's z-index), so it only ever needs to clear the
+       collapsed rail; chasing the transient expanded width would need
+       its own :has() rule for how briefly it's ever open. */
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width-desktop-collapsed);
+    right: 0;
+    bottom: 0;
     overflow: hidden;
   }
   .events-map-layout {
