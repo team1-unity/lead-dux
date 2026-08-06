@@ -260,6 +260,7 @@
   --secondary-ink: #2e4e8a;
   --info: #2d6c86;
   --success: #417033;
+  --success-soft: #dcefd2;
   --warning: #9f4f0d;
   --danger: #b73a1d;
   --danger-soft: #f5e2df;
@@ -357,6 +358,7 @@
     --accent-soft: #3d3520;
     --secondary-ink: #a8bce8;
     --success: #b9d9a0;
+    --success-soft: #28401f;
     --warning: #e8b787;
     --danger: #e8a29c;
     --danger-soft: #452724;
@@ -413,6 +415,7 @@
   --accent-soft: #3d3520;
   --secondary-ink: #a8bce8;
   --success: #b9d9a0;
+  --success-soft: #28401f;
   --warning: #e8b787;
   --danger: #e8a29c;
   --danger-soft: #452724;
@@ -476,6 +479,7 @@
   --accent-soft: #e6dacb;
   --secondary-ink: #2e4e8a;
   --success: #417033;
+  --success-soft: #dcefd2;
   --warning: #9f4f0d;
   --danger: #b73a1d;
   --danger-soft: #f5e2df;
@@ -3482,7 +3486,7 @@ a.org-home-stat-tile:hover {
   margin-top: 12px;
 }
 
-/* ---------- Check In confirmation (see CheckIn.jsx) ---------- */
+/* ---------- Check In confirmation (see CheckInConfirm.jsx) ---------- */
 .check-in-confirmation {
   display: flex;
   flex-direction: column;
@@ -3498,9 +3502,51 @@ a.org-home-stat-tile:hover {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent);
   margin-bottom: 4px;
+}
+/* A real, unambiguous success green regardless of theme — this app's own
+   --accent is a muted butter-yellow in the light "theme 9a" palette
+   (see style.css's own header note), which doesn't read as "success" the
+   way a checkmark conventionally should. --success/--success-soft are the
+   same semantic-green pair .box-success already uses elsewhere, just as
+   theme-aware CSS custom properties instead of that rule's hardcoded hex
+   values. */
+.check-in-confirmation-icon[data-tone='success'] {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.check-in-confirmation-icon[data-tone='danger'] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* QuestScanner.jsx's own camera view — .quest-scanner-video is the div
+   html5-qrcode itself renders its <video>/<canvas> into, so nothing else
+   should be nested inside it (the library owns that subtree). The error
+   message is instead an absolutely-positioned sibling, overlaid on top of
+   (not below) the live camera feed and pinned near the top of the frame —
+   the first thing visible without looking away from the camera, unlike
+   the plain-below-the-video placement this replaced. */
+.quest-scanner {
+  position: relative;
+  margin-top: 12px;
+}
+.quest-scanner-video {
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.quest-scanner-error {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 20px);
+  max-width: 300px;
+  z-index: 2;
+  margin: 0;
 }
 
 .section-heading {

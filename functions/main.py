@@ -84,6 +84,17 @@ def _require_admin(req: https_fn.CallableRequest):
 
 DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
 
+# The event QR encodes a real URL (see _make_qr_data_uri) rather than a raw
+# JSON payload, specifically so it's scannable by a phone's own native
+# camera app, not just this app's in-app scanner (QuestScanner.jsx) —
+# whichever one decodes it just opens/navigates to this same link, landing
+# on CheckInConfirm.jsx. Hardcoded to the real production Hosting URL
+# (this project's one deployment, per .firebaserc) rather than derived from
+# the request — there's no "request origin" to derive it from here, this
+# runs once at QR-generation time, for a code that's meant to be printed/
+# displayed at a real in-person event either way.
+CHECKIN_BASE_URL = "https://lead-dux.web.app"
+
 # Point System & Feedback (see AI_README.md) ---------------------------------
 #
 # Three sources count toward a user's points: a flat amount for completing
@@ -164,13 +175,21 @@ def _qr_expires_at(event_date: datetime, event_end_time: datetime | None) -> dat
     return _to_utc(event_date) + timedelta(hours=DEFAULT_EVENT_WINDOW_HOURS)
 
 
-def _make_qr_data_uri(quest_id: str, token: str, version: int) -> str:
-    # No uid in the payload — this QR belongs to the event, not to whoever
-    # happens to scan it. `v` (qrTokenVersion) rides along purely as a
-    # sanity check for check_in_to_event; the token itself is what actually
-    # gets validated (see the constant-time compare there).
-    payload = json.dumps({"questId": quest_id, "token": token, "v": version})
-    image = qrcode.make(payload)
+def _check_in_url(quest_id: str, token: str) -> str:
+    # No uid in the URL — this QR belongs to the event, not to whoever
+    # happens to scan it. qrTokenVersion doesn't ride along here (it never
+    # actually gated anything in check_in_to_event — only the token itself
+    # is validated, via the constant-time compare there); a stale/refreshed
+    # QR is already caught by the token simply no longer matching. Split out
+    # from _make_qr_data_uri as its own pure function so the URL shape
+    # itself is directly unit-testable without decoding a rendered QR image
+    # back to text (this repo has no QR-decoding dependency, only qrcode
+    # for encoding).
+    return f"{CHECKIN_BASE_URL}/check-in/{quest_id}/{token}"
+
+
+def _make_qr_data_uri(quest_id: str, token: str) -> str:
+    image = qrcode.make(_check_in_url(quest_id, token))
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -1829,7 +1848,7 @@ def generate_event_qr_code(req: https_fn.CallableRequest) -> dict:
         token = secrets.token_urlsafe(24)
         ref.update({"qrToken": token, "qrTokenVersion": version})
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
 # Callable from the org dashboard's "View QR Code" button — re-renders
@@ -1848,7 +1867,7 @@ def get_event_qr_code(req: https_fn.CallableRequest) -> dict:
             "No QR code has been generated for this quest yet.",
         )
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, quest.get("qrTokenVersion", 0))}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
 # Callable from the org dashboard's "Refresh QR Code" button — mints a new
@@ -1867,17 +1886,18 @@ def refresh_event_qr_code(req: https_fn.CallableRequest) -> dict:
     version = quest.get("qrTokenVersion", 0) + 1
     ref.update({"qrToken": token, "qrTokenVersion": version})
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
-# Callable from the new user-facing "Scan QR Code" flow (see
-# frontend/template/QuestScanner.jsx) — any signed-in user, not just an
-# org/admin, since the whole point of this redesign is that attendees scan
-# themselves in. questId/token/v come from decoding the event's QR image
-# client-side (see _make_qr_data_uri for the payload shape). Idempotent:
-# scanning an already-checked-in code again succeeds with
-# alreadyCheckedIn=True rather than erroring, since a double scan is an
-# expected accident, not an attack.
+# Callable from CheckInConfirm.jsx (frontend/app/src) — any signed-in user,
+# not just an org/admin, since the whole point of this redesign is that
+# attendees scan themselves in. That page is reached either by opening the
+# event QR's own URL directly (any camera app can scan it — see
+# _make_qr_data_uri) or via this app's own in-app scanner
+# (frontend/template/QuestScanner.jsx), which just decodes the same URL and
+# navigates there instead of calling this itself. Idempotent: scanning an
+# already-checked-in code again succeeds with alreadyCheckedIn=True rather
+# than erroring, since a double scan is an expected accident, not an attack.
 @https_fn.on_call()
 def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)

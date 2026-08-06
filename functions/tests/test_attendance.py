@@ -55,6 +55,15 @@ def _generate_qr(fake_firestore, make_request, call, quest_id="quest-1", uid="or
     return call(main.generate_event_qr_code, make_request(data={"questId": quest_id}, uid=uid, role=role))
 
 
+class TestCheckInUrl:
+    # The event QR encodes this URL directly (see _make_qr_data_uri) rather
+    # than a raw JSON payload, specifically so a phone's native camera app
+    # can scan it too, not just this app's own in-app scanner
+    # (QuestScanner.jsx) — both land on the same CheckInConfirm.jsx route.
+    def test_builds_the_check_in_url(self):
+        assert main._check_in_url("quest-1", "tok-abc") == "https://lead-dux.web.app/check-in/quest-1/tok-abc"
+
+
 class TestGenerateEventQrCode:
     def test_owning_org_generates_a_qr_and_stores_a_token(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "quest-1", orgId="org-1")
