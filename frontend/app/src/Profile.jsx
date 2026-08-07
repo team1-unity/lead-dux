@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
@@ -8,7 +8,7 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { UserAvatar } from '@shared/UserAvatar.jsx';
-import { IconChevron, IconGear } from '@shared/icons.jsx';
+import { IconChevron } from '@shared/icons.jsx';
 import { useEarnedBadges } from '@shared/useEarnedBadges.js';
 import { EditProfileModal } from '@shared/EditProfileModal.jsx';
 import { BadgeRing } from '@mobile/Badges.jsx';
@@ -88,20 +88,28 @@ export function Profile() {
   const { user, role, loading, logout } = useAuth();
   const [name, setName] = useState(null);
   const [photoURL, setPhotoURL] = useState(null);
+  const [duckSkin, setDuckSkin] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const earnedBadges = useEarnedBadges(role === 'user' ? user : null);
   const navigate = useNavigate();
 
+  // A live listener, not a one-time getDoc — BottomNav's avatar dropdown
+  // opens the exact same EditProfileModal as an overlay on top of whichever
+  // page is already showing, Profile included, without navigating away.
+  // A save from that path only ever updated BottomNav's own local state
+  // (see BottomNav.jsx), never this already-mounted page's — a one-time
+  // fetch would keep showing the old photo/duck until the next remount.
   useEffect(() => {
     if (!user) return;
-    getDoc(doc(db, 'users', user.uid)).then((snap) => {
+    return onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.exists() ? snap.data() : {};
       setName(data.name || '');
       // A custom-uploaded photo (Firestore) wins over the Google account
-      // photo (Firebase Auth) wins over the duck-mascot fallback (see
+      // photo (Firebase Auth) wins over the chosen duck fallback (see
       // UserAvatar) — a password account has no Auth photoURL at all, so
       // it falls straight through to the duck.
       setPhotoURL(data.photoURL || user.photoURL || null);
+      setDuckSkin(data.duckSkin || null);
     });
   }, [user]);
 
@@ -148,10 +156,12 @@ export function Profile() {
       user={user}
       currentName={name}
       currentPhotoURL={photoURL}
+      currentDuckSkin={duckSkin}
       onClose={() => setEditingProfile(false)}
-      onSaved={({ name: savedName, photoURL: savedPhotoURL }) => {
+      onSaved={({ name: savedName, photoURL: savedPhotoURL, duckSkin: savedDuckSkin }) => {
         setName(savedName);
         setPhotoURL(savedPhotoURL);
+        setDuckSkin(savedDuckSkin);
         setEditingProfile(false);
       }}
     />
@@ -160,22 +170,18 @@ export function Profile() {
   return (
     <PageMotion>
       <section className='ink-card profile-identity-card'>
-        <Link
-          to='/settings'
-          className='profile-settings-link'
-          aria-label='Settings'
-          title='Settings'
-        >
-          <IconGear />
-        </Link>
-        <UserAvatar photoURL={photoURL} />
+        <UserAvatar photoURL={photoURL} duckSkin={duckSkin} />
         {nameAndBadges}
         <p className='profile-meta'>{user.email}</p>
+        <StampButton type='button' variant='primary' onClick={() => setEditingProfile(true)}>
+          Edit Profile
+        </StampButton>
+        <StampButton as={Link} to='/settings'>
+          Settings
+        </StampButton>
+        <div className='profile-identity-divider' />
         <StampButton type='button' onClick={handleLogout}>
           Log out
-        </StampButton>
-        <StampButton type='button' onClick={() => setEditingProfile(true)}>
-          Edit Profile
         </StampButton>
       </section>
 

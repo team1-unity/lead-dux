@@ -8,11 +8,14 @@ import {
   callCreateRecurringQuest,
   callUpdateQuest,
   callMakeQuestRecurring,
+  callUpdateRecurringSeries,
   callAddQuestSeriesCoverPhoto,
   callRemoveQuestSeriesCoverPhoto,
 } from '@shared/fetch.jsx';
 import { PhotoGallery } from '@shared/PhotoGallery.jsx';
+import { ImageUploadCard } from '@shared/ImageUploadCard.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { AddPropertyMenu } from '@shared/AddPropertyMenu.jsx';
 import { PlaceCombobox } from '@shared/PlaceCombobox.jsx';
 import { ConfirmBox } from '@shared/QuestSeriesRow.jsx';
@@ -239,14 +242,19 @@ function AccessChip({ selected, onClick, children }) {
 // callUpdateQuest instead of callCreateQuest/callCreateRecurringQuest.
 // Touching the When field is the one edit with a real consequence — see
 // whenChanged below — so it's gated behind its own confirmation instead of
-// submitting immediately. "Recurring" is still addable here (via
+// submitting immediately. "Recurring" is addable here (via
 // callMakeQuestRecurring, same call org/Quests.jsx's own — currently
 // unused-in-the-UI — useQuestSeriesActions.makeRecurring already wraps),
-// turning this one occurrence into the first date of a new series, but
-// only when `canMakeRecurring` says it isn't already part of one — a
-// series' overall pattern (frequency/until) isn't editable here once it
-// exists, same granularity delete already draws between "this date" and
-// "the whole series."
+// turning this one occurrence into the first date of a new series, only
+// when `canMakeRecurring` says it isn't already part of one. When it
+// already IS part of one (isExistingSeries), frequency/until are still
+// editable — just routed to callUpdateRecurringSeries instead, which
+// diffs the new pattern against the series' real occurrences rather than
+// generating a second series from scratch (see that function's own
+// module note in functions/main.py for the add/remove/RSVP-safety
+// details). Either way, this form still can't remove the property
+// entirely once it exists — that's the "this date" vs. "the whole
+// series" granularity delete_quest/delete_quest_series already draw.
 export function CreateQuestForm({
   quests,
   onCreated,
@@ -266,8 +274,20 @@ export function CreateQuestForm({
 
   const [form, setForm] = useState(initialRef.current);
   const [startedBlank, setStartedBlank] = useState(false);
-  const [uploadingCover, setUploadingCover] = useState(false);
   const [coverError, setCoverError] = useState('');
+  const [coverModalOpen, setCoverModalOpen] = useState(false);
+  // ImageUploadCard's own onUpload only means "picked and locally
+  // previewed" here, not "actually uploaded" — the real Storage write
+  // waits for the modal's own explicit Upload button (see
+  // uploadCoverPhoto), matching QuestPhotoSubmission's pick-then-confirm
+  // shape rather than uploading the instant a file is dropped.
+  const [pickedCoverFile, setPickedCoverFile] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  // ImageUploadCard is single-image — used here as a repeatable "add one"
+  // widget rather than a multi-file picker (see OrganizationProfile.jsx's
+  // OrgPhotoGallery for the identical pattern). Bumping this remounts it
+  // fresh after each successful upload.
+  const [coverUploadKey, setCoverUploadKey] = useState(0);
   // A brand-new quest with nothing carried over has no placeId yet, so it
   // should start in "searching" mode — but editing an existing quest
   // always has a real location to show back, even on the (older) data
@@ -328,10 +348,15 @@ export function CreateQuestForm({
   const whenChanged = Boolean(editingQuest) && form.whenText !== initialRef.current.whenText;
 
   // Prefilled from an existing series (see computeEditInitialState) rather
-  // than something the organizer just added — frequency/until aren't
-  // editable here for a quest already part of a series (see this
-  // component's own module note), so the row shows for context only.
-  const recurringIsReadOnly = Boolean(editingQuest) && !canMakeRecurring;
+  // than something the organizer just added. Frequency/until are editable
+  // either way now (see update_recurring_series/callUpdateRecurringSeries
+  // in handleSubmit) — this just decides which backend call submitting a
+  // change actually makes: make_quest_recurring (turning a standalone
+  // quest into a brand-new series) vs. update_recurring_series (changing
+  // the pattern of one that already exists). The property still can't be
+  // *removed* from here either way (see the label switch below) — that's
+  // what delete_quest_series's "keep one" option is for instead.
+  const isExistingSeries = Boolean(editingQuest) && !canMakeRecurring;
 
   const resolvedWhen = useMemo(() => parseNaturalWhen(form.whenText), [form.whenText]);
   const resolvedEnd = resolvedWhen ? resolveEndWhen(resolvedWhen, DURATION_MINUTES) : null;
@@ -422,28 +447,37 @@ export function CreateQuestForm({
   // Appends to the series' cover-photo set — there's no cap on how many an
   // org can add (see add_quest_series_cover_photo), so unlike the old
   // single-cover-photo version this never replaces what's already there.
-  async function uploadCoverPhoto(file) {
+  async function uploadCoverPhoto() {
+    if (!pickedCoverFile) return;
     setCoverError('');
-    if (!COVER_CONTENT_TYPES.includes(file.type)) {
+    if (!COVER_CONTENT_TYPES.includes(pickedCoverFile.type)) {
       setCoverError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
       return;
     }
-    if (file.size > COVER_MAX_SIZE_BYTES) {
+    if (pickedCoverFile.size > COVER_MAX_SIZE_BYTES) {
       setCoverError('Photo must be smaller than 10MB.');
       return;
     }
     setUploadingCover(true);
     try {
-      const ext = COVER_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+      const ext = COVER_EXT_BY_CONTENT_TYPE[pickedCoverFile.type] || 'jpg';
       const path = `questCovers/${user.uid}/${Date.now()}.${ext}`;
-      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+      await uploadBytes(storageRef(storage, path), pickedCoverFile, { contentType: pickedCoverFile.type });
       const url = await getDownloadURL(storageRef(storage, path));
       setForm((f) => ({ ...f, coverPhotos: [...f.coverPhotos, url] }));
+      setPickedCoverFile(null);
+      setCoverUploadKey((k) => k + 1);
     } catch (err) {
       setCoverError(err.message || 'Something went wrong uploading that photo.');
     } finally {
       setUploadingCover(false);
     }
+  }
+
+  function closeCoverModal() {
+    setCoverModalOpen(false);
+    setPickedCoverFile(null);
+    setCoverError('');
   }
 
   // Removed locally only — nothing's sent to remove_quest_series_cover_photo
@@ -461,7 +495,7 @@ export function CreateQuestForm({
     if (!form.placeId) next.location = 'Select a location from the suggestions.';
     if (form.accommodationTags.length === 0)
       next.access = 'Select at least one accessibility accommodation.';
-    if (form.addedProperties.recurring && !recurringIsReadOnly && !resolvedUntil)
+    if (form.addedProperties.recurring && !resolvedUntil)
       next.until = 'Try something like "aug 30" or "12/31".';
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -541,6 +575,18 @@ export function CreateQuestForm({
         if (form.addedProperties.recurring && canMakeRecurring) {
           await callMakeQuestRecurring({
             questId: editingQuest.id,
+            frequency: form.frequency,
+            until: dateOnlyToString(resolvedUntil),
+          });
+        } else if (
+          isExistingSeries &&
+          (form.frequency !== initialRef.current.frequency || form.untilText !== initialRef.current.untilText)
+        ) {
+          // Only called when the pattern actually changed — an org just
+          // editing the title/location of one occurrence shouldn't also
+          // re-diff and re-touch the whole series every time it saves.
+          await callUpdateRecurringSeries({
+            seriesId: editingQuest.seriesId || editingQuest.id,
             frequency: form.frequency,
             until: dateOnlyToString(resolvedUntil),
           });
@@ -865,8 +911,10 @@ export function CreateQuestForm({
                 {/* Already part of an existing series (prefilled from
                     computeEditInitialState, not user-added) — nothing to
                     remove here, since this form can't cancel a series'
-                    recurrence, only turn a standalone quest into one. */}
-                {recurringIsReadOnly ? (
+                    recurrence entirely, only change its pattern (see
+                    isExistingSeries/callUpdateRecurringSeries) or turn a
+                    standalone quest into a brand-new one. */}
+                {isExistingSeries ? (
                   <span>Recurring</span>
                 ) : (
                   <button
@@ -880,12 +928,19 @@ export function CreateQuestForm({
                 )}
               </div>
               <div className='quest-form-row-value flex flex-col gap-sm'>
+                {isExistingSeries && (
+                  <p className='field-optional' style={{ margin: '0 0 4px' }}>
+                    Changes apply going forward only — dates that already
+                    happened are never touched, and shrinking this range
+                    is blocked if it would remove a date someone's already
+                    RSVP&rsquo;d to.
+                  </p>
+                )}
                 <label>
                   Frequency
                   <select
                     value={form.frequency}
                     onChange={(e) => patch({ frequency: e.target.value })}
-                    disabled={recurringIsReadOnly}
                   >
                     <option value='daily'>Daily</option>
                     <option value='weekly'>Weekly</option>
@@ -901,7 +956,6 @@ export function CreateQuestForm({
                       value={form.untilText}
                       onChange={(e) => patch({ untilText: e.target.value })}
                       placeholder='e.g. aug 30, 12/31'
-                      disabled={recurringIsReadOnly}
                     />
                   </label>
                   <AnimatePresence mode='wait'>
@@ -1022,29 +1076,45 @@ export function CreateQuestForm({
                 {form.coverPhotos.length > 0 && (
                   <PhotoGallery photos={form.coverPhotos} onDelete={(i) => removeCoverPhoto(form.coverPhotos[i])} />
                 )}
-                <label className='quest-form-ghost-btn stamp-btn' style={{ display: 'inline-block', width: 'fit-content' }}>
-                  {uploadingCover ? 'Uploading...' : '+ Add a photo'}
-                  <input
-                    type='file'
-                    accept='image/jpeg,image/png,image/webp,image/heic,image/heif'
-                    disabled={uploadingCover}
-                    className='visually-hidden'
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadCoverPhoto(file);
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
+                <StampButton type='button' className='quest-form-ghost-btn' onClick={() => setCoverModalOpen(true)}>
+                  + Add a photo
+                </StampButton>
                 {/* Shown here, not per-occurrence — a series-wide gallery
                     (see add_quest_series_cover_photo's own note), same as
                     title/tags/description already effectively are. */}
-                {(recurringIsReadOnly || form.addedProperties.recurring) && (
+                {(isExistingSeries || form.addedProperties.recurring) && (
                   <p className='field-optional'>Applies to every date in this series.</p>
                 )}
-                {coverError && <p className='box-danger'>{coverError}</p>}
+                {!coverModalOpen && coverError && <p className='box-danger'>{coverError}</p>}
               </div>
             </motion.div>
+          )}
+          {coverModalOpen && (
+            <LightboxBackdrop onClose={closeCoverModal} label='Upload image'>
+              <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
+                <ImageUploadCard
+                  key={coverUploadKey}
+                  title='Upload image'
+                  accept={COVER_CONTENT_TYPES.join(',')}
+                  onUpload={(url, file) => setPickedCoverFile(file)}
+                  onRemove={() => setPickedCoverFile(null)}
+                />
+                {coverError && <p className='box-danger'>{coverError}</p>}
+                <div className='flex gap-sm' style={{ marginTop: 12 }}>
+                  <StampButton
+                    type='button'
+                    variant='primary'
+                    onClick={uploadCoverPhoto}
+                    disabled={!pickedCoverFile || uploadingCover}
+                  >
+                    {uploadingCover ? 'Uploading…' : 'Upload'}
+                  </StampButton>
+                  <StampButton type='button' onClick={closeCoverModal} disabled={uploadingCover}>
+                    Cancel
+                  </StampButton>
+                </div>
+              </div>
+            </LightboxBackdrop>
           )}
 
           <AddPropertyMenu

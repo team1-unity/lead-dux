@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
@@ -137,6 +137,7 @@ export function BottomNav() {
   const isDesktop = useIsDesktop();
   const [displayName, setDisplayName] = useState(null);
   const [photoURL, setPhotoURL] = useState(null);
+  const [duckSkin, setDuckSkin] = useState(null);
   const [orgLogoUrl, setOrgLogoUrl] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
@@ -179,23 +180,35 @@ export function BottomNav() {
   // its own OrganizationProfile.jsx page reads) from its org doc, a
   // member's own name and photo (for the image-or-duck avatar below — see
   // UserAvatar) from their user doc. Every other role never touches this.
+  //
+  // A live listener, not a one-time getDoc — this same edit is also
+  // reachable from Profile.jsx/OrganizationProfile.jsx's own pages, which
+  // keep their own separate copy of this same state (see those files'
+  // own notes). BottomNav stays mounted across every navigation (see
+  // AppShell), so a save made through one of those pages would otherwise
+  // never reach this already-mounted nav's local state, leaving the small
+  // avatar shown here stuck on the old photo/duck/name until a full
+  // reload.
   useEffect(() => {
     if (!user) return;
     if (role === 'organization') {
-      getDoc(doc(db, 'organizations', user.uid)).then((snap) => {
+      return onSnapshot(doc(db, 'organizations', user.uid), (snap) => {
         const data = snap.exists() ? snap.data() : {};
         setDisplayName(data.name || '');
         setOrgLogoUrl(data.logoUrl || null);
       });
-    } else if (role === 'user' || role === 'pending_org') {
-      getDoc(doc(db, 'users', user.uid)).then((snap) => {
+    }
+    if (role === 'user' || role === 'pending_org') {
+      return onSnapshot(doc(db, 'users', user.uid), (snap) => {
         const data = snap.exists() ? snap.data() : {};
         setDisplayName(data.name || '');
         // Custom-uploaded photo wins over the Google account photo wins
-        // over the duck-mascot fallback — same priority as Profile.jsx.
+        // over the chosen duck fallback — same priority as Profile.jsx.
         setPhotoURL(data.photoURL || user.photoURL || null);
+        setDuckSkin(data.duckSkin || null);
       });
     }
+    return undefined;
   }, [role, user]);
 
   // Profile's destination becomes a top-right avatar on desktop (matching
@@ -412,6 +425,20 @@ export function BottomNav() {
                       to={`/organizations/${user.uid}`}
                       state={{ editMode: true }}
                       role='menuitem'
+                      // Both links share the exact same pathname (see the
+                      // note above) — a pathname-only aria-current check
+                      // can't tell them apart, so whichever one matched on
+                      // an *earlier* navigation just stayed lit regardless
+                      // of which one was actually clicked most recently.
+                      // location.state?.editMode (OrganizationProfile.jsx's
+                      // own read of it) is the only thing that actually
+                      // differs between them, so both checks below key off
+                      // it instead, matching what the page itself is doing.
+                      aria-current={
+                        location.pathname === `/organizations/${user.uid}` && location.state?.editMode
+                          ? 'page'
+                          : undefined
+                      }
                     >
                       <IconEdit /> Edit profile
                     </Link>
@@ -419,7 +446,9 @@ export function BottomNav() {
                       to={`/organizations/${user.uid}`}
                       role='menuitem'
                       aria-current={
-                        location.pathname === `/organizations/${user.uid}` ? 'page' : undefined
+                        location.pathname === `/organizations/${user.uid}` && !location.state?.editMode
+                          ? 'page'
+                          : undefined
                       }
                     >
                       <IconPerson /> View profile
@@ -462,7 +491,7 @@ export function BottomNav() {
                     setAvatarMenuEverOpened(true);
                   }}
                 >
-                  <UserAvatar photoURL={photoURL} size={24} className='nav-avatar nav-avatar-photo' />
+                  <UserAvatar photoURL={photoURL} duckSkin={duckSkin} className='nav-avatar nav-avatar-photo' />
                   {showNameNextToAvatar && displayName && (
                     <span className='bottom-nav-org-name'>{displayName}</span>
                   )}
@@ -472,7 +501,7 @@ export function BottomNav() {
                     <div className='bottom-nav-avatar-menu-header'>
                       <UserAvatar
                         photoURL={photoURL}
-                        size={40}
+                        duckSkin={duckSkin}
                         className='user-avatar bottom-nav-avatar-menu-photo'
                       />
                       <div className='bottom-nav-avatar-menu-identity'>
@@ -531,10 +560,12 @@ export function BottomNav() {
                     user={user}
                     currentName={displayName}
                     currentPhotoURL={photoURL}
+                    currentDuckSkin={duckSkin}
                     onClose={() => setEditingProfile(false)}
-                    onSaved={({ name: savedName, photoURL: savedPhotoURL }) => {
+                    onSaved={({ name: savedName, photoURL: savedPhotoURL, duckSkin: savedDuckSkin }) => {
                       setDisplayName(savedName);
                       setPhotoURL(savedPhotoURL);
+                      setDuckSkin(savedDuckSkin);
                       setEditingProfile(false);
                     }}
                   />
@@ -552,7 +583,7 @@ export function BottomNav() {
                   aria-expanded={avatarMenuOpen}
                   onClick={() => setAvatarMenuOpen((v) => !v)}
                 >
-                  <UserAvatar photoURL={photoURL} size={24} className='nav-avatar nav-avatar-photo' />
+                  <UserAvatar photoURL={photoURL} duckSkin={duckSkin} className='nav-avatar nav-avatar-photo' />
                 </button>
                 {avatarMenuOpen && (
                   <div className='bottom-nav-avatar-menu' role='menu'>

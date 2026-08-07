@@ -3,10 +3,17 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
 import { useAuth } from './AuthContext.jsx';
-import { groupBySeries, attachSeriesRatings, attachOrgLogos, isUpcoming, toDate } from './questSeries.js';
+import {
+  groupBySeries,
+  attachSeriesRatings,
+  attachOrgLogos,
+  isUpcoming,
+  toDate,
+  nextExplorableOccurrence,
+} from './questSeries.js';
 import { MAP_STYLE_URL, createQuestPinElement, createUserPositionElement, paintQuestPin } from './mapStyle.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
@@ -244,8 +251,12 @@ export function EventsMap() {
       getDocs(collection(db, 'quests')),
       getDocs(collection(db, 'questSeries')),
       getDocs(collection(db, 'organizations')),
+      // Same query mobile/Quests.jsx's own Past Attended filter uses — an
+      // eventId this map filters out below needs to match whichever
+      // occurrence a user actually checked into, not just RSVP'd to.
+      getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid))),
     ])
-      .then(([questsSnap, seriesSnap, orgsSnap]) => {
+      .then(([questsSnap, seriesSnap, orgsSnap, attendanceSnap]) => {
         // Filtered to upcoming occurrences BEFORE grouping, not after — a
         // recurring series' `primary` (groupBySeries' own earliest-occurrence
         // pick) is the *first ever* occurrence otherwise, which for a series
@@ -260,10 +271,23 @@ export function EventsMap() {
         const quests = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         const seriesAgg = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         const logoByOrgId = new Map(orgsSnap.docs.map((d) => [d.id, d.data().logoUrl]));
+        const attendedEventIds = new Set(attendanceSnap.docs.map((d) => d.data().eventId));
+        // The map is for exploring what to do next, not a second copy of
+        // "my quests" — a series someone's already RSVP'd to (or already
+        // attended) has nothing left to explore here. A recurring series
+        // still shows if it has another upcoming date that's neither, just
+        // pointed at that date instead of its (already-spoken-for) earliest
+        // one — see nextExplorableOccurrence.
         const groups = attachOrgLogos(
           attachSeriesRatings(groupBySeries(quests), seriesAgg),
           logoByOrgId,
-        ).filter((g) => g.primary.lat != null && g.primary.lng != null);
+        )
+          .map((g) => {
+            const primary = nextExplorableOccurrence(g, user.uid, attendedEventIds);
+            return primary ? { ...g, primary } : null;
+          })
+          .filter(Boolean)
+          .filter((g) => g.primary.lat != null && g.primary.lng != null);
         setSeriesList(groups);
       })
       .catch((err) => {

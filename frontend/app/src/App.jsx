@@ -179,19 +179,24 @@ function AppShell() {
   const location = useLocation();
   const showNav = location.pathname !== '/' || (role && role !== 'onboarding_user');
 
-  // Tracks the pathname one hop back, for Settings/Badges' dynamic "Back to
-  // X" link (see PreviousPathContext.jsx). A layout effect, not a plain
-  // effect — it fires synchronously before paint, so the corrected value is
-  // in place before the browser ever shows a frame, rather than flashing a
-  // stale one-hop-further-back path for a frame first.
+  // Tracks the full path (pathname + search) one hop back, for Settings/
+  // Badges/quest-detail's dynamic "Back to X" link (see
+  // PreviousPathContext.jsx) — includes the query string, not just the
+  // route, so a caller that reflects filter/search state in its own URL
+  // (see mobile/Quests.jsx) gets that state back too on the way in, not
+  // just the bare route. A layout effect, not a plain effect — it fires
+  // synchronously before paint, so the corrected value is in place before
+  // the browser ever shows a frame, rather than flashing a stale
+  // one-hop-further-back path for a frame first.
   const [previousPath, setPreviousPath] = useState(null);
-  const currentPathRef = useRef(location.pathname);
+  const fullPath = location.pathname + location.search;
+  const currentPathRef = useRef(fullPath);
   useLayoutEffect(() => {
-    if (currentPathRef.current !== location.pathname) {
+    if (currentPathRef.current !== fullPath) {
       setPreviousPath(currentPathRef.current);
-      currentPathRef.current = location.pathname;
+      currentPathRef.current = fullPath;
     }
-  }, [location.pathname]);
+  }, [fullPath]);
 
   return (
     <PreviousPathProvider value={previousPath}>

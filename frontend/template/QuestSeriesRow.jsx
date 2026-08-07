@@ -4,7 +4,7 @@ import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconShare, IconCheck, IconX } from './icons.jsx';
+import { IconShare, IconCheck } from './icons.jsx';
 
 export function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
@@ -105,14 +105,6 @@ export function ShareButton({ seriesId, questTitle, iconOnly = false, disabled =
                 )}
               </StampButton>
             </div>
-            <button
-              type="button"
-              className="photo-lightbox-close"
-              onClick={() => setModalOpen(false)}
-              aria-label="Close"
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}
@@ -202,7 +194,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             {a.qrBusy ? 'Generating…' : 'Generate QR Code'}
           </StampButton>
         ) : (
-          <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
+          <StampButton type="button" variant="primary" onClick={a.viewQr} disabled={a.qrBusy}>
             {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
           </StampButton>
         )}

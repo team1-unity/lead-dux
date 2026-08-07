@@ -339,10 +339,6 @@ export function PendingPhotoReview() {
       {reviewOpen && (
         <LightboxBackdrop onClose={closeReview} label="Review pending photos" className="pending-review-backdrop">
           <div className="pending-review-modal" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="photo-lightbox-close" onClick={closeReview} aria-label="Close">
-              <IconX width={18} height={18} />
-            </button>
-
             {topPhoto ? (
               <>
                 <div className="pending-review-stack">

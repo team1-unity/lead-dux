@@ -7,6 +7,8 @@ import { callRsvpToQuest, callCancelRsvp, callGetSideQuestStatus } from '@shared
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
+import { usePreviousPath } from '@shared/PreviousPathContext.jsx';
+import { labelForPath } from '@shared/routeLabels.js';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { QuestDetailBody, sideQuestGate } from '@mobile/Quests.jsx';
 
@@ -19,6 +21,7 @@ export function QuestDetails() {
   const { seriesId } = useParams();
   const navigate = useNavigate();
   const { user, role, loading } = useAuth();
+  const previousPath = usePreviousPath();
   const [series, setSeries] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -78,9 +81,19 @@ export function QuestDetails() {
   if (loading || !series) return <LoadingSpinner label="Loading quest…" />;
   if (!user) return <Navigate to="/login" replace />;
 
+  // Reachable from Explore Quests (any filter/search/sort — see
+  // mobile/Quests.jsx's own URL-syncing effect, which is what makes
+  // `previousPath` carry that state back), an organization's public
+  // profile ("Active Quests" cards), the map, or a direct link — "back"
+  // should reflect whichever of those actually got the caller here, not
+  // always the plain browsing list.
+  const previousLabel = labelForPath(previousPath);
+  const backTo = previousLabel ? previousPath : '/quests';
+  const backLabel = previousLabel || 'Quests';
+
   return (
     <PageMotion>
-      <BackLink to="/quests" label="Quests" />
+      <BackLink to={backTo} label={backLabel} />
       <div className="ink-card">
         <QuestDetailBody
           series={series}

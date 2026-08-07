@@ -39,9 +39,27 @@ export function QuestScanner() {
   // just navigates away), so the only thing left to render here is an
   // error.
   const [error, setError] = useState(null);
+  // Distinct from `error` — this is the ordinary "browser's native camera
+  // permission dialog hasn't been answered yet" wait, not a failure. Starts
+  // true and flips off as soon as .start() actually settles either way, so
+  // the empty video box doesn't just sit blank while that prompt is up.
+  const [requesting, setRequesting] = useState(true);
 
   useEffect(() => {
-    const scanner = new Html5Qrcode(elementId);
+    let scanner = null;
+    // True once this effect's cleanup has run — checked inside .start()'s
+    // own .then() below, not just read once here, because unmounting
+    // quickly (a fast back-navigation, or the auto-navigate-on-decode
+    // itself) can happen *before* .start() finishes acquiring the camera.
+    // Camera startup is real hardware/permission-prompt latency, not
+    // instant, and it's much more likely to still be in flight on a phone
+    // than on a desktop webcam that's already warm — which is exactly why
+    // this raced on mobile specifically. Calling stop() in the cleanup
+    // below against a scanner that hasn't actually started yet is a no-op
+    // (nothing to release yet), so without this, whatever camera stream
+    // .start() goes on to acquire *after* that point never gets stopped at
+    // all — an orphaned getUserMedia stream left running indefinitely.
+    let unmounted = false;
 
     function handleDecoded(decodedText) {
       if (busyRef.current) return;
@@ -59,17 +77,67 @@ export function QuestScanner() {
       navigate(`/check-in/${questId}/${token}`);
     }
 
-    scanner
-      .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: 220 },
-        handleDecoded,
-        () => {} // per-frame "no code found yet" — expected while aiming the camera, not an error
-      )
-      .catch((err) => setError(`Camera unavailable: ${err.message || err}`));
+    // getUserMedia's rejection shape (a real DOMException, surfaced here
+    // via html5-qrcode) is specific enough to give a real answer instead
+    // of the raw browser error text — "NotAllowedError: Permission denied"
+    // reads like a crash, "Allow camera access..." reads like something to
+    // actually do about it.
+    function messageFor(err) {
+      const name = err?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        return 'Camera access is turned off for Lead-Dux. Allow camera access for this site in your browser or device settings, then reload this page.';
+      }
+      if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        return "No camera was found on this device — check-in still works by opening the event's QR link directly.";
+      }
+      if (name === 'NotReadableError') {
+        return 'The camera is already in use by another app. Close it and reload this page.';
+      }
+      return `Camera unavailable: ${err?.message || err}`;
+    }
+
+    // Both the constructor and .start() itself (not just its returned
+    // promise) can throw synchronously depending on the environment — e.g.
+    // navigator.mediaDevices being entirely absent in an insecure context
+    // or an unusual WebView. Uncaught, that propagates straight out of this
+    // effect to the route-level error boundary ("This page hit a snag"),
+    // which is exactly the crash a denied/missing camera permission should
+    // never produce — this should always resolve to the in-page message
+    // below instead.
+    try {
+      scanner = new Html5Qrcode(elementId);
+      scanner
+        .start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: 220 },
+          handleDecoded,
+          () => {} // per-frame "no code found yet" — expected while aiming the camera, not an error
+        )
+        .then(() => {
+          setRequesting(false);
+          // The camera only actually finished starting after this
+          // component was already torn down — release it now, since the
+          // cleanup below ran too early to catch it.
+          if (unmounted) scanner.stop().catch(() => {}).finally(() => scanner.clear());
+        })
+        .catch((err) => {
+          setRequesting(false);
+          if (!unmounted) setError(messageFor(err));
+        });
+    } catch (err) {
+      setRequesting(false);
+      setError(messageFor(err));
+    }
 
     return () => {
-      scanner.stop().catch(() => {}).finally(() => scanner.clear());
+      unmounted = true;
+      if (!scanner) return;
+      try {
+        scanner.stop().catch(() => {}).finally(() => scanner.clear());
+      } catch {
+        // .start() never actually got underway (e.g. it threw synchronously
+        // above) — nothing running to stop.
+      }
     };
   }, [elementId, navigate]);
 
@@ -80,6 +148,9 @@ export function QuestScanner() {
           pinned near the top of the frame, so it's the first thing
           visible without looking away from — or scrolling past — the
           camera itself. */}
+      {requesting && !error && (
+        <p className="quest-scanner-status">Requesting camera access…</p>
+      )}
       {error && <p className="quest-scanner-error box-danger">{error}</p>}
     </div>
   );

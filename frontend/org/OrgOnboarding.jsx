@@ -97,10 +97,6 @@ function OrgOnboardingWizard({ onComplete }) {
   return (
     <div className="tour-backdrop" role="dialog" aria-modal="true" aria-label="Organization walkthrough">
       <div className="ink-card tour-card org-onboarding-card">
-        <button type="button" className="tour-close" onClick={onComplete} aria-label="Skip walkthrough">
-          &times;
-        </button>
-
         <div className="onboarding-progress">
           <div className="onboarding-progress-fill" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
         </div>

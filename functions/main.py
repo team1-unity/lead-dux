@@ -1234,6 +1234,140 @@ def make_quest_recurring(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "seriesId": series_id, "questIds": quest_ids}
 
 
+# Callable from the org/admin quest-edit form's Recurring section (see
+# CreateQuestForm.jsx — this used to be permanently read-only once a series
+# existed; update_quest's own module note explains why frequency/until
+# still can't be touched from *that* function specifically, but editing a
+# pattern is exactly what this one is for instead).
+#
+# Diffs the new frequency/until against whichever occurrences already
+# exist for this series and adds/removes dates to match — anchored to the
+# series' own first (earliest) occurrence, which never moves; only
+# frequency/until change. Past occurrences (already happened) are never
+# touched regardless of the new pattern — they're historical record, not
+# something a schedule change should be able to retroactively rewrite, the
+# same "this date vs. the whole series" granularity delete_quest/
+# delete_quest_series already draw.
+#
+# Blocks the whole update (nothing partially applies) if any occurrence
+# that the new pattern would remove already has at least one RSVP —
+# silently dropping someone's RSVP because an org shortened a series is
+# worse than telling the org to sort those out first (cancel that date
+# individually via delete_quest, or wait for attendees to un-RSVP) before
+# shrinking the series around them.
+@https_fn.on_call()
+def update_recurring_series(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    series_id = req.data.get("seriesId")
+    if not series_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "seriesId is required.",
+        )
+
+    db = firestore.client()
+    occurrence_docs = list(db.collection("quests").where("seriesId", "==", series_id).stream())
+    if not occurrence_docs:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            f"No series {series_id}.",
+        )
+    quests_by_id = {doc.id: doc.to_dict() for doc in occurrence_docs}
+    first = min(quests_by_id.values(), key=lambda q: q["eventDate"])
+
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and first.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only edit your own organization's quests.",
+        )
+
+    tz = first.get("timezone") or "UTC"
+    zone = ZoneInfo(tz)
+    frequency = _validate_frequency(req.data.get("frequency"))
+    until = _parse_event_datetime(req.data.get("until"), "until", tz)
+    target_dates = _generate_series_dates(first["eventDate"], frequency, until, tz)
+    target_date_keys = {d.astimezone(zone).date() for d in target_dates}
+
+    now = datetime.now(timezone.utc)
+    existing_by_date_key = {
+        quest["eventDate"].astimezone(zone).date(): (doc_id, quest)
+        for doc_id, quest in quests_by_id.items()
+    }
+
+    # Only ever consider occurrences that haven't happened yet — a past
+    # date missing from the new pattern isn't "removed," it already
+    # happened under whatever pattern was in effect at the time.
+    to_remove = [
+        (doc_id, quest)
+        for date_key, (doc_id, quest) in existing_by_date_key.items()
+        if quest["eventDate"] >= now and date_key not in target_date_keys
+    ]
+    conflicts = [(doc_id, quest) for doc_id, quest in to_remove if quest.get("rsvpd")]
+    if conflicts:
+        details = "; ".join(
+            f"{quest['eventDate'].astimezone(zone).strftime('%b %-d, %Y')} "
+            f"({len(quest['rsvpd'])} RSVP'd)"
+            for _, quest in conflicts
+        )
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            f"Can't shrink this series — these dates already have RSVPs: {details}. "
+            "Cancel those dates individually first, then try again.",
+        )
+
+    to_add = [
+        d for d in target_dates
+        if d >= now and d.astimezone(zone).date() not in existing_by_date_key
+    ]
+    duration = (
+        first["eventEndTime"] - first["eventDate"]
+        if first.get("eventEndTime") is not None
+        else None
+    )
+
+    # Not batched with the writes below — _delete_quest's own attendance/
+    # feedback/journal cleanup queries don't compose with an in-flight
+    # batch (same reason delete_quest_series loops plain deletes instead
+    # of batching them). Every occurrence here is already confirmed
+    # rsvpd-free above, so there's nothing time-sensitive about doing
+    # these one at a time first.
+    for doc_id, _quest in to_remove:
+        _delete_quest(db, db.collection("quests").document(doc_id))
+
+    removed_ids = {doc_id for doc_id, _quest in to_remove}
+    batch = db.batch()
+    for occurrence_date in to_add:
+        doc_ref = db.collection("quests").document()
+        occurrence_end = occurrence_date + duration if duration is not None else None
+        batch.set(doc_ref, _quest_doc_fields(
+            title=first["title"], description=first["description"], tags=first.get("tags", []),
+            location=first.get("location", ""), tz=tz, capacity=first.get("capacity"),
+            series_id=series_id, recurrence_frequency=frequency, recurrence_until=until,
+            event_date=occurrence_date, event_end_time=occurrence_end,
+            org_id=first.get("orgId"), org_name=first.get("orgName"), is_default=first.get("isDefault", False),
+            tier=first.get("tier"), place_id=first.get("placeId"),
+            lat=first.get("lat"), lng=first.get("lng"),
+            accommodation_tags=first.get("accommodationTags"), accommodation_details=first.get("accommodationDetails"),
+        ))
+    # Every doc in a series shares recurrenceFrequency/recurrenceUntil (see
+    # _quest_doc_fields) — including the ones just removed would be
+    # redundant, and past occurrences get updated too so nothing in the
+    # series is left pointing at a stale pattern.
+    for doc_id in quests_by_id:
+        if doc_id in removed_ids:
+            continue
+        batch.update(db.collection("quests").document(doc_id), {
+            "recurrenceFrequency": frequency,
+            "recurrenceUntil": until,
+        })
+    batch.commit()
+
+    return {"success": True, "added": len(to_add), "removed": len(to_remove)}
+
+
 # One-time (well — re-runnable, but idempotent) admin utility: every quest
 # that has a placeId already had a real place selected via Places
 # Autocomplete, but coordinates weren't captured client-side until the map

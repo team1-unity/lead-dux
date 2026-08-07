@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import {
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  updateEmail,
-  updatePassword,
-} from 'firebase/auth';
 import { storage } from './firebaseapp.jsx';
 import { callUpdateUserProfile } from './fetch.jsx';
 import { StampButton } from './StampButton.jsx';
+import { UserAvatar } from './UserAvatar.jsx';
+import { AvatarCropModal } from './AvatarCropModal.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconX } from './icons.jsx';
+import { IconEdit } from './icons.jsx';
+import { DUCK_SKINS, DEFAULT_DUCK_SKIN } from './duckSkins.js';
 
 const PROFILE_PHOTO_CONTENT_TYPES = [
   'image/jpeg',
@@ -28,41 +25,41 @@ const PROFILE_PHOTO_EXT_BY_CONTENT_TYPE = {
   'image/heif': 'heif',
 };
 
-// Name + profile picture live in Firestore (users/{uid}), so those two go
-// through update_user_profile like everything else in this app ("every
-// write goes through a Cloud Function"). Email and password are Firebase
-// Auth's own concern instead — updateEmail/updatePassword talk to Auth
-// directly, no Cloud Function involved — and only appear at all for an
-// account that actually signed in with a password; a Google-only account
-// has no password to change and Google, not this app, owns its email.
-// Both require a fresh reauthentication first (Firebase's own
-// "requires-recent-login" rule for anything security-sensitive), so
-// "Current password" is asked for once and reused for whichever of the
-// two actually changed.
+// Visual identity only — name, profile picture, and the duck-avatar
+// fallback (all three live on users/{uid}, written through
+// update_user_profile like everything else in this app). Email/password
+// are account-security concerns, not identity, and live on Settings'
+// Account section instead (see Settings.jsx's AccountSection) — the two
+// used to share this one modal, but "who am I" and "how do I sign in"
+// aren't really the same decision, and splitting them means Settings can
+// also gate a fresh reauthentication around just the security-sensitive
+// half instead of every save here needing to ask for a password.
 //
 // Shared, not Profile.jsx-only — the nav's avatar dropdown (see
 // BottomNav.jsx) also opens this directly, from wherever in the app the
 // caller happens to be, rather than routing to /profile first.
-export function EditProfileModal({ user, currentName, currentPhotoURL, onClose, onSaved }) {
-  const isPasswordProvider = user.providerData.some((p) => p.providerId === 'password');
+//
+// The photo itself saves immediately (see handleAvatarSave), independent
+// of this form's own Save button — cropping and clicking Save inside
+// AvatarCropModal already is the confirmation for that specific change,
+// the same way OrganizationProfile's logo upload always saved the instant
+// a file was picked. Only name/duckSkin wait for the form's own Save.
+export function EditProfileModal({ user, currentName, currentPhotoURL, currentDuckSkin, onClose, onSaved }) {
   const [name, setName] = useState(currentName || '');
-  const [file, setFile] = useState(null);
-  const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
-  const [newEmail, setNewEmail] = useState(user.email || '');
-  const [newPassword, setNewPassword] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
+  const [photoURL, setPhotoURL] = useState(currentPhotoURL || null);
+  const [duckSkin, setDuckSkin] = useState(currentDuckSkin || DEFAULT_DUCK_SKIN);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!file) {
-      setLocalPreviewUrl(null);
-      return undefined;
-    }
-    const url = URL.createObjectURL(file);
-    setLocalPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+  async function handleAvatarSave(file) {
+    const ext = PROFILE_PHOTO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+    const path = `avatars/${user.uid}/${Date.now()}.${ext}`;
+    await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+    const url = await getDownloadURL(storageRef(storage, path));
+    await callUpdateUserProfile({ name: name.trim() || currentName, photoURL: url });
+    setPhotoURL(url);
+  }
 
   async function handleSave(e) {
     e.preventDefault();
@@ -71,45 +68,17 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, onClose, 
       setError('Give yourself a name.');
       return;
     }
-    if (file) {
-      if (!PROFILE_PHOTO_CONTENT_TYPES.includes(file.type)) {
-        setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
-        return;
-      }
-      if (file.size > PROFILE_PHOTO_MAX_SIZE_BYTES) {
-        setError('Photo must be smaller than 10MB.');
-        return;
-      }
-    }
-    const emailChanged = isPasswordProvider && newEmail.trim() !== user.email;
-    const passwordChanged = isPasswordProvider && newPassword.trim().length > 0;
-    if ((emailChanged || passwordChanged) && !currentPassword) {
-      setError('Enter your current password to change your email or password.');
-      return;
-    }
-
     setSaving(true);
     try {
-      if (emailChanged || passwordChanged) {
-        const credential = EmailAuthProvider.credential(user.email, currentPassword);
-        await reauthenticateWithCredential(user, credential);
-        if (emailChanged) await updateEmail(user, newEmail.trim());
-        if (passwordChanged) await updatePassword(user, newPassword.trim());
-      }
-
-      let photoURL;
-      if (file) {
-        const ext = PROFILE_PHOTO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
-        const path = `avatars/${user.uid}/${Date.now()}.${ext}`;
-        await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
-        photoURL = await getDownloadURL(storageRef(storage, path));
-      }
-
       const trimmedName = name.trim();
-      if (trimmedName !== currentName || photoURL) {
-        await callUpdateUserProfile({ name: trimmedName, ...(photoURL ? { photoURL } : {}) });
+      const duckSkinChanged = duckSkin !== (currentDuckSkin || DEFAULT_DUCK_SKIN);
+      if (trimmedName !== currentName || duckSkinChanged) {
+        await callUpdateUserProfile({
+          name: trimmedName,
+          ...(duckSkinChanged ? { duckSkin } : {}),
+        });
       }
-      onSaved({ name: trimmedName, photoURL: photoURL || currentPhotoURL });
+      onSaved({ name: trimmedName, photoURL, duckSkin });
     } catch (err) {
       setError(err.message || 'Something went wrong.');
     } finally {
@@ -122,60 +91,45 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, onClose, 
       <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSave} className='ink-card flex flex-col gap-md'>
           <h3 style={{ margin: 0 }}>Edit Profile</h3>
+
+          <button
+            type='button'
+            className='avatar-edit-trigger'
+            onClick={() => setCropModalOpen(true)}
+            aria-label='Change profile picture'
+          >
+            <UserAvatar photoURL={photoURL} duckSkin={duckSkin} />
+            <span className='avatar-edit-trigger-badge' aria-hidden='true'>
+              <IconEdit width={14} height={14} />
+            </span>
+          </button>
+
           <label>
             Name
-            <input required value={name} onChange={(e) => setName(e.target.value)} />
+            <input required value={name} onChange={(e) => setName(e.target.value)} autoComplete='name' />
           </label>
-          <label>
-            Profile picture
-            <input
-              type='file'
-              accept='image/jpeg,image/png,image/webp,image/heic,image/heif'
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-            />
-          </label>
-          {(localPreviewUrl || currentPhotoURL) && (
-            <img
-              src={localPreviewUrl || currentPhotoURL}
-              alt='Profile preview'
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 'var(--radius-full)',
-                objectFit: 'cover',
-              }}
-            />
-          )}
-          {isPasswordProvider && (
-            <>
-              <label>
-                Email
-                <input
-                  type='email'
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                />
-              </label>
-              <label>
-                New password <span className='field-optional'>(optional)</span>
-                <input
-                  type='password'
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder='Leave blank to keep your current password'
-                />
-              </label>
-              <label>
-                Current password
-                <input
-                  type='password'
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder='Only needed to change email or password'
-                />
-              </label>
-            </>
-          )}
+          <div>
+            <p style={{ margin: '0 0 8px', fontWeight: 600 }}>Duck avatar</p>
+            <p className='field-optional' style={{ margin: '0 0 8px' }}>
+              Shown whenever you don&rsquo;t have a profile picture set.
+            </p>
+            <div className='duck-skin-picker' role='radiogroup' aria-label='Duck avatar'>
+              {DUCK_SKINS.map((duck) => (
+                <button
+                  key={duck.id}
+                  type='button'
+                  role='radio'
+                  aria-checked={duckSkin === duck.id}
+                  aria-label={duck.label}
+                  className='duck-skin-option'
+                  data-selected={duckSkin === duck.id ? 'true' : undefined}
+                  onClick={() => setDuckSkin(duck.id)}
+                >
+                  <img src={duck.src} alt='' />
+                </button>
+              ))}
+            </div>
+          </div>
           {error && <p className='box-danger'>{error}</p>}
           <div className='flex gap-sm'>
             <StampButton type='submit' variant='primary' disabled={saving}>
@@ -186,10 +140,16 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, onClose, 
             </StampButton>
           </div>
         </form>
-        <button type='button' className='photo-lightbox-close' onClick={onClose} aria-label='Close'>
-          <IconX width={18} height={18} />
-        </button>
       </div>
+      {cropModalOpen && (
+        <AvatarCropModal
+          label='Profile picture'
+          accept={PROFILE_PHOTO_CONTENT_TYPES.join(',')}
+          maxSizeBytes={PROFILE_PHOTO_MAX_SIZE_BYTES}
+          onClose={() => setCropModalOpen(false)}
+          onSave={handleAvatarSave}
+        />
+      )}
     </LightboxBackdrop>
   );
 }

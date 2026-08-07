@@ -7,7 +7,7 @@ import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { Collapse } from './Collapse.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconChevron, IconX } from './icons.jsx';
+import { IconChevron } from './icons.jsx';
 
 // Flat submission rows grouped into one entry per quest — matches the
 // wireframe's Title (quest) → grid-of-users shape instead of one long flat
@@ -92,14 +92,6 @@ function SubmissionCard({ submission, url, busy, allowGalleryKeep, onApprove, on
         <LightboxBackdrop onClose={() => setLightboxOpen(false)} label="Submitted photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={url} alt="Submitted proof" className="photo-lightbox-image" />
-            <button
-              type="button"
-              className="photo-lightbox-close"
-              onClick={() => setLightboxOpen(false)}
-              aria-label="Close"
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}

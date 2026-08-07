@@ -94,7 +94,7 @@ export function Landing() {
           <StampButton as={Link} to="/register" variant="primary">
             Sign Up as a Leader
           </StampButton>
-          <StampButton as={Link} to="/register/organization">
+          <StampButton as={Link} to="/register/organization" variant="primary">
             Register Your Organization
           </StampButton>
         </div>

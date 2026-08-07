@@ -19,8 +19,13 @@ const ROUTE_LABELS = {
   '/admin': 'Data',
 };
 
-export function labelForPath(pathname) {
-  if (!pathname) return null;
+export function labelForPath(path) {
+  if (!path) return null;
+  // `path` may carry a query string (e.g. /quests?segment=org — see
+  // PreviousPathContext, which now tracks pathname+search so filter state
+  // round-trips through a "back" link) — labeling only cares about the
+  // route itself, not what's filtered/searched within it.
+  const pathname = path.split('?')[0].split('#')[0];
   if (ROUTE_LABELS[pathname]) return ROUTE_LABELS[pathname];
   // Prefix fallback for nested/dynamic routes (e.g. /quests/abc123,
   // /organizations/xyz) — longest matching prefix wins so /org/quests

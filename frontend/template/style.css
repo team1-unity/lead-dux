@@ -209,17 +209,23 @@
   /* tag rack — restored to main's original pastel palette (the RIPE pass
      had re-muted these into deeper/more saturated tones; the paper/
      paper-card/paper-well cream surfaces above are the only part of that
-     pass being kept). */
+     pass being kept). environment/community/outdoors/rejected inks are
+     nudged a shade darker than that restored palette (same hue, just
+     enough lightness removed) — the originals landed at 3.35-4.34:1
+     against their own fill, under the 4.5:1 AA text threshold; every pair
+     here now clears ~4.6:1+. Keep tagTones.js's TONE_HEX mirror (used
+     wherever a tag needs a real hex value CSS vars can't reach, like map
+     pins) in sync with whatever inks live here. */
   --tag-environment: #dcefdc;
-  --tag-environment-ink: #3f7a49;
+  --tag-environment-ink: #3c7446;
   --tag-community: #f2edc7;
-  --tag-community-ink: #8f7f1e;
+  --tag-community-ink: #776919;
   --tag-youth: #d7e4f7;
   --tag-youth-ink: #1e3a73;
   --tag-education: #d6ecf7;
   --tag-education-ink: #1b4e66;
   --tag-outdoors: #f7e4cf;
-  --tag-outdoors-ink: #b06d26;
+  --tag-outdoors-ink: #91591f;
   --tag-technology: #cfe9e6;
   --tag-technology-ink: #15574f;
   --tag-fitness: #f6d6d0;
@@ -229,9 +235,9 @@
   --tag-arts: #e3d6f0;
   --tag-arts-ink: #48276e;
   --tag-verified: #dcefdc;
-  --tag-verified-ink: #3f7a49;
+  --tag-verified-ink: #3c7446;
   --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c0402f;
+  --tag-rejected-ink: #b83e2d;
 
   /* rank ladder — restored to main's original pastel palette, same reasoning
      as the tag rack above. */
@@ -446,15 +452,15 @@
   --accent-contrast: #4a3728;
 
   --tag-environment: #dcefdc;
-  --tag-environment-ink: #3f7a49;
+  --tag-environment-ink: #3c7446;
   --tag-community: #f2edc7;
-  --tag-community-ink: #8f7f1e;
+  --tag-community-ink: #776919;
   --tag-youth: #d7e4f7;
   --tag-youth-ink: #1e3a73;
   --tag-education: #d6ecf7;
   --tag-education-ink: #1b4e66;
   --tag-outdoors: #f7e4cf;
-  --tag-outdoors-ink: #b06d26;
+  --tag-outdoors-ink: #91591f;
   --tag-technology: #cfe9e6;
   --tag-technology-ink: #15574f;
   --tag-fitness: #f6d6d0;
@@ -464,9 +470,9 @@
   --tag-arts: #e3d6f0;
   --tag-arts-ink: #48276e;
   --tag-verified: #dcefdc;
-  --tag-verified-ink: #3f7a49;
+  --tag-verified-ink: #3c7446;
   --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c0402f;
+  --tag-rejected-ink: #b83e2d;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
   --rank-iron: #dfe3e6;
@@ -1948,6 +1954,18 @@ button.quest-card-head:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
 }
+/* Quest detail's title + Share row (mobile/Quests.jsx's QuestDetailBody,
+   showTitle). Grid, not flex: a two-column 1fr/auto track keeps Share
+   pinned to the right edge next to the title no matter how long the
+   title is, and align-items: start lines Share's icon up with the
+   title's own first line rather than centering it against the whole
+   block once a long title wraps to two lines. */
+.quest-detail-title-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 8px;
+}
 .quest-title {
   font-family: var(--font-heading);
   font-weight: 700;
@@ -2788,7 +2806,11 @@ a.org-home-stat-tile:hover {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.82rem;
-  color: var(--accent);
+  /* Brown (--line-soft), not the accent yellow — this is a plain text
+     link action, not a selection/CTA, so it takes the same ink color
+     .back-link already uses rather than competing with the pills'
+     selected-state yellow right above it. */
+  color: var(--line-soft);
   background: none;
   border: none;
   padding: 0;
@@ -2798,6 +2820,7 @@ a.org-home-stat-tile:hover {
   box-shadow: none;
 }
 .quest-filter-clear:hover {
+  color: var(--line);
   text-decoration: underline;
   box-shadow: none;
   transform: none;
@@ -2867,8 +2890,13 @@ a.org-home-stat-tile:hover {
   width: 68px;
   /* Nudges the label's text down to sit level with the first pill row's
      own text, rather than its top edge lining up with the pills' top
-     edge (the pills have their own vertical padding the label doesn't). */
-  padding-top: 9px;
+     edge (the pills have their own vertical padding the label doesn't).
+     Retuned down from 9px now that the pills themselves are smaller (see
+     .quest-filter-pill-row .stamp-btn's own 8px 16px/0.82rem, shrunk from
+     the base button's 12px 24px/1rem for the label-vs-option hierarchy
+     fix) — the old 9px was tuned against the taller pill and started
+     sitting the label noticeably low once the pill shrank under it. */
+  padding-top: 5px;
 }
 .quest-filter-group-inline .quest-filter-pill-row {
   flex: 1;
@@ -2877,6 +2905,18 @@ a.org-home-stat-tile:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* Options within a Type/Activity/Sort group (FilterPill -> .stamp-btn) —
+   without this, they inherited the base button/.stamp-btn font-size
+   (1rem, unset here) at full size, reading BIGGER than their own group's
+   0.92rem label above/beside them. That inverted the hierarchy: the
+   selectable options looked like the heading and the actual heading
+   looked like a footnote. Smaller and one notch lighter than the label
+   restores label-reads-as-heading, options-read-as-choices. */
+.quest-filter-pill-row .stamp-btn {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 8px 16px;
 }
 
 /* ---------- desktop split view: list + detail panel ---------- */
@@ -2976,7 +3016,17 @@ a.org-home-stat-tile:hover {
   font-size: 0.9rem;
   color: var(--line-soft);
 }
+/* display: flex + align-items: center here (matching .quest-meta-row's own
+   icon+text rows) — without it, an icon+text .data-stat (org profile's
+   About tab: location/website/email/phone, each an <IconX /> followed by
+   text) fell back to inline layout, and inline SVGs default to
+   vertical-align: baseline. A ~22px icon's bottom then sat on this text's
+   own ~0.78rem baseline instead of centered against its line-height, so
+   the icon rode noticeably high relative to the label beside it. */
 .data-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: 0.78rem;
@@ -2986,6 +3036,9 @@ a.org-home-stat-tile:hover {
   /* Point/submission/attendee counts live here and update live — equal-width
      digits keep the surrounding layout from twitching as a count changes. */
   font-variant-numeric: tabular-nums;
+}
+.data-stat svg {
+  flex: none;
 }
 .data-row-actions {
   display: flex;
@@ -3592,6 +3645,39 @@ a.org-home-stat-tile:hover {
   scrollbar-width: none;
 }
 
+/* EditProfileModal's duck-avatar picker — same selected-state formula as
+   .theme-option (accent border/ring on the active choice) so choosing a
+   duck reads as the same kind of single-select control as the theme
+   picker, not a bespoke one. */
+.duck-skin-picker {
+  display: flex;
+  gap: 10px;
+}
+.duck-skin-option {
+  width: 64px;
+  height: 64px;
+  padding: 4px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--paper-well);
+  overflow: hidden;
+}
+.duck-skin-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Matches UserAvatar's own duck crop (see UserAvatar.jsx) — these
+     portrait illustrations lose their hat/face to a true center crop, so
+     the picker preview should show the same framing the avatar actually
+     applies once picked, not a different one. */
+  object-position: center 10%;
+  display: block;
+}
+.duck-skin-option[data-selected='true'] {
+  border-color: var(--accent-contrast);
+  background: var(--accent);
+}
+
 /* Wider than the shared .detail-modal-content default (org/Quests.jsx's
    Attendees modal) — a multi-column card grid (.attendee-grid below) wants
    more room than the single-column QR/photo-review modals sharing that
@@ -3643,16 +3729,13 @@ a.org-home-stat-tile:hover {
 }
 
 /* .photo-lightbox-close normally floats half outside its content (a bare
-   photo, in PhotoGallery.jsx/PendingPhotoSubmissions.jsx — negative offsets
-   look intentional against a borderless image). These containers wrap a
-   bordered card instead, so that same floating-outside look would either
-   hang off the card's edge or (worse, for .detail-modal-content/
-   .events-map-detail-slot) get clipped by its own overflow-y:auto — inset
-   it within the card instead. */
-.qr-modal-content > .photo-lightbox-close,
-.detail-modal-content > .photo-lightbox-close,
-.events-map-detail-slot > .photo-lightbox-close,
-.pending-review-modal > .photo-lightbox-close {
+   photo — negative offsets look intentional against a borderless image).
+   .events-map-detail-slot wraps a bordered card instead (MapQuestOverlay's
+   brief loading/error state, before MapQuestDetailBody's own hero-mounted
+   close/back button takes over), so that same floating-outside look would
+   get clipped by its own overflow-y:auto — inset it within the card
+   instead. */
+.events-map-detail-slot > .photo-lightbox-close {
   top: 10px;
   right: 10px;
 }
@@ -3768,6 +3851,26 @@ a.org-home-stat-tile:hover {
   max-width: 300px;
   z-index: 2;
   margin: 0;
+}
+/* The ordinary "browser's native permission dialog is up" wait, not a
+   problem — same position as .quest-scanner-error (they're never both
+   shown at once) but without the danger fill, since nothing has gone
+   wrong yet. */
+.quest-scanner-status {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 20px);
+  max-width: 300px;
+  z-index: 2;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--paper-card);
+  color: var(--line-soft);
+  font-size: 0.88rem;
+  text-align: center;
 }
 
 .section-heading {
@@ -3922,6 +4025,15 @@ button.data-row:active:not(:disabled) {
   font-family: var(--font-body);
   color: var(--line);
 }
+/* Without this, the generic input:hover rule (a background-color tint,
+   meant for bordered form fields elsewhere) still applies here on hover
+   even though this field's own resting background is none — a tint
+   would briefly flash in against .quest-search-row's own pill background
+   only while the cursor sits over the text, then vanish again on
+   mouseleave, reading as a glitch rather than a real hover state. */
+.vanish-search-input:hover {
+  background: none;
+}
 .vanish-search-input:focus-visible {
   outline: none;
   box-shadow: none;
@@ -4042,22 +4154,6 @@ button.data-row:active:not(:disabled) {
   height: 16px;
   flex: none;
 }
-.profile-settings-link {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  color: var(--line-soft);
-  flex: none;
-}
-.profile-settings-link:hover {
-  color: var(--line);
-  background: var(--paper-well);
-}
-
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -4071,14 +4167,14 @@ button.data-row:active:not(:disabled) {
   align-items: start;
 }
 
-/* The identity card — avatar/name+badges/email/Log out/Edit Profile, one
-   card at every width (used to split into a different desktop-only grid
-   with settings inline in a second column; that's reverted — a gear icon
-   here is simpler and consistent with OrganizationProfile.jsx's own). The
-   gear icon is positioned absolutely off this card's own top-right corner
-   (overriding .profile-settings-link's plain margin-left:auto flow-row
-   position above, which OrganizationProfile.jsx's own header still uses
-   as-is), not stacked in the centered column with everything else. */
+/* The identity card — avatar/name+badges/email/Edit Profile/Settings/
+   Log out, one card at every width (used to split into a different
+   desktop-only grid with settings inline in a second column; that's
+   reverted). Settings used to be a gear icon pinned to this card's own
+   top-right corner — now a plain button in the same stack as the other
+   two, with Log out set apart below a divider since it's a different
+   kind of action (leaving, not managing) from Edit Profile/Settings
+   above it. */
 .profile-identity-card {
   position: relative;
   display: flex;
@@ -4089,22 +4185,29 @@ button.data-row:active:not(:disabled) {
   min-height: 55vh;
   text-align: center;
 }
-.profile-identity-card .profile-settings-link {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  margin-left: 0;
+.profile-identity-divider {
+  width: 70%;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
 }
-/* Log out/Edit Profile — this card's own fill (--paper-card, via .ink-card)
-   is the exact same value as the base button's own resting fill
-   (--paper-well), so without a border here the two buttons have no visible
-   edge against the card at all. Matched to a shared fixed width (rather
-   than each sizing to its own label, or stretching to the full card) since
-   "Log out" and "Edit Profile" are different lengths — comfortably fits
-   the longer label. */
+/* Log out — this card's own fill (--paper-card, via .ink-card) is the
+   exact same value as the base button's own resting fill (--paper-well),
+   so without a border here it'd have no visible edge against the card at
+   all. Matched to a shared fixed width (rather than each sizing to its
+   own label, or stretching to the full card) since "Log out"/"Settings"/
+   "Edit Profile" are all different lengths — comfortably fits the
+   longest label. */
 .profile-identity-card .stamp-btn {
   width: 70%;
   border: 1.5px solid var(--border);
+}
+/* Edit Profile is the primary action here (variant='primary', pastel-
+   yellow fill) — that fill already contrasts against the card on its
+   own, so the border above (needed only because the *default* variant's
+   fill is otherwise invisible against the card) would just be a stray
+   outline nothing else in the app puts on a primary button. */
+.profile-identity-card .stamp-btn.ink-btn-primary {
+  border: none;
 }
 .profile-identity-card .profile-name-badges {
   justify-content: center;
@@ -4136,6 +4239,19 @@ button.data-row:active:not(:disabled) {
   flex: none;
   outline: 1px solid var(--image-outline);
   outline-offset: -1px;
+}
+/* OrgAvatar's own fallback letter-tile, rendered here with no wrapping
+   size (unlike quest-thumb/attendee-card-avatar elsewhere, which already
+   give it one) — .org-avatar's base rule is width/height:100% of
+   whatever contains it, and this container is a plain flex row
+   (.org-profile-header) with nothing else constraining that slot's size.
+   Without this, a no-logo org's fallback tile stretched to fill the
+   row's remaining width instead of staying a 64px circle like
+   .org-profile-logo above always does. */
+.org-profile-header .org-avatar {
+  width: 64px;
+  height: 64px;
+  flex: none;
 }
 .org-profile-header-info {
   display: flex;
@@ -4213,7 +4329,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 2px solid var(--border);
+  border: none;
 }
 .photo-lightbox-backdrop {
   position: fixed;
@@ -4246,7 +4362,7 @@ button.data-row:active:not(:disabled) {
   padding: 0;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 2px solid var(--border);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4286,23 +4402,6 @@ button.data-row:active:not(:disabled) {
   width: 100%;
   text-align: center;
   padding: 34px 24px 22px;
-}
-.tour-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: transparent;
-  color: var(--line-soft);
-  font-size: 1.3rem;
-  line-height: 1;
-  cursor: pointer;
-}
-.tour-close:hover {
-  background: var(--paper-well);
 }
 .tour-icon {
   width: 40px;
@@ -4349,15 +4448,6 @@ button.data-row:active:not(:disabled) {
   max-height: 90vh;
   overflow-y: auto;
   padding: 30px 28px 24px;
-}
-/* .tour-close sits at top:10px/right:10px relative to the card, which
-   collides with the progress bar's own top edge here (the leader tour's
-   TourCard never has this problem — its close button sits above the
-   tour-dots row instead, further down, not a progress bar). Give the bar
-   room to clear it rather than touching the shared .onboarding-progress
-   rule other pages rely on. */
-.org-onboarding-card .onboarding-progress {
-  margin-right: 36px;
 }
 .org-onboarding-slide {
   text-align: center;
@@ -4507,42 +4597,10 @@ button.data-row:active:not(:disabled) {
   color: var(--line-soft);
 }
 
-.badges-earned-row {
-  display: flex;
-  justify-content: space-around;
-  margin-bottom: 18px;
-}
-.badges-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  justify-items: center;
-  margin-bottom: 20px;
-}
-.badges-desktop-row {
+.badges-row {
   display: flex;
   gap: 22px;
   flex-wrap: wrap;
-}
-.badge-section-pill {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--paper-card);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 16px;
-  margin-bottom: 14px;
-  font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--line);
-}
-.badge-section-pill[data-tone='muted'] {
-  background: var(--paper-well);
-  color: var(--line-soft);
 }
 .badge-section-title {
   font-family: var(--font-heading);
@@ -4587,38 +4645,37 @@ button.data-row:active:not(:disabled) {
 .home-page {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  /* Centers within the space between #root's own top/bottom padding —
+     24px top, nav-height + 32px bottom (see #root above) — rather than
+     the raw viewport height, so it lands in the actual visible content
+     area above the bottom nav instead of getting pulled down past it. */
+  min-height: calc(100vh - var(--nav-height) - 56px);
 }
 /* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
    1180px cap (see #root above), the greeting/rank-card/CTA buttons were
    stretching to fill nearly the whole content column. Capped to 40vw and
    centered instead, matching the same 860px breakpoint used everywhere
-   else in this file for desktop-only treatments. Vertical centering
-   (in the space between #root's own top/bottom padding — 24px top,
-   nav-height + 32px bottom, see #root above) is desktop-only too now — on
-   mobile it was what pushed the rank card down the page rather than
-   letting content simply start at the top. */
+   else in this file for desktop-only treatments. */
 @media (min-width: 860px) {
   .home-page {
     max-width: 40vw;
     width: 100%;
     margin: 0 auto;
-    justify-content: center;
-    min-height: calc(100vh - var(--nav-height) - 56px);
   }
 }
 
 /* A must-dismiss popup notice (NotificationBanner.jsx) — a quest RSVP'd to
-   was rescheduled or cancelled. Sits above the greeting, not inside its
-   card, so it reads as an interruption rather than part of the normal
-   layout. z-index here specifically has to clear .home-quick-actions'
-   own 5 (a position:fixed HUD floating in the same top area of the
-   mobile Home screen, see style.css's own note there) — without an
-   explicit z-index, this banner (position:relative with no z-index of
-   its own) painted as plain in-flow content, letting that fixed, higher-
-   stacking HUD render over it whenever they visually overlapped. This
-   should always win against ordinary page-level floating widgets, but
-   still stays well under real modals/lightboxes (30-60 elsewhere in this
-   file). */
+   was rescheduled or cancelled. Rendered as PageMotion's sibling, not its
+   child (see mobile/Home.jsx's own note on why) — nested inside, this
+   z-index would only ever be scoped against PageMotion's own new stacking
+   context (its transform triggers one), unable to reach out and outrank
+   .home-quick-actions, a sibling of PageMotion itself. As a sibling of
+   that same HUD instead, z-index here now directly clears its own 5 (a
+   position:fixed HUD floating in the same top area of the mobile Home
+   screen, see style.css's own note there). This should always win against
+   ordinary page-level floating widgets, but still stays well under real
+   modals/lightboxes (30-60 elsewhere in this file). */
 .notification-banner {
   position: relative;
   z-index: 20;
@@ -4637,28 +4694,25 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
 }
 
-/* Trimmed on mobile now that .home-page no longer vertically centers this
-   whole block (see above) — the old 48px top padding was compensating for
-   that centering by pushing the greeting down from an already-centered
-   start; without it, that same value just reads as dead space above the
-   duck. Back to the fuller value on desktop, where .home-page's own
-   centering still applies. */
 .home-greeting {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   text-align: center;
-  padding: 20px 20px 24px;
+  padding: 48px 20px 32px;
   margin-bottom: 16px;
 }
 .home-greeting h1 {
   margin: 12px 0 0;
 }
-@media (min-width: 860px) {
-  .home-greeting {
-    padding: 48px 20px 32px;
-  }
+/* The member's chosen duck character (see duckSkins.js) — a real <img>,
+   not the line-drawn .duck-mark brand icon (DuckMark), so it needs its
+   own natural aspect ratio (the illustrated ducks aren't square like the
+   brand PNGs) rather than a fixed width+height square. */
+.home-greeting-duck {
+  width: 140px;
+  height: auto;
 }
 
 /* A floating quick-actions HUD (Check in / My quests / Last quest).
@@ -5333,31 +5387,30 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
   color: var(--line-soft);
 }
-/* MapQuestOverlay.jsx's close button — floats directly on the hero photo
-   itself (a real lightbox close button, not one hanging in the padding
-   above it), rather than the generic .photo-lightbox-close every other
-   modal in this app uses (which floats relative to the whole bordered
-   card, not specifically the image at its top). Map-only: the Explore
-   Quests detail has no close/back button overlaying its hero. */
-.map-quest-hero-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
+/* Desktop's "Back to Map" (see MapQuestDetailBody.jsx) — the same
+   .back-link treatment used everywhere else in the app, just rendered as
+   a real <button> (onClose is a callback, not a route) rather than
+   BackLink.jsx's <Link>. That means the generic `button` reset earlier in
+   this file (pill padding/radius/fill) applies too and has to be stripped
+   back off here, or it'd paint as a filled pill instead of the plain
+   understated link every other back-link in the app is. Margin-bottom
+   traded for one that matches the hero's own spacing below it. Mobile
+   gets a different, floating-on-the-photo treatment instead
+   (.map-quest-hero-back below) since there it's returning to the sheet's
+   list beneath it, not a full page nav. */
+.map-quest-back-link {
+  margin-bottom: 10px;
   padding: 0;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.85);
-  border: none;
-  color: var(--line);
-  z-index: 1;
+  border-radius: 0;
+  background: none;
 }
-/* Mobile's equivalent (see MapQuestDetailBody.jsx) — same treatment as
-   .map-quest-hero-close, just mirrored to the top-left corner for a
-   back-chevron instead of an X. */
+.map-quest-back-link:hover {
+  background: none;
+}
+/* MapQuestOverlay.jsx's mobile back-chevron — floats directly on the hero
+   photo itself (a real lightbox-style control, not one hanging in the
+   padding above it). Map-only: the Explore Quests detail has no back
+   button overlaying its hero. */
 .map-quest-hero-back {
   position: absolute;
   top: 10px;
@@ -5734,7 +5787,7 @@ button.data-row:active:not(:disabled) {
   padding: 0;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 2px solid var(--border);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5800,4 +5853,208 @@ button.data-row:active:not(:disabled) {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* ---------- ImageUploadCard.jsx — single-image drag-and-drop upload with
+   a "vending machine" drop-in animation (the animation's own timing/easing
+   values live in the component; this is just the drop zone's visual
+   states and the stacking order they depend on). z-index mirrors the
+   layering the animation itself assumes: zone (0) < dropped image (10) <
+   dashed border (20) < top mask (30), so the falling image is never drawn
+   on top of the border it's supposed to land inside of, and the mask can
+   hide it entirely while it's still above the card's own rounded top
+   edge. */
+.image-upload-card {
+  width: 100%;
+  max-width: 32rem;
+  margin: 0 auto;
+}
+.image-upload-card-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--paper-card);
+}
+.image-upload-card-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  z-index: 30;
+  pointer-events: none;
+}
+.image-upload-card-body {
+  padding: 24px;
+}
+.image-upload-card-zone-wrap {
+  position: relative;
+}
+.image-upload-card-zone {
+  position: relative;
+  z-index: 0;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background: var(--paper-well);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.image-upload-card-zone.is-drag-over {
+  background: var(--accent-soft);
+}
+.image-upload-card-zone.is-uploading {
+  background: var(--accent-soft);
+  cursor: default;
+}
+.image-upload-card-icon {
+  color: var(--line-soft);
+  transition: color 0.2s ease;
+}
+.image-upload-card-icon.is-active {
+  color: var(--accent-contrast);
+}
+.image-upload-card-border {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--border);
+  pointer-events: none;
+  transition: border-color 0.2s ease;
+}
+.image-upload-card-border[data-drag-over='true'],
+.image-upload-card-border[data-uploading='true'] {
+  border-color: var(--accent);
+}
+.image-upload-card-drop-layer {
+  position: absolute;
+  z-index: 10;
+}
+.image-upload-card-preview {
+  position: relative;
+  min-width: 320px;
+  max-width: 100%;
+  border-radius: var(--radius);
+  background: var(--paper-well);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.image-upload-card-img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: block;
+}
+.image-upload-card-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 3;
+}
+.image-upload-card-preview:hover .image-upload-card-remove {
+  opacity: 1;
+}
+.image-upload-card-remove:hover {
+  transform: scale(1.1);
+}
+.image-upload-card-filename {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--line-soft);
+}
+.image-upload-card-copy {
+  text-align: left;
+  margin-bottom: 16px;
+}
+.image-upload-card-copy h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+.image-upload-card-copy p {
+  margin: 0;
+  color: var(--line-soft);
+  font-size: 0.9rem;
+}
+
+/* ---------- AvatarCropModal.jsx — pick/crop/save for a round avatar
+   (EditProfileModal's profile picture, OrganizationProfile's logo). The
+   crop area's size comes from aspect-ratio, not a fixed height — react-
+   easy-crop's own Cropper needs a `position: relative` container with a
+   real (non-auto) size either way, aspect-ratio just means this stays
+   square across whatever width the surrounding modal ends up at. ---------- */
+.avatar-crop-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(360px, 100%);
+}
+.avatar-crop-area {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--paper-well);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.avatar-crop-zoom {
+  width: 100%;
+}
+
+/* The circular "click to change" trigger — a member's own photo/duck
+   (UserAvatar) or an org's own logo (OrgAvatar), wrapped in a plain
+   button with a small pencil badge overlaid at the bottom-right corner,
+   the same "here's the current one, tap to replace it" affordance as a
+   typical profile-photo editor. */
+.avatar-edit-trigger {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  background: none;
+}
+/* .user-avatar/.org-avatar both default to their own fixed size (64px) —
+   this trigger wants whichever one it wraps to fill its own 72px button
+   instead. */
+.avatar-edit-trigger .user-avatar,
+.avatar-edit-trigger .org-avatar {
+  width: 100%;
+  height: 100%;
+}
+.avatar-edit-trigger-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--paper-card);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }

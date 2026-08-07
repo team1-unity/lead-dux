@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { doc, getDoc, getDocs, collection, limit, query, where } from 'firebase/firestore';
+import { doc, getDoc, getDocs, onSnapshot, collection, limit, query, where } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
-import { DuckMark } from '@shared/Logo.jsx';
 import { ProgressCard } from '@shared/ProgressCard.jsx';
 import { NotificationBanner } from '@shared/NotificationBanner.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { IconQrCode, IconList, IconHistory } from '@shared/icons.jsx';
+import { duckSkinSrc } from '@shared/duckSkins.js';
 
 // A small rotating set rather than one fixed line — Home is the one screen
 // in the app someone opens several times a day, so a single static caption
@@ -148,11 +148,20 @@ export function Home() {
   const lastAttended = useLastAttendedQuest(user);
   const hasRsvpd = useHasRsvpdQuest(user);
 
+  // A live listener, not a one-time getDoc — Edit Profile is reachable two
+  // ways: Profile.jsx's own button (navigates through /profile, so Home
+  // remounts fresh and a one-time fetch would've been enough) and
+  // BottomNav's avatar dropdown (opens the same modal as an overlay on top
+  // of whichever page is already showing, Home included, with no
+  // navigation at all). Saving a new duck skin from that second path never
+  // touched this already-mounted component's own state, so the greeting
+  // kept showing the old duck until the next full remount. A live
+  // subscription picks up either path the moment the write lands.
   useEffect(() => {
     if (!user) return;
-    getDoc(doc(db, 'users', user.uid)).then((snap) => {
+    return onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.exists() ? snap.data() : {};
-      setProfile({ name: data.name || '' });
+      setProfile({ name: data.name || '', duckSkin: data.duckSkin || null });
     });
   }, [user]);
 
@@ -169,11 +178,25 @@ export function Home() {
           inside it, this HUD would anchor to PageMotion's own narrow
           centered box instead of the true viewport edge. */}
       <HomeQuickActions hasRsvpd={hasRsvpd} lastAttended={lastAttended} />
+      {/* Also outside PageMotion, for a related but distinct reason: that
+          same always-on transform/filter doesn't just move this HUD's
+          containing block, it also makes PageMotion's own div a brand new
+          stacking context. A child's z-index (however high) only ever
+          ranks it against siblings *inside* that same context — it can't
+          reach out and outrank a sibling of the transformed ancestor
+          itself. Nested in PageMotion, this banner's z-index: 20 (see
+          .notification-banner) was being silently capped there, so
+          .home-quick-actions' own position:fixed + z-index: 5 (a sibling
+          of PageMotion, not a descendant) still painted over it whenever
+          they overlapped — the exact trap LightboxBackdrop.jsx's own
+          module comment describes for this same PageMotion transform.
+          Rendering as PageMotion's sibling instead sidesteps the nested
+          context entirely, the same fix already applied to
+          HomeQuickActions above. */}
+      <NotificationBanner />
       <PageMotion className="home-page">
-        <NotificationBanner />
-
         <div className='home-greeting'>
-          <DuckMark size={140} />
+          <img src={duckSkinSrc(profile.duckSkin)} alt="" className="home-greeting-duck" />
           <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
           <p className="duck-caption">{homeCaption()}</p>
         </div>

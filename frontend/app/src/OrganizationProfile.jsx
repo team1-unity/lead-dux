@@ -15,6 +15,9 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { ImageUploadCard } from '@shared/ImageUploadCard.jsx';
+import { AvatarCropModal } from '@shared/AvatarCropModal.jsx';
+import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { AddPropertyMenu } from '@shared/AddPropertyMenu.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
@@ -98,8 +101,7 @@ const OPTIONAL_FIELD_ITEMS = [{ key: 'logoUrl', label: 'Logo URL' }, ...SOCIAL_L
 function AboutEditForm({ org, onSaved, onCancel }) {
   const { user } = useAuth();
   const reduce = useReducedMotion();
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [logoError, setLogoError] = useState('');
+  const [logoCropOpen, setLogoCropOpen] = useState(false);
   const [fields, setFields] = useState({
     logoUrl: org.logoUrl || '',
     category: org.category || '',
@@ -138,28 +140,20 @@ function AboutEditForm({ org, onSaved, onCancel }) {
     else setSocial((s) => ({ ...s, [key]: '' }));
   }
 
-  async function uploadLogo(file) {
-    setLogoError('');
-    if (!LOGO_CONTENT_TYPES.includes(file.type)) {
-      setLogoError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
-      return;
-    }
-    if (file.size > LOGO_MAX_SIZE_BYTES) {
-      setLogoError('Photo must be smaller than 10MB.');
-      return;
-    }
-    setUploadingLogo(true);
-    try {
-      const ext = LOGO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
-      const path = `avatars/${user.uid}/${Date.now()}.${ext}`;
-      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
-      const url = await getDownloadURL(storageRef(storage, path));
-      setFields((f) => ({ ...f, logoUrl: url }));
-    } catch (err) {
-      setLogoError(err.message || 'Something went wrong uploading that photo.');
-    } finally {
-      setUploadingLogo(false);
-    }
+  // Saves immediately (a targeted update_organization_profile call with
+  // just logoUrl), not deferred to this form's own Save — cropping and
+  // clicking Save inside AvatarCropModal already is the confirmation for
+  // this specific change, same as EditProfileModal's identical pattern for
+  // a member's own profile picture. `fields.logoUrl` still updates too, so
+  // the rest of this form (and its own eventual Save) stays in sync with
+  // whatever the logo actually is right now.
+  async function handleLogoAvatarSave(file) {
+    const ext = LOGO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+    const path = `avatars/${user.uid}/${Date.now()}.${ext}`;
+    await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+    const url = await getDownloadURL(storageRef(storage, path));
+    await callUpdateOrganizationProfile({ logoUrl: url });
+    setFields((f) => ({ ...f, logoUrl: url }));
   }
 
   async function save(e) {
@@ -185,6 +179,7 @@ function AboutEditForm({ org, onSaved, onCancel }) {
   }
 
   return (
+    <>
     <form onSubmit={save} className="about-edit-doc">
       {/* Same borderless auto-grow trick as the create-quest description
           field (see CreateQuestForm.jsx/style.css) — a textarea and an
@@ -322,6 +317,22 @@ function AboutEditForm({ org, onSaved, onCancel }) {
               </button>
             </div>
             <div className="quest-form-row-value">
+              <div className="flex items-center gap-sm" style={{ marginBottom: 10 }}>
+                <button
+                  type="button"
+                  className="avatar-edit-trigger"
+                  onClick={() => setLogoCropOpen(true)}
+                  aria-label="Change logo"
+                >
+                  <OrgAvatar name={org.name} seed={user.uid} logoUrl={fields.logoUrl} />
+                  <span className="avatar-edit-trigger-badge" aria-hidden="true">
+                    <IconEdit width={14} height={14} />
+                  </span>
+                </button>
+                <p className="field-optional" style={{ margin: 0 }}>
+                  Tap to crop and upload a photo, or paste a URL below.
+                </p>
+              </div>
               <label className="visually-hidden" htmlFor="org-logo">Logo URL</label>
               <input
                 id="org-logo"
@@ -330,29 +341,6 @@ function AboutEditForm({ org, onSaved, onCancel }) {
                 value={fields.logoUrl}
                 onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))}
               />
-              <div className="flex items-center gap-sm" style={{ marginTop: 8 }}>
-                {fields.logoUrl && (
-                  <img
-                    src={fields.logoUrl}
-                    alt=""
-                    style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', objectFit: 'cover' }}
-                  />
-                )}
-                <label className="field-optional" style={{ margin: 0 }}>
-                  {uploadingLogo ? 'Uploading...' : 'Or upload a photo'}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                    disabled={uploadingLogo}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadLogo(file);
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
-              </div>
-              {logoError && <p className="box-danger">{logoError}</p>}
             </div>
           </motion.div>
         )}
@@ -405,6 +393,16 @@ function AboutEditForm({ org, onSaved, onCancel }) {
         </button>
       </div>
     </form>
+    {logoCropOpen && (
+      <AvatarCropModal
+        label="Logo"
+        accept={LOGO_CONTENT_TYPES.join(',')}
+        maxSizeBytes={LOGO_MAX_SIZE_BYTES}
+        onClose={() => setLogoCropOpen(false)}
+        onSave={handleLogoAvatarSave}
+      />
+    )}
+    </>
   );
 }
 
@@ -431,8 +429,21 @@ const ORG_PHOTO_EXT_BY_CONTENT_TYPE = {
 // nothing to keep in sync if the bucket's URL-signing scheme ever changes.
 function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
   const [urls, setUrls] = useState([]);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  // ImageUploadCard's own onUpload only means "picked and locally
+  // previewed" here, not "actually uploaded" — the real Storage write
+  // waits for the modal's own explicit Upload button (see handleUpload),
+  // matching QuestPhotoSubmission's identical pick-then-confirm shape
+  // rather than uploading the instant a file is dropped.
+  const [pickedFile, setPickedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  // Bumping this remounts ImageUploadCard fresh (empty, no lingering
+  // preview) after each successful upload, since the component itself has
+  // no reset API of its own to call instead — the modal itself stays open
+  // across uploads, so this is what lets someone add several photos in
+  // one sitting rather than reopening it each time.
+  const [uploadKey, setUploadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -455,31 +466,37 @@ function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
     };
   }, [paths]);
 
-  async function handleUpload(e) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // lets picking the exact same file again re-trigger onChange
-    if (!file) return;
+  async function handleUpload() {
+    if (!pickedFile) return;
     setError('');
-    if (!ORG_PHOTO_CONTENT_TYPES.includes(file.type)) {
+    if (!ORG_PHOTO_CONTENT_TYPES.includes(pickedFile.type)) {
       setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
       return;
     }
-    if (file.size > ORG_PHOTO_MAX_SIZE_BYTES) {
+    if (pickedFile.size > ORG_PHOTO_MAX_SIZE_BYTES) {
       setError('Photo must be smaller than 10MB.');
       return;
     }
     setUploading(true);
     try {
-      const ext = ORG_PHOTO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+      const ext = ORG_PHOTO_EXT_BY_CONTENT_TYPE[pickedFile.type] || 'jpg';
       const path = `orgPhotos/${orgId}/${Date.now()}.${ext}`;
-      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+      await uploadBytes(storageRef(storage, path), pickedFile, { contentType: pickedFile.type });
       await callAddOrganizationPhoto(path);
       onPathsChange([...paths, path]);
+      setPickedFile(null);
+      setUploadKey((k) => k + 1);
     } catch (err) {
       setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setUploading(false);
     }
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    setPickedFile(null);
+    setError('');
   }
 
   async function handleDelete(index) {
@@ -495,19 +512,39 @@ function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
   return (
     <>
       {canEdit && (
-        <label className="quest-form-ghost-btn stamp-btn" style={{ marginBottom: 12, display: 'inline-block' }}>
-          {uploading ? 'Uploading…' : '+ Add photo'}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-            onChange={handleUpload}
-            disabled={uploading}
-            className="visually-hidden"
-          />
-        </label>
+        <StampButton
+          type="button"
+          className="quest-form-ghost-btn"
+          style={{ marginBottom: 12 }}
+          onClick={() => setModalOpen(true)}
+        >
+          + Add photo
+        </StampButton>
       )}
-      {error && <p className="box-danger">{error}</p>}
+      {!modalOpen && error && <p className="box-danger">{error}</p>}
       <PhotoGallery photos={urls} onDelete={canEdit ? handleDelete : undefined} />
+      {modalOpen && (
+        <LightboxBackdrop onClose={closeModal} label="Upload image">
+          <div className="detail-modal-content" onClick={(e) => e.stopPropagation()}>
+            <ImageUploadCard
+              key={uploadKey}
+              title="Upload image"
+              accept={ORG_PHOTO_CONTENT_TYPES.join(',')}
+              onUpload={(url, file) => setPickedFile(file)}
+              onRemove={() => setPickedFile(null)}
+            />
+            {error && <p className="box-danger">{error}</p>}
+            <div className="flex gap-sm" style={{ marginTop: 12 }}>
+              <StampButton type="button" variant="primary" onClick={handleUpload} disabled={!pickedFile || uploading}>
+                {uploading ? 'Uploading…' : 'Upload'}
+              </StampButton>
+              <StampButton type="button" onClick={closeModal} disabled={uploading}>
+                Cancel
+              </StampButton>
+            </div>
+          </div>
+        </LightboxBackdrop>
+      )}
     </>
   );
 }

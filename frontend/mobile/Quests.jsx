@@ -26,6 +26,7 @@ import { DuckMark } from '@shared/Logo.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { ImageUploadCard } from '@shared/ImageUploadCard.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
@@ -51,7 +52,6 @@ import {
   IconCheck,
   IconAlert,
   IconLock,
-  IconX,
   IconGrid,
   IconList,
 } from '@shared/icons.jsx';
@@ -199,7 +199,7 @@ function RequestFeedbackForm({ questId, onRequested }) {
 // form here. (The caller also only renders this once it already knows the
 // member checked in — see QuestDetailBody's own `checkedIn` state — this
 // server check just stays as the actual source of truth.)
-function QuestReview({ questId }) {
+function QuestReview({ questId, onSubmitted }) {
   const [loading, setLoading] = useState(true);
   const [review, setReview] = useState(null);
   const [rating, setRating] = useState(5);
@@ -236,6 +236,7 @@ function QuestReview({ questId }) {
     try {
       await callSubmitReview({ questId, rating, body });
       setReview({ rating, body });
+      onSubmitted?.();
     } catch (err) {
       setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
@@ -313,7 +314,6 @@ const EXT_BY_CONTENT_TYPE = {
 function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
   const [submission, setSubmission] = useState(undefined); // undefined = loading, null = none yet
   const [file, setFile] = useState(null);
-  const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
   const [submittedPhotoUrl, setSubmittedPhotoUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -341,17 +341,6 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questId, userId]);
 
-  // A quick local preview of whichever file is currently selected, before
-  // it's even uploaded — lets someone confirm they picked the right photo.
-  useEffect(() => {
-    if (!file) {
-      setLocalPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setLocalPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
 
   // Once a submission exists (pending/approved/rejected), fetch the actual
   // uploaded photo itself so it's visible here too, not just its status.
@@ -472,24 +461,12 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
             />
           </label>
         )}
-        <label>
-          {submission?.status === 'rejected' ? 'Submit a new photo' : 'Upload a photo'}
-          <input
-            type='file'
-            accept='image/jpeg,image/png,image/webp,image/heic,image/heif'
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
-        </label>
-        {/* A quick local preview of whichever file is currently selected,
-            before it's even uploaded — lets someone confirm they picked the
-            right photo before submitting. */}
-        {localPreviewUrl && (
-          <img
-            src={localPreviewUrl}
-            alt='Selected photo preview'
-            style={{ maxWidth: '100%', borderRadius: 'var(--radius)' }}
-          />
-        )}
+        <ImageUploadCard
+          title={submission?.status === 'rejected' ? 'Submit a new photo' : 'Upload a photo'}
+          accept={PHOTO_CONTENT_TYPES.join(',')}
+          onUpload={(url, selectedFile) => setFile(selectedFile)}
+          onRemove={() => setFile(null)}
+        />
         {error && <p className='box-danger'>{error}</p>}
         <StampButton
           type='submit'
@@ -530,7 +507,7 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
           <span>{statusLabel}</span>
         </button>
       ) : (
-        <StampButton type='button' onClick={() => setModalOpen(true)}>
+        <StampButton type='button' variant='primary' onClick={() => setModalOpen(true)}>
           {isDefault ? 'Mark as complete' : 'Submit Proof Photo'}
         </StampButton>
       )}
@@ -541,14 +518,6 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
               This wrapper is just the modal's sizing/scroll constraint. */}
           <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
             {content}
-            <button
-              type='button'
-              className='photo-lightbox-close'
-              onClick={() => setModalOpen(false)}
-              aria-label='Close'
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}
@@ -623,6 +592,31 @@ export function QuestDetailBody({
   const rsvpCount = (selected.rsvpd || []).length;
   const isRsvpd = (selected.rsvpd || []).includes(userId);
   const isFull = selected.capacity != null && rsvpCount >= selected.capacity && !isRsvpd;
+
+  // A one-shot confirmation, not a permanent label — without this,
+  // "You're in!"/"Accepted!" (rendered below whenever isRsvpd is true) sat
+  // next to the Cancel RSVP button for as long as the RSVP itself stood,
+  // rather than reading as a momentary confirmation of the action that was
+  // just taken. Tracks isRsvpd's own false->true edge (a fresh RSVP, not
+  // one that was already in place when this mounted) and clears itself
+  // after 5s; switching occurrences/series resets it so an old date's
+  // confirmation can't bleed into a newly-selected one.
+  const [justRsvpd, setJustRsvpd] = useState(false);
+  const wasRsvpdRef = useRef(isRsvpd);
+  useEffect(() => {
+    const wasRsvpd = wasRsvpdRef.current;
+    wasRsvpdRef.current = isRsvpd;
+    if (!wasRsvpd && isRsvpd) {
+      setJustRsvpd(true);
+      const timer = setTimeout(() => setJustRsvpd(false), 5000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [isRsvpd]);
+  useEffect(() => {
+    setJustRsvpd(false);
+    wasRsvpdRef.current = false;
+  }, [selectedId, series.seriesId]);
   // Org quest, checked in — the completed/attended state: date/spots/
   // accessibility/RSVP all give way to a plain "Completed on …" line and
   // the review/proof-photo actions. Side quests never set this (checkedIn
@@ -681,6 +675,31 @@ export function QuestDetailBody({
     };
   }, [primary.isDefault, selected?.id, userId, checkedIn]);
 
+  // Whether this member has already reviewed this quest — "Leave a
+  // review" shouldn't still read as an open action once one exists (the
+  // review itself is still visible via QuestReviewsList below, and
+  // re-opening the modal after submitting would just show the same
+  // read-only "Your review: ★★★★☆" card QuestReview already renders for
+  // an existing review — this just skips offering that as a fresh action).
+  const [hasReview, setHasReview] = useState(false);
+  useEffect(() => {
+    if (primary.isDefault || !userId || !selected?.id || !checkedIn) {
+      setHasReview(false);
+      return undefined;
+    }
+    let cancelled = false;
+    callGetMyReview(selected.id)
+      .then((data) => {
+        if (!cancelled) setHasReview(Boolean(data.review));
+      })
+      .catch(() => {
+        if (!cancelled) setHasReview(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [primary.isDefault, selected?.id, userId, checkedIn]);
+
   return (
     <div className='quest-card-body'>
       {showTitle && (
@@ -694,9 +713,14 @@ export function QuestDetailBody({
           over the photo above; without one, it keeps the old absolute-
           positioned treatment (org/Quests.jsx's own copy of this row
           always has at least Edit/Delete, so it doesn't need this
-          fallback). */}
+          fallback). A grid, not flex — a flex row's align-items: center
+          would center Share against the *whole* title block once it wraps
+          to two lines, leaving it floating between them; grid's
+          align-items: start pins it level with the title's own first
+          line instead, and the fixed auto column means it never gets
+          pushed onto its own line the way flexWrap: wrap could. */}
       {showTitle ? (
-        <div className='flex items-center justify-between gap-sm' style={{ flexWrap: 'wrap' }}>
+        <div className='quest-detail-title-row'>
           <p className='quest-title' style={{ fontSize: '1.25rem', margin: 0 }}>
             {primary.title}
           </p>
@@ -886,10 +910,13 @@ export function QuestDetailBody({
           </StampButton>
         )}
         <AnimatePresence>
-          {/* Not shown once completed — there's no "you're in" left to
-              confirm, and the "Completed on …"/review/photo actions
-              already say what's true now. */}
-          {canRsvp && isRsvpd && busyId !== selected.id && !isCompleted && (
+          {/* justRsvpd, not isRsvpd — a 5s confirmation of the RSVP that was
+              just made (see justRsvpd's own effect above), not a permanent
+              label that would otherwise sit next to Cancel RSVP for as long
+              as the RSVP itself stands. Not shown once completed either way
+              — there's no "you're in" left to confirm, and the "Completed
+              on …"/review/photo actions already say what's true now. */}
+          {canRsvp && justRsvpd && busyId !== selected.id && !isCompleted && (
             <motion.span
               className='quest-rsvp-confirm'
               initial={reduce ? false : { opacity: 0, scale: 0.9 }}
@@ -912,12 +939,14 @@ export function QuestDetailBody({
             gate, just relocated here (see the effect above). */}
         {!primary.isDefault && canRsvp && isRsvpd && checkedIn && (
           <>
-            <StampButton type='button' onClick={() => setReviewModalOpen(true)}>
-              Leave a review
-            </StampButton>
+            {!hasReview && (
+              <StampButton type='button' variant='primary' onClick={() => setReviewModalOpen(true)}>
+                Leave a review
+              </StampButton>
+            )}
             <QuestPhotoSubmission questId={selected.id} userId={userId} isDefault={false} />
             {!feedbackRequestStatus && (
-              <StampButton type='button' onClick={() => setRequestFeedbackOpen(true)}>
+              <StampButton type='button' variant='primary' onClick={() => setRequestFeedbackOpen(true)}>
                 Request feedback
               </StampButton>
             )}
@@ -931,15 +960,7 @@ export function QuestDetailBody({
       {!primary.isDefault && isRsvpd && checkedIn && reviewModalOpen && (
         <LightboxBackdrop onClose={() => setReviewModalOpen(false)} label='Review'>
           <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
-            <QuestReview questId={selected.id} />
-            <button
-              type='button'
-              className='photo-lightbox-close'
-              onClick={() => setReviewModalOpen(false)}
-              aria-label='Close'
-            >
-              <IconX width={18} height={18} />
-            </button>
+            <QuestReview questId={selected.id} onSubmitted={() => setHasReview(true)} />
           </div>
         </LightboxBackdrop>
       )}
@@ -950,14 +971,6 @@ export function QuestDetailBody({
               questId={selected.id}
               onRequested={() => setFeedbackRequestStatus('pending')}
             />
-            <button
-              type='button'
-              className='photo-lightbox-close'
-              onClick={() => setRequestFeedbackOpen(false)}
-              aria-label='Close'
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}
@@ -1247,13 +1260,21 @@ function FilterPanelContent({
 export function Quests({ interests, name, recommendedQuestOrder, attendedTagCounts }) {
   const { user, role } = useAuth();
   const navigate = useNavigate();
-  // Read once, as the initial state below — a one-time entry point (see
-  // mobile/Home.jsx's "revisit past quests"/"your RSVP'd quests" links,
-  // /quests?view=past and ?view=mine), not a persisted/synced param, so
-  // changing the dropdown afterward doesn't need to write anything back
-  // to the URL.
-  const [searchParams] = useSearchParams();
+  // Read once, as the initial state below (see mobile/Home.jsx's "revisit
+  // past quests"/"your RSVP'd quests" links, /quests?view=past and
+  // ?view=mine) — `view` specifically stays a one-time entry point (a
+  // fresh link should always win over whatever the URL otherwise says),
+  // but segment/q/sort below it are also read once here and then kept in
+  // sync going forward (see the effect after all filter state is
+  // declared), so navigating away to a quest's detail page and back
+  // restores the exact same filter/search/sort instead of resetting —
+  // "back" only actually gets you back to this if the URL still carries
+  // it, since a fresh mount has no other memory of what was showing.
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialView = searchParams.get('view');
+  const initialSegment = searchParams.get('segment');
+  const initialSearch = searchParams.get('q') || '';
+  const initialSort = searchParams.get('sort');
   const [seriesList, setSeriesList] = useState(null);
   // Every quest doc, unfiltered — kept alongside seriesList (which only
   // ever holds upcoming ones) purely so the Past Attended view below has
@@ -1275,17 +1296,21 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
   // view=past/mine link always wins regardless of role — both only ever
   // exist under the org segment.
   const [segment, setSegment] = useState(
-    initialView === 'past' || initialView === 'mine'
-      ? 'org'
-      : role === 'admin'
-        ? 'side-quests'
-        : 'org',
+    initialSegment === 'org' || initialSegment === 'side-quests'
+      ? initialSegment
+      : initialView === 'past' || initialView === 'mine'
+        ? 'org'
+        : role === 'admin'
+          ? 'side-quests'
+          : 'org',
   );
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   // 'recommended'/'soonest'/'newest' apply different orderings to the same
   // upcoming org-quest list ('recommended' leaves load()'s own relevance/
   // AI-ranked sort untouched) — a true sort, always exactly one active.
-  const [sort, setSort] = useState('recommended');
+  const [sort, setSort] = useState(
+    initialSort === 'soonest' || initialSort === 'newest' ? initialSort : 'recommended',
+  );
   // 'mine'/'past' are filters, not sorts, and now their own group (My
   // Activity) in the filter panel rather than folded into the sort
   // control — null means neither is active. They're mutually exclusive
@@ -1296,6 +1321,22 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
   const [activity, setActivity] = useState(
     initialView === 'past' || initialView === 'mine' ? initialView : null,
   );
+  // Keeps the URL in sync with the filter state above (segment/search/
+  // sort reflected as segment/q/sort, activity reusing the existing
+  // `view` key) — `replace: true` so typing in the search box doesn't
+  // spam browser history with one entry per keystroke. This is what makes
+  // "back" from a quest's detail page (see QuestDetails.jsx's dynamic
+  // BackLink, PreviousPathContext) land on the exact same filtered view
+  // instead of a bare, reset /quests.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (segment) next.set('segment', segment);
+    if (search.trim()) next.set('q', search);
+    if (sort !== 'recommended') next.set('sort', sort);
+    if (activity) next.set('view', activity);
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segment, search, sort, activity]);
   const reduce = useReducedMotion();
   const isDesktop = useIsDesktop();
   const {

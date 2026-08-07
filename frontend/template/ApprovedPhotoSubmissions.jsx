@@ -6,7 +6,6 @@ import { callAddSubmissionToGallery } from './fetch.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconX } from './icons.jsx';
 
 // For submissions an org has already approved — the only action here is
 // "Add to gallery" (see add_submission_to_gallery in functions/main.py),
@@ -57,14 +56,6 @@ function ApprovedCard({ submission, url, busy, onAdd }) {
         <LightboxBackdrop onClose={() => setLightboxOpen(false)} label="Approved photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={url} alt="Approved submission" className="photo-lightbox-image" />
-            <button
-              type="button"
-              className="photo-lightbox-close"
-              onClick={() => setLightboxOpen(false)}
-              aria-label="Close"
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}

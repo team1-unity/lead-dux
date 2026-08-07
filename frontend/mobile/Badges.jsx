@@ -61,57 +61,29 @@ export function BadgeRing({ badge, size, locked = false, isNew = false }) {
   );
 }
 
-function BadgesMobile({ earned, inProgress, undiscovered, newIds }) {
+// One layout for every breakpoint — mobile used to get its own bespoke
+// version (a flex row with no wrap for Earned, a fixed 3-column grid for
+// the rest), which read worse than this ink-card/flex-wrap treatment
+// desktop already had and actively overflowed sideways once Earned had
+// more badges than fit on one line (badge-ring is `flex: none`, so
+// nothing shrank to make room). .badges-row's plain flex-wrap
+// already reflows correctly at any width, so there's no real "desktop"
+// layout left to fork from — just this.
+function BadgesBody({ earned, inProgress, undiscovered, newIds, isDesktop }) {
   return (
     <>
-      <TopBar title="Badges" />
-
-      {earned.length > 0 ? (
-        <div className="badges-earned-row">
-          {earned.map((b) => (
-            <BadgeRing key={b.id} badge={b} size={74} isNew={newIds.has(b.id)} />
-          ))}
+      {isDesktop ? (
+        <div className="page-greeting">
+          <h1>Badges</h1>
         </div>
       ) : (
-        <p className="data-stat" style={{ marginBottom: 18 }}>No badges yet — your first quest starts the collection.</p>
+        <TopBar title="Badges" />
       )}
-
-      {inProgress.length > 0 && (
-        <>
-          <div className="badge-section-pill">In progress</div>
-          <div className="badges-grid">
-            {inProgress.map((b) => (
-              <BadgeRing key={b.id} badge={b} size={70} />
-            ))}
-          </div>
-        </>
-      )}
-
-      {undiscovered.length > 0 && (
-        <>
-          <div className="badge-section-pill" data-tone="muted">Undiscovered</div>
-          <div className="badges-grid">
-            {undiscovered.map((b) => (
-              <BadgeRing key={b.id} badge={b} size={70} locked />
-            ))}
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-function BadgesDesktop({ earned, inProgress, undiscovered, newIds }) {
-  return (
-    <>
-      <div className="page-greeting">
-        <h1>Badges</h1>
-      </div>
 
       <section className="ink-card" style={{ marginBottom: 16 }}>
         <p className="badge-section-title">Earned</p>
         {earned.length > 0 ? (
-          <div className="badges-desktop-row">
+          <div className="badges-row">
             {earned.map((b) => (
               <BadgeRing key={b.id} badge={b} size={78} isNew={newIds.has(b.id)} />
             ))}
@@ -124,7 +96,7 @@ function BadgesDesktop({ earned, inProgress, undiscovered, newIds }) {
       {inProgress.length > 0 && (
         <section className="ink-card" style={{ marginBottom: 16 }}>
           <p className="badge-section-title">In progress</p>
-          <div className="badges-desktop-row">
+          <div className="badges-row">
             {inProgress.map((b) => (
               <BadgeRing key={b.id} badge={b} size={78} />
             ))}
@@ -135,7 +107,7 @@ function BadgesDesktop({ earned, inProgress, undiscovered, newIds }) {
       {undiscovered.length > 0 && (
         <section className="ink-card" data-muted="true">
           <p className="badge-section-title">Undiscovered</p>
-          <div className="badges-desktop-row">
+          <div className="badges-row">
             {undiscovered.map((b) => (
               <BadgeRing key={b.id} badge={b} size={78} locked />
             ))}
@@ -207,11 +179,13 @@ export function Badges() {
         to={previousLabel ? previousPath : '/profile'}
         label={previousLabel || 'Profile'}
       />
-      {isDesktop ? (
-        <BadgesDesktop earned={earned} inProgress={inProgress} undiscovered={undiscovered} newIds={newIds} />
-      ) : (
-        <BadgesMobile earned={earned} inProgress={inProgress} undiscovered={undiscovered} newIds={newIds} />
-      )}
+      <BadgesBody
+        earned={earned}
+        inProgress={inProgress}
+        undiscovered={undiscovered}
+        newIds={newIds}
+        isDesktop={isDesktop}
+      />
     </PageMotion>
   );
 }

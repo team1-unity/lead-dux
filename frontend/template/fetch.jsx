@@ -231,6 +231,20 @@ export async function callMakeQuestRecurring({ questId, frequency, until }) {
   return result.data;
 }
 
+// organization (own series) or admin (own default series): changes an
+// *existing* series' frequency/until, adding or removing future
+// occurrences to match — see update_recurring_series in functions/main.py
+// for exactly what that diff does and why it refuses rather than silently
+// dropping RSVPs. Past occurrences and the returned counts are the only
+// thing this ever reports back; the actual added/removed docs aren't
+// individually listed since nothing here needs to react to which
+// particular ids changed, only that the series as a whole now matches.
+export async function callUpdateRecurringSeries({ seriesId, frequency, until }) {
+  const fn = httpsCallable(functions, 'update_recurring_series');
+  const result = await fn({ seriesId, frequency, until });
+  return result.data;
+}
+
 // admin: creates a quest with no owning organization, shown to everyone.
 // `tier` (iron/bronze/silver/gold/diamond) is required — it's what the
 // quest's check-in base points come from (see TIER_BASE_POINTS,

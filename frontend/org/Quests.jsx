@@ -27,7 +27,6 @@ import {
   IconTrash,
   IconChevron,
   IconUsers,
-  IconX,
 } from '@shared/icons.jsx';
 
 // The compact collapsed row — title, star rating, and date (same flat,
@@ -322,7 +321,7 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
             creation time (see _quest_doc_fields) — "Generate" only ever
             shows for quests that predate that change. */}
         {!selected.qrToken ? (
-          <StampButton type='button' onClick={a.generateQr} disabled={a.qrBusy}>
+          <StampButton type='button' variant='primary' onClick={a.generateQr} disabled={a.qrBusy}>
             {a.qrBusy ? 'Generating…' : 'Generate QR Code'}
           </StampButton>
         ) : (
@@ -349,14 +348,6 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
                 Regenerate
               </StampButton>
             </div>
-            <button
-              type='button'
-              className='photo-lightbox-close'
-              onClick={a.viewQr}
-              aria-label='Close'
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}
@@ -413,14 +404,6 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
                 ))}
               </div>
             )}
-            <button
-              type='button'
-              className='photo-lightbox-close'
-              onClick={a.toggleAttendees}
-              aria-label='Close'
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}
