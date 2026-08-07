@@ -633,6 +633,13 @@ ACCOMMODATION_OPTIONS = {
 }
 ACCOMMODATION_DETAILS_MAX_LENGTH = 500
 
+# The illustrated duck characters a member can pick for their own avatar
+# fallback (see UserAvatar.jsx/duckSkins.js on the frontend, and
+# update_user_profile below) — "duck1" (straw hat) is the default for
+# anyone who hasn't picked one yet. Whitelisted server-side so a client
+# can't write an arbitrary string here.
+DUCK_SKINS = {"duck1", "duck2", "duck3"}
+
 
 def _validate_accommodation_tags(value, field_name):
     if not isinstance(value, list):
@@ -3717,15 +3724,17 @@ def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
-# Callable from Profile's "Edit Profile" — a member's own display name and
-# profile picture. Email/password are Firebase Auth's own concern, not
-# Firestore, so the frontend calls updateEmail/updatePassword directly
-# against the client SDK instead of going through here (see Profile.jsx) —
-# this is only for the two fields that actually live on users/{uid}.
-# photoURL is a resolved download URL, not a storage path — same "store
-# the plain URL, not something to resolve later" choice organizations.
-# logoUrl already made, for the same reason (fewer places need to know how
-# to resolve a path).
+# Callable from Profile's "Edit Profile" — a member's own display name,
+# profile picture, and chosen duck avatar fallback. Email/password are
+# Firebase Auth's own concern, not Firestore, so the frontend calls
+# updateEmail/updatePassword directly against the client SDK instead of
+# going through here (see Profile.jsx) — this is only for the fields that
+# actually live on users/{uid}. photoURL is a resolved download URL, not a
+# storage path — same "store the plain URL, not something to resolve
+# later" choice organizations.logoUrl already made, for the same reason
+# (fewer places need to know how to resolve a path). duckSkin only ever
+# matters once photoURL is unset (see UserAvatar.jsx) — whitelisted
+# against DUCK_SKINS above rather than accepting any string.
 @https_fn.on_call()
 def update_user_profile(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -3747,11 +3756,19 @@ def update_user_profile(req: https_fn.CallableRequest) -> dict:
                 "photoURL must be a string or null.",
             )
         update["photoURL"] = photo_url
+    if "duckSkin" in req.data:
+        duck_skin = req.data.get("duckSkin")
+        if duck_skin not in DUCK_SKINS:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"duckSkin must be one of {sorted(DUCK_SKINS)}.",
+            )
+        update["duckSkin"] = duck_skin
 
     if not update:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "Provide a name and/or photoURL to update.",
+            "Provide a name, photoURL, and/or duckSkin to update.",
         )
 
     firestore.client().collection("users").document(req.auth.uid).update(update)
