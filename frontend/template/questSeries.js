@@ -34,6 +34,25 @@ export function isUpcoming(quest) {
 // selected, not from `primary`. Reviews are the one exception — they live
 // at the series level (see attachSeriesRatings), not per occurrence, so
 // they're the same no matter which date is selected.
+// The soonest occurrence in a series a given user could still explore —
+// hasn't RSVP'd to it, hasn't already attended it — or null if every
+// upcoming occurrence is already spoken for one way or the other. Used by
+// browsing surfaces (the Map) where a quest someone's already fully
+// engaged with has nothing left to offer; `group.primary` (groupBySeries'
+// own earliest-occurrence pick) doesn't know or care about any of that, so
+// a caller that wants "what should this series point at for someone who's
+// already RSVP'd to its first date but not a later recurring one" needs
+// this instead. `group.occurrences` is already sorted ascending by
+// groupBySeries, so the first match here is genuinely the soonest one.
+export function nextExplorableOccurrence(group, uid, attendedEventIds) {
+  if (!uid) return group.primary;
+  return (
+    group.occurrences.find(
+      (o) => !(o.rsvpd || []).includes(uid) && !attendedEventIds?.has(o.id),
+    ) || null
+  );
+}
+
 export function groupBySeries(quests) {
   const bySeriesId = new Map();
   quests.forEach((quest) => {

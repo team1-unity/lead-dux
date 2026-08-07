@@ -302,7 +302,7 @@ export function PendingPhotoReview() {
   // mount dozens of absolutely-positioned cards at once).
   const stackToRender = useMemo(() => (photos ? photos.slice(-5) : []), [photos]);
 
-  if (photos === null) return <LoadingSpinner label="Loading photo submissions..." />;
+  if (photos === null) return <LoadingSpinner label="Loading photo submissions…" />;
 
   return (
     <div>
@@ -339,10 +339,6 @@ export function PendingPhotoReview() {
       {reviewOpen && (
         <LightboxBackdrop onClose={closeReview} label="Review pending photos" className="pending-review-backdrop">
           <div className="pending-review-modal" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="photo-lightbox-close" onClick={closeReview} aria-label="Close">
-              <IconX width={18} height={18} />
-            </button>
-
             {topPhoto ? (
               <>
                 <div className="pending-review-stack">

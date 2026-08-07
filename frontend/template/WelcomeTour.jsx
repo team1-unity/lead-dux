@@ -89,9 +89,6 @@ export function WelcomeTour() {
     <AnimatePresence>
       <div className="tour-backdrop" role="dialog" aria-modal="true" aria-label="Welcome walkthrough">
         <TourCard slide={slide} Icon={Icon}>
-          <button type="button" className="tour-close" onClick={dismiss} aria-label="Close">
-            &times;
-          </button>
           <div className="tour-dots">
             {slides.map((_, i) => (
               <span key={i} className="tour-dot" data-active={i === step ? 'true' : 'false'} />

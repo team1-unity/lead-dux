@@ -84,6 +84,17 @@ def _require_admin(req: https_fn.CallableRequest):
 
 DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
 
+# The event QR encodes a real URL (see _make_qr_data_uri) rather than a raw
+# JSON payload, specifically so it's scannable by a phone's own native
+# camera app, not just this app's in-app scanner (QuestScanner.jsx) —
+# whichever one decodes it just opens/navigates to this same link, landing
+# on CheckInConfirm.jsx. Hardcoded to the real production Hosting URL
+# (this project's one deployment, per .firebaserc) rather than derived from
+# the request — there's no "request origin" to derive it from here, this
+# runs once at QR-generation time, for a code that's meant to be printed/
+# displayed at a real in-person event either way.
+CHECKIN_BASE_URL = "https://lead-dux.web.app"
+
 # Point System & Feedback (see AI_README.md) ---------------------------------
 #
 # Three sources count toward a user's points: a flat amount for completing
@@ -164,13 +175,21 @@ def _qr_expires_at(event_date: datetime, event_end_time: datetime | None) -> dat
     return _to_utc(event_date) + timedelta(hours=DEFAULT_EVENT_WINDOW_HOURS)
 
 
-def _make_qr_data_uri(quest_id: str, token: str, version: int) -> str:
-    # No uid in the payload — this QR belongs to the event, not to whoever
-    # happens to scan it. `v` (qrTokenVersion) rides along purely as a
-    # sanity check for check_in_to_event; the token itself is what actually
-    # gets validated (see the constant-time compare there).
-    payload = json.dumps({"questId": quest_id, "token": token, "v": version})
-    image = qrcode.make(payload)
+def _check_in_url(quest_id: str, token: str) -> str:
+    # No uid in the URL — this QR belongs to the event, not to whoever
+    # happens to scan it. qrTokenVersion doesn't ride along here (it never
+    # actually gated anything in check_in_to_event — only the token itself
+    # is validated, via the constant-time compare there); a stale/refreshed
+    # QR is already caught by the token simply no longer matching. Split out
+    # from _make_qr_data_uri as its own pure function so the URL shape
+    # itself is directly unit-testable without decoding a rendered QR image
+    # back to text (this repo has no QR-decoding dependency, only qrcode
+    # for encoding).
+    return f"{CHECKIN_BASE_URL}/check-in/{quest_id}/{token}"
+
+
+def _make_qr_data_uri(quest_id: str, token: str) -> str:
+    image = qrcode.make(_check_in_url(quest_id, token))
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -613,6 +632,13 @@ ACCOMMODATION_OPTIONS = {
     "wheelchair-accessible", "asl-interpretation", "accessible-parking", "sensory-friendly", "elevator-access",
 }
 ACCOMMODATION_DETAILS_MAX_LENGTH = 500
+
+# The illustrated duck characters a member can pick for their own avatar
+# fallback (see UserAvatar.jsx/duckSkins.js on the frontend, and
+# update_user_profile below) — "duck1" (straw hat) is the default for
+# anyone who hasn't picked one yet. Whitelisted server-side so a client
+# can't write an arbitrary string here.
+DUCK_SKINS = {"duck1", "duck2", "duck3"}
 
 
 def _validate_accommodation_tags(value, field_name):
@@ -1206,6 +1232,140 @@ def make_quest_recurring(req: https_fn.CallableRequest) -> dict:
     batch.commit()
 
     return {"success": True, "seriesId": series_id, "questIds": quest_ids}
+
+
+# Callable from the org/admin quest-edit form's Recurring section (see
+# CreateQuestForm.jsx — this used to be permanently read-only once a series
+# existed; update_quest's own module note explains why frequency/until
+# still can't be touched from *that* function specifically, but editing a
+# pattern is exactly what this one is for instead).
+#
+# Diffs the new frequency/until against whichever occurrences already
+# exist for this series and adds/removes dates to match — anchored to the
+# series' own first (earliest) occurrence, which never moves; only
+# frequency/until change. Past occurrences (already happened) are never
+# touched regardless of the new pattern — they're historical record, not
+# something a schedule change should be able to retroactively rewrite, the
+# same "this date vs. the whole series" granularity delete_quest/
+# delete_quest_series already draw.
+#
+# Blocks the whole update (nothing partially applies) if any occurrence
+# that the new pattern would remove already has at least one RSVP —
+# silently dropping someone's RSVP because an org shortened a series is
+# worse than telling the org to sort those out first (cancel that date
+# individually via delete_quest, or wait for attendees to un-RSVP) before
+# shrinking the series around them.
+@https_fn.on_call()
+def update_recurring_series(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    series_id = req.data.get("seriesId")
+    if not series_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "seriesId is required.",
+        )
+
+    db = firestore.client()
+    occurrence_docs = list(db.collection("quests").where("seriesId", "==", series_id).stream())
+    if not occurrence_docs:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            f"No series {series_id}.",
+        )
+    quests_by_id = {doc.id: doc.to_dict() for doc in occurrence_docs}
+    first = min(quests_by_id.values(), key=lambda q: q["eventDate"])
+
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and first.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only edit your own organization's quests.",
+        )
+
+    tz = first.get("timezone") or "UTC"
+    zone = ZoneInfo(tz)
+    frequency = _validate_frequency(req.data.get("frequency"))
+    until = _parse_event_datetime(req.data.get("until"), "until", tz)
+    target_dates = _generate_series_dates(first["eventDate"], frequency, until, tz)
+    target_date_keys = {d.astimezone(zone).date() for d in target_dates}
+
+    now = datetime.now(timezone.utc)
+    existing_by_date_key = {
+        quest["eventDate"].astimezone(zone).date(): (doc_id, quest)
+        for doc_id, quest in quests_by_id.items()
+    }
+
+    # Only ever consider occurrences that haven't happened yet — a past
+    # date missing from the new pattern isn't "removed," it already
+    # happened under whatever pattern was in effect at the time.
+    to_remove = [
+        (doc_id, quest)
+        for date_key, (doc_id, quest) in existing_by_date_key.items()
+        if quest["eventDate"] >= now and date_key not in target_date_keys
+    ]
+    conflicts = [(doc_id, quest) for doc_id, quest in to_remove if quest.get("rsvpd")]
+    if conflicts:
+        details = "; ".join(
+            f"{quest['eventDate'].astimezone(zone).strftime('%b %-d, %Y')} "
+            f"({len(quest['rsvpd'])} RSVP'd)"
+            for _, quest in conflicts
+        )
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            f"Can't shrink this series — these dates already have RSVPs: {details}. "
+            "Cancel those dates individually first, then try again.",
+        )
+
+    to_add = [
+        d for d in target_dates
+        if d >= now and d.astimezone(zone).date() not in existing_by_date_key
+    ]
+    duration = (
+        first["eventEndTime"] - first["eventDate"]
+        if first.get("eventEndTime") is not None
+        else None
+    )
+
+    # Not batched with the writes below — _delete_quest's own attendance/
+    # feedback/journal cleanup queries don't compose with an in-flight
+    # batch (same reason delete_quest_series loops plain deletes instead
+    # of batching them). Every occurrence here is already confirmed
+    # rsvpd-free above, so there's nothing time-sensitive about doing
+    # these one at a time first.
+    for doc_id, _quest in to_remove:
+        _delete_quest(db, db.collection("quests").document(doc_id))
+
+    removed_ids = {doc_id for doc_id, _quest in to_remove}
+    batch = db.batch()
+    for occurrence_date in to_add:
+        doc_ref = db.collection("quests").document()
+        occurrence_end = occurrence_date + duration if duration is not None else None
+        batch.set(doc_ref, _quest_doc_fields(
+            title=first["title"], description=first["description"], tags=first.get("tags", []),
+            location=first.get("location", ""), tz=tz, capacity=first.get("capacity"),
+            series_id=series_id, recurrence_frequency=frequency, recurrence_until=until,
+            event_date=occurrence_date, event_end_time=occurrence_end,
+            org_id=first.get("orgId"), org_name=first.get("orgName"), is_default=first.get("isDefault", False),
+            tier=first.get("tier"), place_id=first.get("placeId"),
+            lat=first.get("lat"), lng=first.get("lng"),
+            accommodation_tags=first.get("accommodationTags"), accommodation_details=first.get("accommodationDetails"),
+        ))
+    # Every doc in a series shares recurrenceFrequency/recurrenceUntil (see
+    # _quest_doc_fields) — including the ones just removed would be
+    # redundant, and past occurrences get updated too so nothing in the
+    # series is left pointing at a stale pattern.
+    for doc_id in quests_by_id:
+        if doc_id in removed_ids:
+            continue
+        batch.update(db.collection("quests").document(doc_id), {
+            "recurrenceFrequency": frequency,
+            "recurrenceUntil": until,
+        })
+    batch.commit()
+
+    return {"success": True, "added": len(to_add), "removed": len(to_remove)}
 
 
 # One-time (well — re-runnable, but idempotent) admin utility: every quest
@@ -1829,7 +1989,7 @@ def generate_event_qr_code(req: https_fn.CallableRequest) -> dict:
         token = secrets.token_urlsafe(24)
         ref.update({"qrToken": token, "qrTokenVersion": version})
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
 # Callable from the org dashboard's "View QR Code" button — re-renders
@@ -1848,7 +2008,7 @@ def get_event_qr_code(req: https_fn.CallableRequest) -> dict:
             "No QR code has been generated for this quest yet.",
         )
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, quest.get("qrTokenVersion", 0))}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
 # Callable from the org dashboard's "Refresh QR Code" button — mints a new
@@ -1867,17 +2027,18 @@ def refresh_event_qr_code(req: https_fn.CallableRequest) -> dict:
     version = quest.get("qrTokenVersion", 0) + 1
     ref.update({"qrToken": token, "qrTokenVersion": version})
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
-# Callable from the new user-facing "Scan QR Code" flow (see
-# frontend/template/QuestScanner.jsx) — any signed-in user, not just an
-# org/admin, since the whole point of this redesign is that attendees scan
-# themselves in. questId/token/v come from decoding the event's QR image
-# client-side (see _make_qr_data_uri for the payload shape). Idempotent:
-# scanning an already-checked-in code again succeeds with
-# alreadyCheckedIn=True rather than erroring, since a double scan is an
-# expected accident, not an attack.
+# Callable from CheckInConfirm.jsx (frontend/app/src) — any signed-in user,
+# not just an org/admin, since the whole point of this redesign is that
+# attendees scan themselves in. That page is reached either by opening the
+# event QR's own URL directly (any camera app can scan it — see
+# _make_qr_data_uri) or via this app's own in-app scanner
+# (frontend/template/QuestScanner.jsx), which just decodes the same URL and
+# navigates there instead of calling this itself. Idempotent: scanning an
+# already-checked-in code again succeeds with alreadyCheckedIn=True rather
+# than erroring, since a double scan is an expected accident, not an attack.
 @https_fn.on_call()
 def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -3697,15 +3858,17 @@ def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
-# Callable from Profile's "Edit Profile" — a member's own display name and
-# profile picture. Email/password are Firebase Auth's own concern, not
-# Firestore, so the frontend calls updateEmail/updatePassword directly
-# against the client SDK instead of going through here (see Profile.jsx) —
-# this is only for the two fields that actually live on users/{uid}.
-# photoURL is a resolved download URL, not a storage path — same "store
-# the plain URL, not something to resolve later" choice organizations.
-# logoUrl already made, for the same reason (fewer places need to know how
-# to resolve a path).
+# Callable from Profile's "Edit Profile" — a member's own display name,
+# profile picture, and chosen duck avatar fallback. Email/password are
+# Firebase Auth's own concern, not Firestore, so the frontend calls
+# updateEmail/updatePassword directly against the client SDK instead of
+# going through here (see Profile.jsx) — this is only for the fields that
+# actually live on users/{uid}. photoURL is a resolved download URL, not a
+# storage path — same "store the plain URL, not something to resolve
+# later" choice organizations.logoUrl already made, for the same reason
+# (fewer places need to know how to resolve a path). duckSkin only ever
+# matters once photoURL is unset (see UserAvatar.jsx) — whitelisted
+# against DUCK_SKINS above rather than accepting any string.
 @https_fn.on_call()
 def update_user_profile(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -3727,11 +3890,19 @@ def update_user_profile(req: https_fn.CallableRequest) -> dict:
                 "photoURL must be a string or null.",
             )
         update["photoURL"] = photo_url
+    if "duckSkin" in req.data:
+        duck_skin = req.data.get("duckSkin")
+        if duck_skin not in DUCK_SKINS:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"duckSkin must be one of {sorted(DUCK_SKINS)}.",
+            )
+        update["duckSkin"] = duck_skin
 
     if not update:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "Provide a name and/or photoURL to update.",
+            "Provide a name, photoURL, and/or duckSkin to update.",
         )
 
     firestore.client().collection("users").document(req.auth.uid).update(update)

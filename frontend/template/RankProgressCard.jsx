@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
@@ -17,6 +18,7 @@ import { pointsToNextRank, progressPercent, rankForPoints } from './rank.js';
 export function RankProgressCard({ points: pointsProp }) {
   const { user } = useAuth();
   const [fetchedPoints, setFetchedPoints] = useState(null);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     if (pointsProp !== undefined || !user) return;
@@ -33,7 +35,17 @@ export function RankProgressCard({ points: pointsProp }) {
   const percent = progressPercent(points);
 
   return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    // This mounts the moment its own async fetch resolves, well after
+    // PageMotion's page-shell transition has already finished — without
+    // its own initial/animate here, the numbers would just pop into
+    // existence with no transition at all once the network response lands.
+    <motion.section
+      className="ink-card"
+      style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+      initial={reduce ? false : { opacity: 0, y: 8, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+    >
       <h2 style={{ marginBottom: 0 }}>Leadership Progress</h2>
       <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.4rem', textTransform: 'uppercase' }}>
         {rank}
@@ -46,6 +58,6 @@ export function RankProgressCard({ points: pointsProp }) {
       <div className="rank-progress-track" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
         <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
       </div>
-    </section>
+    </motion.section>
   );
 }

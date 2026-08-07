@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
@@ -9,6 +9,8 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { WelcomeTour } from '@shared/WelcomeTour.jsx';
 import { RouteErrorBoundary } from '@shared/RouteErrorBoundary.jsx';
+import { PreviousPathProvider } from '@shared/PreviousPathContext.jsx';
+import { SmoothScroll } from '@shared/SmoothScroll.jsx';
 import { EventsMap } from '@shared/EventsMap.jsx';
 import { Landing } from './Landing.jsx';
 import { Login } from './Login.jsx';
@@ -17,6 +19,7 @@ import { ResetPassword } from './ResetPassword.jsx';
 import { Settings } from './Settings.jsx';
 import { Profile } from './Profile.jsx';
 import { CheckIn } from './CheckIn.jsx';
+import { CheckInConfirm } from './CheckInConfirm.jsx';
 import { Certificate } from './Certificate.jsx';
 import { OrganizationProfile } from './OrganizationProfile.jsx';
 import { QuestDetails } from './QuestDetails.jsx';
@@ -175,15 +178,35 @@ function AppShell() {
   const { role } = useAuth();
   const location = useLocation();
   const showNav = location.pathname !== '/' || (role && role !== 'onboarding_user');
+
+  // Tracks the full path (pathname + search) one hop back, for Settings/
+  // Badges/quest-detail's dynamic "Back to X" link (see
+  // PreviousPathContext.jsx) — includes the query string, not just the
+  // route, so a caller that reflects filter/search state in its own URL
+  // (see mobile/Quests.jsx) gets that state back too on the way in, not
+  // just the bare route. A layout effect, not a plain effect — it fires
+  // synchronously before paint, so the corrected value is in place before
+  // the browser ever shows a frame, rather than flashing a stale
+  // one-hop-further-back path for a frame first.
+  const [previousPath, setPreviousPath] = useState(null);
+  const fullPath = location.pathname + location.search;
+  const currentPathRef = useRef(fullPath);
+  useLayoutEffect(() => {
+    if (currentPathRef.current !== fullPath) {
+      setPreviousPath(currentPathRef.current);
+      currentPathRef.current = fullPath;
+    }
+  }, [fullPath]);
+
   return (
-    <>
+    <PreviousPathProvider value={previousPath}>
       <RouteErrorBoundary resetKey={location.pathname}>
         <Outlet />
       </RouteErrorBoundary>
       {showNav && <BottomNav />}
       <WelcomeTour />
       <OrgOnboarding />
-    </>
+    </PreviousPathProvider>
   );
 }
 
@@ -222,6 +245,16 @@ function AppRoutes() {
             MapQuestDetailBody.jsx) rather than a second, map-flavored
             share page — one shareable link per quest, not two. */}
         <Route path="/share/:seriesId" element={<SharedQuest />} />
+        {/* Deliberately outside AppShell too, same reasoning as /share
+            above — an event QR's own URL (see functions/main.py's
+            _check_in_url) has to work the moment it's scanned with a
+            phone's native camera app, not just from inside this app's own
+            nav chrome. Unlike /share, this one does require signing in
+            (check_in_to_event itself requires auth) — CheckInConfirm.jsx
+            handles that itself with a plain "log in, then scan again"
+            prompt rather than a redirect-back-after-login flow, since the
+            QR is a durable, reusable link either way. */}
+        <Route path="/check-in/:questId/:token" element={<CheckInConfirm />} />
         <Route element={<AppShell />}>
           <Route path="/" element={<Home />} />
           <Route path="/quests" element={<QuestsPage />} />
@@ -303,6 +336,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <SmoothScroll />
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

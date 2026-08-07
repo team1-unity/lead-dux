@@ -66,7 +66,7 @@ function QuestionStep({ legend, options, value, otherValue, onSelect, onOtherCha
           type="text"
           value={otherValue}
           onChange={(e) => onOtherChange(e.target.value)}
-          placeholder="Type your own answer..."
+          placeholder="Type your own answer…"
           maxLength={OTHER_MAX_LENGTH}
         />
       )}
@@ -232,7 +232,7 @@ export function Onboarding({ name: initialName, onComplete }) {
             Your neighborhood or city
             <PlaceAutocompleteInput
               ariaLabel="Your neighborhood or city"
-              placeholder="Search for a place..."
+              placeholder="Search for a place…"
               onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat: selectedLat, lng: selectedLng }) => {
                 setLocation(selectedLocation);
                 setPlaceId(selectedPlaceId);
@@ -324,7 +324,7 @@ export function Onboarding({ name: initialName, onComplete }) {
           )}
           {showContinueButton && (
             <StampButton type="submit" variant="primary" disabled={submitting} style={{ flex: 1 }}>
-              {submitting ? 'Saving...' : step === TOTAL_STEPS - 1 ? 'Finish' : 'Continue'}
+              {submitting ? 'Saving…' : step === TOTAL_STEPS - 1 ? 'Finish' : 'Continue'}
             </StampButton>
           )}
         </div>

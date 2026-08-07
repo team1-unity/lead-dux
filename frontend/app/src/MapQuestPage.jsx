@@ -31,7 +31,7 @@ export function MapQuestPage() {
   // Firebase Auth hasn't resolved `user` yet even after this page's own
   // (auth-independent) fetch finishes, so this waits on both rather than
   // just `series`.
-  if (loading || !series) return <LoadingSpinner label="Loading quest..." />;
+  if (loading || !series) return <LoadingSpinner label="Loading quest…" />;
   if (!user) return <Navigate to="/login" replace />;
 
   return (

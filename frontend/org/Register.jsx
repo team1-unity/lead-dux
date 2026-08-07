@@ -8,6 +8,7 @@ import { AuthShell } from '@shared/AuthShell.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
+import { IconGoogle } from '@shared/icons.jsx';
 
 // The account-creation half of organization signup — reached directly from
 // the landing page by someone with no account yet. Mirrors mobile/Register,
@@ -91,11 +92,16 @@ function SignupStep() {
         </label>
         {error && <p className="box-danger">{error}</p>}
         <StampButton type="submit" variant="primary" disabled={submitting}>
-          {submitting ? 'Creating account...' : 'Continue'}
+          {submitting ? 'Creating account…' : 'Continue'}
         </StampButton>
       </form>
-      <StampButton type="button" onClick={handleGoogleSignup} disabled={submitting} style={{ marginTop: 10, width: '100%' }}>
-        Sign up with Google
+      <StampButton
+        type="button"
+        onClick={handleGoogleSignup}
+        disabled={submitting}
+        style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+      >
+        <IconGoogle /> Sign up with Google
       </StampButton>
     </AuthShell>
   );
@@ -160,7 +166,7 @@ export function Register() {
           Location
           <PlaceAutocompleteInput
             ariaLabel="Organization location"
-            placeholder="Search for an address..."
+            placeholder="Search for an address…"
             onSelect={({ location: selectedLocation, placeId: selectedPlaceId }) => {
               setLocation(selectedLocation);
               setPlaceId(selectedPlaceId);
@@ -174,7 +180,7 @@ export function Register() {
         </label>
         {error && <p className="box-danger">{error}</p>}
         <StampButton type="submit" variant="primary" disabled={submitting}>
-          {submitting ? 'Submitting request...' : 'Request organization account'}
+          {submitting ? 'Submitting request…' : 'Request organization account'}
         </StampButton>
       </form>
     </AuthShell>

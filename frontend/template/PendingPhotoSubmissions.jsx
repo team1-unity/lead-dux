@@ -5,8 +5,9 @@ import { db, storage } from './firebaseapp.jsx';
 import { callApprovePhotoSubmission, callRejectPhotoSubmission } from './fetch.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
+import { Collapse } from './Collapse.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconChevron, IconX } from './icons.jsx';
+import { IconChevron } from './icons.jsx';
 
 // Flat submission rows grouped into one entry per quest — matches the
 // wireframe's Title (quest) → grid-of-users shape instead of one long flat
@@ -72,7 +73,7 @@ function SubmissionCard({ submission, url, busy, allowGalleryKeep, onApprove, on
           onClick={() => onApprove(allowGalleryKeep && keepForGallery)}
           disabled={busy}
         >
-          {busy ? 'Approving...' : 'Approve'}
+          {busy ? 'Approving…' : 'Approve'}
         </StampButton>
         <StampButton type="button" variant="danger" onClick={() => setRejecting((v) => !v)} disabled={busy}>
           Reject
@@ -82,7 +83,7 @@ function SubmissionCard({ submission, url, busy, allowGalleryKeep, onApprove, on
         <div className="flex flex-col gap-sm" style={{ marginTop: 8 }}>
           <textarea placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <StampButton type="button" variant="danger" onClick={() => onReject(reason)} disabled={busy}>
-            {busy ? 'Rejecting...' : 'Confirm reject'}
+            {busy ? 'Rejecting…' : 'Confirm reject'}
           </StampButton>
         </div>
       )}
@@ -91,14 +92,6 @@ function SubmissionCard({ submission, url, busy, allowGalleryKeep, onApprove, on
         <LightboxBackdrop onClose={() => setLightboxOpen(false)} label="Submitted photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={url} alt="Submitted proof" className="photo-lightbox-image" />
-            <button
-              type="button"
-              className="photo-lightbox-close"
-              onClick={() => setLightboxOpen(false)}
-              aria-label="Close"
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}
@@ -131,7 +124,7 @@ function QuestSubmissionGroup({ group, urls, busyId, allowGalleryKeep, onApprove
         <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
       </button>
 
-      {open && (
+      <Collapse open={open}>
         <div className="submission-grid" style={{ marginTop: 12 }}>
           {group.items.map((s) => (
             <SubmissionCard
@@ -145,7 +138,7 @@ function QuestSubmissionGroup({ group, urls, busyId, allowGalleryKeep, onApprove
             />
           ))}
         </div>
-      )}
+      </Collapse>
     </section>
   );
 }
@@ -211,7 +204,7 @@ export function PendingPhotoSubmissions({
     }
   }
 
-  if (!submissions) return <LoadingSpinner label="Loading photo submissions..." />;
+  if (!submissions) return <LoadingSpinner label="Loading photo submissions…" />;
 
   const groups = groupByQuest(submissions);
 

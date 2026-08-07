@@ -19,7 +19,8 @@ export function StampButton({ as, variant = 'default', className = '', ...props 
   return (
     <Component
       className={combined || undefined}
-      whileTap={reduce ? undefined : { scale: 0.97 }}
+      whileTap={reduce ? undefined : { scale: 0.96 }}
+      transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
       {...props}
     />
   );
