@@ -5,6 +5,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
+import { getCachedCollection } from '@shared/collectionCache.js';
 import {
   callUpdateOrganizationTags,
   callUpdateOrganizationProfile,
@@ -627,7 +628,7 @@ export function OrganizationProfile() {
   useEffect(() => {
     Promise.all([
       getDocs(query(collection(db, 'quests'), where('orgId', '==', orgId))),
-      getDocs(collection(db, 'questSeries')),
+      getCachedCollection(db, 'questSeries'),
     ]).then(([questsSnap, seriesSnap]) => {
       const quests = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
       const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));

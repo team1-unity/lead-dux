@@ -4,6 +4,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
+import { getCachedCollection } from '@shared/collectionCache.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
@@ -130,7 +131,7 @@ export function Badges() {
     if (!user) return;
     let cancelled = false;
     Promise.all([
-      getDocs(collection(db, 'quests')),
+      getCachedCollection(db, 'quests'),
       getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid))),
       getDoc(doc(db, 'users', user.uid)),
     ]).then(([questsSnap, attendanceSnap, userSnap]) => {

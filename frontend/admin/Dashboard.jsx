@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
+import { getCachedCollection } from '@shared/collectionCache.js';
 import {
   callAdminListUsers,
   callAdminListOrganizations,
@@ -382,8 +383,8 @@ function QuestsAdmin() {
 
   async function load() {
     const [questsSnap, seriesSnap] = await Promise.all([
-      getDocs(collection(db, 'quests')),
-      getDocs(collection(db, 'questSeries')),
+      getCachedCollection(db, 'quests'),
+      getCachedCollection(db, 'questSeries'),
     ]);
     setQuests(questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
     setSeriesAggregates(new Map(seriesSnap.docs.map((d) => [d.id, d.data()])));

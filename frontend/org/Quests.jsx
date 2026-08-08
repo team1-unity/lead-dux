@@ -3,6 +3,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
+import { getCachedCollection } from '@shared/collectionCache.js';
 import { groupBySeries, attachSeriesRatings, isUpcoming, toDate } from '@shared/questSeries.js';
 import { useQuestSeriesActions } from '@shared/useQuestSeriesActions.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
@@ -467,7 +468,7 @@ function OrgQuests({ creating, setCreating }) {
   async function load() {
     const [questsSnap, seriesSnap] = await Promise.all([
       getDocs(query(collection(db, 'quests'), where('orgId', '==', user.uid))),
-      getDocs(collection(db, 'questSeries')),
+      getCachedCollection(db, 'questSeries'),
     ]);
     setQuests(questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
     setSeriesAggregates(new Map(seriesSnap.docs.map((d) => [d.id, d.data()])));

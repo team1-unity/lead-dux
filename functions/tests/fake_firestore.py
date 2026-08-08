@@ -215,6 +215,15 @@ class FakeFirestoreClient:
     def batch(self):
         return FakeBatch()
 
+    def get_all(self, refs):
+        # Real Firestore batches these into one RPC and does not promise
+        # the returned order matches `refs` — callers (list_quest_reviews,
+        # list_quest_attendees, submit_quest_photo) match snapshots back up
+        # by .reference or .id rather than by position, so returning them
+        # in input order here is a valid (if narrower) stand-in rather than
+        # a shortcut that would mask a caller relying on position.
+        return [FakeDocSnapshot(ref.id, self._store.get(ref.path), reference=ref) for ref in refs]
+
 
 class FakeFirestoreModule:
     """Substitutes for the `firestore` name main.py imports from
