@@ -5878,31 +5878,6 @@ button.data-row:active:not(:disabled) {
   font-style: italic;
 }
 
-.journal-thumbnail-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-.journal-thumbnail-picker-option {
-  aspect-ratio: 1;
-  overflow: hidden;
-  border-radius: 10px;
-  border: 2px solid transparent;
-  padding: 0;
-  background: var(--paper-well);
-  width: 100%;
-}
-.journal-thumbnail-picker-option[data-selected='true'] {
-  border-color: var(--accent);
-}
-.journal-thumbnail-picker-option img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 /* ---------- ImageUploadCard.jsx — single-image drag-and-drop upload with
    a "vending machine" drop-in animation (the animation's own timing/easing
    values live in the component; this is just the drop zone's visual
