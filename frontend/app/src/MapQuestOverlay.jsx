@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMapQuestSeries } from '@shared/useMapQuestSeries.js';
@@ -32,6 +32,7 @@ export function MapQuestOverlay() {
   // rendering is exactly the kind of thing that's fragile to a future
   // reorder of these two components' mount timing.
   const [portalTarget, setPortalTarget] = useState(null);
+  const detailSlotRef = useRef(null);
 
   useEffect(() => {
     const target = document.getElementById('events-map-list-pane');
@@ -62,6 +63,45 @@ export function MapQuestOverlay() {
     };
   }, []);
 
+  // Same html/body scroll lock LightboxBackdrop.jsx uses, and for the same
+  // underlying reason: locking the pane's own overflow above isn't enough,
+  // because the pane isn't actually this page's real scrolling element —
+  // document.documentElement is (see LightboxBackdrop's own note on why
+  // <body> alone doesn't stop it either). Without this, EventsMap's
+  // "selected row scrolls into view" effect (it still fires on every
+  // marker click, even though the list itself is currently hidden behind
+  // this overlay) can't scroll the now-locked pane, so the browser
+  // escalates the scrollIntoView call to the next actually-scrollable
+  // ancestor — documentElement — and drags the whole page (this overlay
+  // included) around instead, which is what made the close button end up
+  // scrolled out of reach.
+  useEffect(() => {
+    const html = document.documentElement;
+    const previousHtml = html.style.overflow;
+    const previousBody = document.body.style.overflow;
+    html.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = previousHtml;
+      document.body.style.overflow = previousBody;
+    };
+  }, []);
+
+  // Clicking a different marker/row while this overlay is already open
+  // navigates here again with a new :seriesId (see EventsMap.jsx's
+  // replace-navigation), but React Router keeps this same component
+  // instance mounted across that param change — it doesn't unmount/remount
+  // just because the route param changed. That means .events-map-detail-
+  // slot (the thing that actually scrolls; the pane above locks its own
+  // overflow while this is open) keeps whatever scroll position the
+  // *previous* quest's detail was left at, so the new quest's content
+  // renders already scrolled partway down. Resetting here, keyed on
+  // seriesId, makes opening a different quest always start at the top,
+  // same as opening the very first one does.
+  useEffect(() => {
+    if (detailSlotRef.current) detailSlotRef.current.scrollTop = 0;
+  }, [seriesId]);
+
   function close() {
     navigate(-1);
   }
@@ -89,7 +129,7 @@ export function MapQuestOverlay() {
   if (notFound || !portalTarget) return null;
 
   return createPortal(
-    <div className="events-map-detail-slot">
+    <div className="events-map-detail-slot" ref={detailSlotRef}>
       {!series ? (
         // No hero photo to float a close button on yet — the generic
         // bordered-card-inset .photo-lightbox-close (see style.css) covers
@@ -99,7 +139,7 @@ export function MapQuestOverlay() {
           <button type="button" className="photo-lightbox-close" onClick={close} aria-label="Close">
             <IconX width={18} height={18} />
           </button>
-          {error ? <p className="box-danger">{error}</p> : <LoadingSpinner label="Loading quest..." />}
+          {error ? <p className="box-danger">{error}</p> : <LoadingSpinner label="Loading quest…" />}
         </>
       ) : (
         <MapQuestDetailBody series={series} fullDetailsHref={`/quests/${series.seriesId}`} onClose={close} />

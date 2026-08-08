@@ -61,6 +61,28 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // A quest series' cover-photo gallery (see add_quest_series_cover_photo/
+    // remove_quest_series_cover_photo in functions/main.py and
+    // CreateQuestForm.jsx) — an org can add as many as it wants. Same shape
+    // as orgPhotos above — readable by anyone signed in (every quest list
+    // that shows one needs it), writable only by the org uploading it,
+    // always to a fresh {timestampMillis}.{ext} path. Keyed by the
+    // uploading org's own uid, not the seriesId — the Cloud Functions above
+    // are what actually enforce that org owns the series a given photo gets
+    // pointed at, the same division of labor orgPhotos already draws
+    // between "can this org write somewhere under its own prefix" (here)
+    // and "is this org allowed to make this specific change" (the Cloud
+    // Function).
+    match /questCovers/{orgId}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.token.role == 'organization'
+        && request.auth.uid == orgId
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+      allow update, delete: if false;
+    }
+
     // A member's own profile picture (see update_user_profile in
     // functions/main.py and Profile.jsx's "Edit Profile"). Same shape as
     // orgPhotos above — a fresh {timestampMillis}.{ext} path each time

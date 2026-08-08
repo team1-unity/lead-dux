@@ -8,6 +8,7 @@ import { db } from '@shared/firebaseapp.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { AuthShell } from '@shared/AuthShell.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { IconGoogle } from '@shared/icons.jsx';
 
 // Firebase Auth has no idea what "suspended" means — that's app data, not
 // login data — so this checks it right after authenticating, before
@@ -97,11 +98,16 @@ export function Login() {
         </label>
         {error && <p className="box-danger">{error}</p>}
         <StampButton type="submit" variant="primary" disabled={submitting}>
-          {submitting ? 'Signing in...' : 'Log in'}
+          {submitting ? 'Signing in…' : 'Log in'}
         </StampButton>
       </form>
-      <StampButton type="button" onClick={handleGoogleLogin} disabled={submitting} style={{ marginTop: 10, width: '100%' }}>
-        Sign in with Google
+      <StampButton
+        type="button"
+        onClick={handleGoogleLogin}
+        disabled={submitting}
+        style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+      >
+        <IconGoogle /> Sign in with Google
       </StampButton>
     </AuthShell>
   );

@@ -270,13 +270,21 @@ and start the emulators from the repo root:
 firebase emulators:start
 ```
 
-Location fields (organization registration, organization quest creation, and the neighborhood/city field in user onboarding) use Google Places Autocomplete — add a Maps API key to `frontend/app/.env.local` too:
+The map view (`/map`) renders with [MapLibre GL JS](https://maplibre.org/) using a [MapTiler](https://www.maptiler.com/) vector style — add a MapTiler key to `frontend/app/.env.local`:
 
 ```
-VITE_GOOGLE_MAPS_API_KEY=your-key-here
+VITE_MAPTILER_KEY=your-key-here
 ```
 
-Get one from the [Google Cloud Console](https://console.cloud.google.com/) under the same project backing this app's Firebase project (`lead-dux`) — enable the **Places API**, create an API key under Credentials, and restrict it to your dev/prod domains (HTTP referrers). Without this key set, those location fields won't render (side/default quests created by an admin are unaffected — they keep a plain free-text location on purpose, since they don't have one specific physical place).
+Get one from the [MapTiler Cloud dashboard](https://cloud.maptiler.com/account/keys/) (free account, no card required) and restrict it to your dev/prod domains under that key's allowed URLs. Without this key set, the map tiles/style won't load (a red error box renders in the map container instead).
+
+Location fields (organization registration, organization quest creation, and the neighborhood/city field in user onboarding) use [Geoapify](https://www.geoapify.com/)'s Autocomplete API — add a Geoapify key too:
+
+```
+VITE_GEOAPIFY_KEY=your-key-here
+```
+
+Get one from [Geoapify MyProjects](https://myprojects.geoapify.com/) (free account, no card required — the free tier covers Autocomplete + Geocoding together) and restrict it to your dev/prod domains under Security in that project. Without this key set, those location fields render but suggestions fail silently with a "Could not load suggestions." message (side/default quests created by an admin are unaffected — they keep a plain free-text location on purpose, since they don't have one specific physical place).
 
 Quest photo submissions (see the Cloud Functions table below) upload to Cloud Storage — no extra frontend config is needed, but if you're testing this locally against the emulator suite, export `STORAGE_EMULATOR_HOST=http://127.0.0.1:9199` before starting `firebase emulators:start` so `functions/main.py`'s server-side upload verification (`firebase_admin.storage`) talks to the local Storage emulator instead of real Cloud Storage — the emulator doesn't wire this up automatically the way it does for Firestore/Auth.
 

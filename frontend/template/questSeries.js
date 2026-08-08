@@ -34,6 +34,25 @@ export function isUpcoming(quest) {
 // selected, not from `primary`. Reviews are the one exception — they live
 // at the series level (see attachSeriesRatings), not per occurrence, so
 // they're the same no matter which date is selected.
+// The soonest occurrence in a series a given user could still explore —
+// hasn't RSVP'd to it, hasn't already attended it — or null if every
+// upcoming occurrence is already spoken for one way or the other. Used by
+// browsing surfaces (the Map) where a quest someone's already fully
+// engaged with has nothing left to offer; `group.primary` (groupBySeries'
+// own earliest-occurrence pick) doesn't know or care about any of that, so
+// a caller that wants "what should this series point at for someone who's
+// already RSVP'd to its first date but not a later recurring one" needs
+// this instead. `group.occurrences` is already sorted ascending by
+// groupBySeries, so the first match here is genuinely the soonest one.
+export function nextExplorableOccurrence(group, uid, attendedEventIds) {
+  if (!uid) return group.primary;
+  return (
+    group.occurrences.find(
+      (o) => !(o.rsvpd || []).includes(uid) && !attendedEventIds?.has(o.id),
+    ) || null
+  );
+}
+
 export function groupBySeries(quests) {
   const bySeriesId = new Map();
   quests.forEach((quest) => {
@@ -48,13 +67,23 @@ export function groupBySeries(quests) {
   });
 }
 
-// Merges questSeries/{seriesId} aggregate docs (avgRating/reviewCount —
-// see submit_review in functions/main.py) onto each series group. Series
-// with no reviews yet have no questSeries doc at all, hence the fallbacks.
+// Merges questSeries/{seriesId} aggregate docs (avgRating/reviewCount — see
+// submit_review in functions/main.py; coverPhotos — see
+// add_quest_series_cover_photo) onto each series group. Series with neither
+// a review nor a cover photo yet have no questSeries doc at all, hence the
+// fallbacks. coverPhotos can hold any number of photos (an org adds as many
+// as it wants) — callers that just need one thumbnail (list cards) read
+// coverPhotos[0], falling back to the org's own logo the same way a single
+// cover photo already did.
 export function attachSeriesRatings(groups, seriesDocsById) {
   return groups.map((group) => {
     const agg = seriesDocsById.get(group.seriesId);
-    return { ...group, avgRating: agg?.avgRating ?? null, reviewCount: agg?.reviewCount ?? 0 };
+    return {
+      ...group,
+      avgRating: agg?.avgRating ?? null,
+      reviewCount: agg?.reviewCount ?? 0,
+      coverPhotos: agg?.coverPhotos ?? [],
+    };
   });
 }
 

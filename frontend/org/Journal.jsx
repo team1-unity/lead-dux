@@ -10,6 +10,7 @@ import { TopBar } from '@shared/TopBar.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { Collapse } from '@shared/Collapse.jsx';
 import { IconChevron } from '@shared/icons.jsx';
 
 const DEFAULT_EVENT_WINDOW_HOURS = 6; // mirrors functions/main.py's DEFAULT_EVENT_WINDOW_HOURS
@@ -99,7 +100,7 @@ function HostJournalEntry({ entry }) {
         <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
       </button>
 
-      {open && (
+      <Collapse open={open}>
         <div className="journal-entry-body">
           {formatEventDate(entry.eventDate) && (
             <p className="quest-org-line" style={{ marginTop: 0 }}>{formatEventDate(entry.eventDate)}</p>
@@ -124,7 +125,7 @@ function HostJournalEntry({ entry }) {
                 {error && <p className="box-danger">{error}</p>}
                 <div className="flex items-center gap-sm" style={{ marginTop: 10 }}>
                   <StampButton type="button" variant="primary" onClick={saveReflection} disabled={saving}>
-                    {saving ? 'Saving...' : 'Save reflection'}
+                    {saving ? 'Saving…' : 'Save reflection'}
                   </StampButton>
                   {savedBody.trim() && (
                     <StampButton type="button" onClick={cancelEditing} disabled={saving}>
@@ -158,7 +159,7 @@ function HostJournalEntry({ entry }) {
             )}
           </div>
         </div>
-      )}
+      </Collapse>
     </div>
   );
 }
@@ -212,7 +213,7 @@ export function Journal() {
     <PageMotion>
       <TopBar title="Journal" />
       {entries === null ? (
-        <LoadingSpinner label="Loading your journal..." />
+        <LoadingSpinner label="Loading your journal…" />
       ) : entries.length === 0 ? (
         <div className="quest-empty">
           <h2>No Entries Yet</h2>

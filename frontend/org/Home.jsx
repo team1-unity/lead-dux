@@ -66,7 +66,7 @@ export function Home() {
     };
   }, [user]);
 
-  if (org === null || data === null) return <LoadingSpinner label="Loading..." />;
+  if (org === null || data === null) return <LoadingSpinner label="Loading…" />;
 
   const trustStatus = getTrustStatus(org.reviewCount || 0, org.avgRating || 0);
 
@@ -75,7 +75,7 @@ export function Home() {
       <AmbientParticles />
       <div className="org-home-greeting">
         <Link to={`/organizations/${user.uid}`} className="org-home-avatar-link" aria-label="View your public profile">
-          <OrgAvatar name={org.name} seed={user.uid} />
+          <OrgAvatar name={org.name} seed={user.uid} logoUrl={org.logoUrl} />
         </Link>
         <div>
           <h1>Hello, {org.name}</h1>

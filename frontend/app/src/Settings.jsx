@@ -2,18 +2,25 @@ import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updateEmail,
+  updatePassword,
+} from 'firebase/auth';
 import { useAuth } from '@shared/AuthContext.jsx';
 import { db } from '@shared/firebaseapp.jsx';
-import { callDeleteAccount, callUpdateInterests, callUpdateAccommodationNeeds } from '@shared/fetch.jsx';
+import { callDeleteAccount, callUpdateAccommodationNeeds } from '@shared/fetch.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { TopBar } from '@shared/TopBar.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
+import { usePreviousPath } from '@shared/PreviousPathContext.jsx';
+import { labelForPath } from '@shared/routeLabels.js';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
-import { INTEREST_OPTIONS } from '@shared/interests.js';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import { getStoredTheme, applyTheme } from '@shared/theme.js';
 
@@ -52,86 +59,13 @@ export function ThemePicker() {
   );
 }
 
-// Lets a "user" change the interests they picked during onboarding —
-// onboarding only ever sets them once, this is the only way back in.
-// Exported so desktop Profile.jsx can render it inline (see
-// .profile-settings-list there); on mobile it's still only reachable via
-// the Settings page, since it's a preference to tweak, not part of "who I
-// am."
-export function InterestsEditor() {
-  const { user } = useAuth();
-  const [interests, setInterests] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    getDoc(doc(db, 'users', user.uid)).then((snap) => {
-      setInterests(snap.exists() ? snap.data().interests || [] : []);
-    });
-  }, [user]);
-
-  function toggle(interest) {
-    setSaved(false);
-    setInterests((prev) =>
-      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest]
-    );
-  }
-
-  async function save() {
-    setError('');
-    if (interests.length === 0) {
-      setError('Pick at least one interest.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await callUpdateInterests({ interests });
-      setSaved(true);
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (interests === null) return <LoadingSpinner label="Loading interests..." />;
-
-  return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <h2 style={{ marginBottom: 0 }}>Interests</h2>
-      <p style={{ margin: 0 }}>These decide which quests show up first for you.</p>
-      <div className="flex flex-wrap gap-sm">
-        {INTEREST_OPTIONS.map((interest) => (
-          <TagStamp
-            key={interest}
-            tone={interest}
-            selectable
-            selected={interests.includes(interest)}
-            onClick={() => toggle(interest)}
-          >
-            {interest}
-          </TagStamp>
-        ))}
-      </div>
-      {error && <p className="box-danger">{error}</p>}
-      <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
-        {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save interests'}
-      </StampButton>
-    </section>
-  );
-}
-
 // Lets a "user" change the accessibility needs and/or location they gave
 // during onboarding — onboarding only ever sets these once, and needs (or
 // where someone lives) can change afterward. Location doubles as the input
 // to the accommodation-based side-quest-limit relaxation check (see
 // rsvp_to_quest), so re-picking it here keeps that check current too, not
 // just the display. Re-picking a place is optional — location fields are
-// only sent to the server when the user actually changes them. Exported
-// for the same reason Interests is — desktop Profile.jsx renders it
-// inline; mobile only reaches it via Settings.
+// only sent to the server when the user actually changes them.
 export function AccommodationNeedsEditor() {
   const { user } = useAuth();
   const [needs, setNeeds] = useState(null);
@@ -184,7 +118,7 @@ export function AccommodationNeedsEditor() {
     }
   }
 
-  if (needs === null) return <LoadingSpinner label="Loading accessibility info..." />;
+  if (needs === null) return <LoadingSpinner label="Loading accessibility info…" />;
 
   return (
     <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -209,7 +143,7 @@ export function AccommodationNeedsEditor() {
         Your neighborhood or city
         <PlaceAutocompleteInput
           ariaLabel="Your neighborhood or city"
-          placeholder="Search for a place..."
+          placeholder="Search for a place…"
           onSelect={({ location: selectedLocation, placeId: selectedPlaceId, lat: selectedLat, lng: selectedLng }) => {
             setLocation(selectedLocation);
             setPlaceId(selectedPlaceId);
@@ -223,8 +157,109 @@ export function AccommodationNeedsEditor() {
       </label>
       {error && <p className="box-danger">{error}</p>}
       <StampButton type="button" variant="primary" onClick={save} disabled={submitting}>
-        {submitting ? 'Saving...' : saved ? 'Saved!' : 'Save'}
+        {submitting ? 'Saving…' : saved ? 'Saved!' : 'Save'}
       </StampButton>
+    </section>
+  );
+}
+
+// Email/password change — moved here from EditProfileModal (which used to
+// hold this alongside name/photo/duck): those are visual identity, this is
+// account security, and the two don't really belong in the same "Edit
+// Profile" popup. Firebase Auth's own concern, not Firestore — updateEmail/
+// updatePassword talk to Auth directly, no Cloud Function involved — and
+// only rendered at all for an account that actually signed in with a
+// password; a Google-only account has no password to change and Google,
+// not this app, owns its email. Both require a fresh reauthentication
+// first (Firebase's own "requires-recent-login" rule for anything
+// security-sensitive), so "Current password" is asked for once and reused
+// for whichever of the two actually changed.
+function AccountSection() {
+  const { user } = useAuth();
+  const isPasswordProvider = user.providerData.some((p) => p.providerId === 'password');
+  const [newEmail, setNewEmail] = useState(user.email || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  if (!isPasswordProvider) return null;
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError('');
+    setSaved(false);
+    const emailChanged = newEmail.trim() !== user.email;
+    const passwordChanged = newPassword.trim().length > 0;
+    if (!emailChanged && !passwordChanged) {
+      setError('Change your email or enter a new password first.');
+      return;
+    }
+    if (!currentPassword) {
+      setError('Enter your current password to make this change.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      if (emailChanged) await updateEmail(user, newEmail.trim());
+      if (passwordChanged) await updatePassword(user, newPassword.trim());
+      setNewPassword('');
+      setCurrentPassword('');
+      setSaved(true);
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="ink-card">
+      <h2>Account</h2>
+      <form onSubmit={handleSave} className="flex flex-col gap-md">
+        <label>
+          Email
+          <input
+            type="email"
+            autoComplete="email"
+            value={newEmail}
+            onChange={(e) => {
+              setNewEmail(e.target.value);
+              setSaved(false);
+            }}
+          />
+        </label>
+        <label>
+          New password <span className="field-optional">(optional)</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => {
+              setNewPassword(e.target.value);
+              setSaved(false);
+            }}
+            placeholder="Leave blank to keep your current password"
+          />
+        </label>
+        <label>
+          Current password
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Required to change email or password"
+          />
+        </label>
+        {error && <p className="box-danger">{error}</p>}
+        <StampButton type="submit" variant="primary" disabled={saving}>
+          {saving ? 'Saving…' : saved ? 'Saved!' : 'Save'}
+        </StampButton>
+      </form>
     </section>
   );
 }
@@ -312,7 +347,7 @@ export function DangerZone() {
                 disabled={confirmText !== 'DELETE' || submitting}
                 onClick={deleteAccount}
               >
-                {submitting ? 'Deleting...' : 'Permanently delete'}
+                {submitting ? 'Deleting…' : 'Permanently delete'}
               </StampButton>
               <StampButton
                 type="button"
@@ -333,36 +368,46 @@ export function DangerZone() {
   );
 }
 
-// App preferences, a "user" role's interests/accessibility (see
-// InterestsEditor/AccommodationNeedsEditor above — those used to live on
-// Profile, but they're preferences to tweak, not identity), signing out
+// App preferences — a "user" role's accessibility needs (see
+// AccommodationNeedsEditor above; interests has no editor here anymore,
+// see functions/main.py's module note above _generate_quest_recommendations
+// for why), account security (email/password, see AccountSection — every
+// role with a password provider gets this, not just "user"), signing out
 // (for every role except "user" — see LogoutSection's own comment), and
 // the one destructive account action. Identity and organization status
-// still live on Profile instead (see Profile.jsx). Not wrapped in narrow-
-// content: at desktop width each section spans the full dashboard-style
-// width rather than floating a mobile-width form in the middle of a wide
-// page.
+// still live on Profile instead (see Profile.jsx). Not wrapped in
+// narrow-content: at desktop width each section spans the full
+// dashboard-style width rather than floating a mobile-width form in the
+// middle of a wide page.
 export function Settings() {
   const { user, role, loading } = useAuth();
+  const previousPath = usePreviousPath();
 
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
 
+  // Settings is reachable from almost anywhere (the nav's avatar dropdown
+  // works on every page), so "back" means wherever the caller actually
+  // came from, not a single fixed parent — falls back to Profile (an
+  // organization's own public profile page, not the generic member
+  // Profile.jsx — see OrganizationProfile.jsx) when there's no previous
+  // in-app page to reflect, e.g. a direct link or a page refresh.
+  const previousLabel = labelForPath(previousPath);
+  const backTo = previousLabel
+    ? previousPath
+    : role === 'organization'
+      ? `/organizations/${user.uid}`
+      : '/profile';
+  const backLabel = previousLabel || 'Profile';
+
   return (
     <PageMotion>
-      {/* An organization's "profile" is its own public profile page
-          (editable in place there — see OrganizationProfile.jsx), not the
-          generic member Profile.jsx, since that's where its avatar/gear now
-          point (see BottomNav.jsx). */}
-      <BackLink
-        to={role === 'organization' ? `/organizations/${user.uid}` : '/profile'}
-        label="Profile"
-      />
+      <BackLink to={backTo} label={backLabel} />
       <TopBar title="Settings" />
       <div className="settings-grid">
         <ThemePicker />
-        {role === 'user' && <InterestsEditor />}
         {role === 'user' && <AccommodationNeedsEditor />}
+        <AccountSection />
         {role !== 'user' && <LogoutSection />}
         <DangerZone />
       </div>

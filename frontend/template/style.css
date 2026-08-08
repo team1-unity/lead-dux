@@ -121,23 +121,23 @@
 }
 
 /* =========================================================================
-   LEAD-DUX visual identity — warm, flat, community-driven. Duck-on-water
-   brand mark; Crushed (display-only) / Cuprum (headings & labels) / DM Sans
-   (body & UI copy). Replaces the earlier rough.js "stamped ink" pass — see
+   LEAD-DUX visual identity — warm cream/butter-yellow palette, brown ink
+   text, Source Serif 4 headlines over Inter body/UI copy ("theme 9a").
+   Replaces the earlier green-accented Bricolage Grotesque/Mulish pass — see
    git history for that version. The .box/.box-primary/etc and .flex/.gap-*
-   utilities above predate both passes and are kept as-is.
+   utilities above predate every visual pass and are kept as-is.
    ========================================================================= */
 
 @font-face {
-  font-family: 'Bricolage Grotesque';
-  src: url('/fonts/bricolage-grotesque-v9-latin-variable.woff2') format('woff2');
-  font-weight: 600 800;
+  font-family: 'Source Serif 4';
+  src: url('/fonts/source-serif-4-v14-latin-variable.woff2') format('woff2');
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Mulish';
-  src: url('/fonts/mulish-v18-latin-variable.woff2') format('woff2');
+  font-family: 'Inter';
+  src: url('/fonts/inter-v20-latin-variable.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
@@ -150,63 +150,82 @@
   font-display: swap;
 }
 
-/* Crushed/Cuprum/DM Sans aren't the ambient UI font anymore (see
-   --font-* below), but Certificate.jsx still draws its canvas text
-   directly in these families for the Diamond-rank certificate's own
-   fixed "stamped" look — keep these registered so that canvas text
-   doesn't silently fall back to a system font. */
-@font-face {
-  font-family: 'Crushed';
-  src: url('/fonts/crushed-v32-latin-400.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Cuprum';
-  src: url('/fonts/cuprum-v29-latin-variable.woff2') format('woff2');
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'DM Sans';
-  src: url('/fonts/dm-sans-v17-latin-variable.woff2') format('woff2');
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
-  /* brand hues — rarely used raw; almost everything below derives from these.
-     Matches the app-wireframe-alignment design handoff exactly (green/yellow/
-     blue + Bricolage Grotesque/Mulish), not the earlier sketchy-vibe pass. */
-  --brand-green: #2f8a4e;
-  --brand-green-deep: #2f7d45;
-  --brand-mustard: #f2c94c;
-  --brand-blue: #3457c4;
-  --brand-orange: #ee9b43;
+  /* ============================================================
+     TEMPORARY TRIAL — "Cozy Duck Growth" reskin (see design brief).
+     Explicitly exploratory, not a committed direction — every value
+     in this block that changed for the trial says so inline. Revert
+     by restoring the values noted in each comment (nothing here is
+     committed to git, so `git diff`/`git checkout` on this file also
+     works as a full undo).
+     ============================================================ */
+  /* brand hues — rarely used raw; almost everything below derives from
+     these. "Theme 9a": warm cream page, butter-yellow primary-action fill,
+     brown ink text — no green/blue/black in structural chrome, ever.
+     Names kept from the previous green-accented pass (avoids renaming
+     every one of their call sites below) but every value here is new.
+     --brand-green-deep was a dead duplicate of --brand-green until now —
+     it's the saturated gold --accent promotes to in light mode (see
+     below); --brand-green itself stays the original pale butter-yellow,
+     fixed for the auth hero panel regardless of theme. */
+  --brand-green: #f0e4a8;
+  --brand-green-deep: #b45309;
+  --brand-green-ink: #57491f;
+  --brand-mustard: #c99a2e;
+  --brand-blue: #3d6fa8;
+  --brand-orange: #d68f3a;
 
-  /* surfaces */
-  --paper: #efe9df;
-  --paper-card: #ffffff;
-  --paper-well: #f3eee3;
-  --line: #223018;
-  --line-soft: #6b6b63;
-  --border: rgba(0, 0, 0, 0.08);
-  --shadow: rgba(34, 48, 24, 0.1);
+  /* Theme-aware duck mark (DuckMark in Logo.jsx) — a brown-outline PNG
+     for light mode, a pale-yellow-outline one for dark mode (a plain
+     brown line is nearly invisible against a dark surface). Swapping the
+     url() itself via this token means DuckMark never needs to know which
+     theme is active — same mechanism as every other themed value in this
+     file, just holding a url() instead of a color. */
+  --duck-mark-url: url('/brand/duck-brown.png');
 
-  /* pastel tag rack — one per quest interest tag, all rooted in the brand hues */
+  /* surfaces — values sampled directly from get-ripe.com's live computed
+     styles (page section bg + card bg), not estimated: their page is
+     #efe5d4, their card #fff7eb, a real ~1.17:1 lift. Our old --paper
+     (#fbf3e7) was already almost as pale as RIPE's own CARD color, which
+     is why lightening --paper-card further kept hitting a ceiling near
+     pure white — deepening --paper itself to RIPE's real page tone is
+     what actually creates the room for a visible card lift.
+     --line-soft/--warning/--info/--success below are each darkened to
+     hold their AA margin against this deeper page (see their comments).
+     Revert to --paper:#fbf3e7 --paper-card:#fff8ec --paper-well:#fff8ec
+     to undo. */
+  --paper: #efe5d4;
+  --paper-card: #fff7eb;
+  --paper-well: #fff7eb;
+  --line: #4a3728;
+  --line-soft: #716352;
+  --border: #8b6f4e;
+  --shadow: rgba(87, 73, 31, 0.12);
+  /* Neutral, not theme-tinted on purpose — a photo's own edge shouldn't
+     pick up the brand's brown/yellow cast (that reads as dirt on the
+     image), so this stays pure black regardless of theme. */
+  --image-outline: rgba(0, 0, 0, 0.1);
+
+  /* tag rack — restored to main's original pastel palette (the RIPE pass
+     had re-muted these into deeper/more saturated tones; the paper/
+     paper-card/paper-well cream surfaces above are the only part of that
+     pass being kept). environment/community/outdoors/rejected inks are
+     nudged a shade darker than that restored palette (same hue, just
+     enough lightness removed) — the originals landed at 3.35-4.34:1
+     against their own fill, under the 4.5:1 AA text threshold; every pair
+     here now clears ~4.6:1+. Keep tagTones.js's TONE_HEX mirror (used
+     wherever a tag needs a real hex value CSS vars can't reach, like map
+     pins) in sync with whatever inks live here. */
   --tag-environment: #dcefdc;
-  --tag-environment-ink: #3f7a49;
+  --tag-environment-ink: #3c7446;
   --tag-community: #f2edc7;
-  --tag-community-ink: #8f7f1e;
+  --tag-community-ink: #776919;
   --tag-youth: #d7e4f7;
   --tag-youth-ink: #1e3a73;
   --tag-education: #d6ecf7;
   --tag-education-ink: #1b4e66;
   --tag-outdoors: #f7e4cf;
-  --tag-outdoors-ink: #b06d26;
+  --tag-outdoors-ink: #91591f;
   --tag-technology: #cfe9e6;
   --tag-technology-ink: #15574f;
   --tag-fitness: #f6d6d0;
@@ -216,11 +235,12 @@
   --tag-arts: #e3d6f0;
   --tag-arts-ink: #48276e;
   --tag-verified: #dcefdc;
-  --tag-verified-ink: #3f7a49;
+  --tag-verified-ink: #3c7446;
   --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c0402f;
+  --tag-rejected-ink: #b83e2d;
 
-  /* rank ladder — one pair per side-quest tier / leadership rank name */
+  /* rank ladder — restored to main's original pastel palette, same reasoning
+     as the tag rack above. */
   --rank-iron: #dfe3e6;
   --rank-iron-ink: #454c52;
   --rank-bronze: #ecd2b3;
@@ -232,147 +252,215 @@
   --rank-diamond: #d3ecf5;
   --rank-diamond-ink: #144a63;
 
-  /* semantic */
-  --accent: var(--brand-green-deep);
-  --accent-contrast: #ffffff;
-  --accent-soft: #d4e7d0;
-  --secondary: var(--brand-mustard);
-  --secondary-ink: #6b4e05;
-  --info: var(--brand-blue);
-  --success: #2f8a53;
-  --warning: #a35d16;
-  --danger: #c0402f;
-  --danger-soft: #fbe3df;
-  --link: var(--brand-blue);
-  --focus-ring: var(--brand-blue);
+  /* semantic — TRIAL: golden accent + dark ink text (matching the
+     reference's "Accept Quest" button: bg #F0B23F, text #4A3728) — a
+     reversal from white-on-gold back to dark-on-gold. Coral repurposed
+     for danger/alerts per the reference's "alerts/hearts" role. Revert
+     target: --accent:var(--brand-green-deep) [#b45309] --accent-contrast:
+     #fffaf0 --accent-soft:#f7f0d2 --danger:#b0403a --warning:#a0602e
+     --info:#3d6fa8. */
+  --accent: #f0e0a0;
+  --accent-contrast: #4a3728;
+  --accent-soft: #e6dacb;
+  --secondary: #cdd6ee;
+  --secondary-ink: #2e4e8a;
+  --info: #2d6c86;
+  --success: #417033;
+  --success-soft: #dcefd2;
+  --warning: #9f4f0d;
+  --danger: #b73a1d;
+  --danger-soft: #f5e2df;
+  --link: var(--line);
+  --focus-ring: #3d6fa8;
 
-  --font-display: 'Bricolage Grotesque', 'Arial Narrow', sans-serif;
-  --font-heading: 'Bricolage Grotesque', 'Arial Narrow', sans-serif;
-  --font-body: 'Mulish', system-ui, -apple-system, sans-serif;
+  /* TRIAL: Baloo 2 (display/rounded) + Quicksand (body) + Caveat
+     (handwritten accent, new token) replacing Source Serif 4 + Inter.
+     Loaded via Google Fonts CDN in index.html for this trial rather than
+     self-hosted. Revert target: --font-display/--font-heading:'Source
+     Serif 4',Georgia,serif — --font-body:'Inter',system-ui,sans-serif —
+     remove --font-script and the index.html font link. */
+  --font-display: 'Baloo 2', sans-serif;
+  --font-heading: 'Baloo 2', sans-serif;
+  --font-body: 'Quicksand', sans-serif;
+  --font-script: 'Caveat', cursive;
   --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  --radius: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 28px;
+  /* TRIAL: card/input radii pulled back — felt too "toy blob" rounded.
+     --radius-full stays 999px on purpose: several fixed-size square
+     elements (avatars, icon buttons — 40-64px boxes) rely on it being
+     larger than half their own size to render as a true circle, not a
+     rounded square; buttons use --radius-button below instead, decoupled
+     from that circle-guarantee role. Revert target if fully undone:
+     --radius:14px --radius-lg:18px --radius-xl:28px. */
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
   --radius-full: 999px;
+  --radius-button: 14px;
   --nav-height: 64px;
-  --nav-height-desktop: 76px;
+  --nav-height-desktop: 60px;
+  /* TRIAL: desktop sidebar nav (was a horizontal topbar) — quick
+     experiment, see .bottom-nav's own desktop media query. */
+  --sidebar-width-desktop: 240px;
+  --sidebar-width-desktop-collapsed: 76px;
   --bp-wide: 860px;
 }
 
+/* Dark mode isn't covered by the "theme 9a" handoff doc at all — it only
+   ever shows one cream palette. Extended in the same spirit rather than
+   reusing the old neutral-gray dark mode: warm dark brown/charcoal
+   surfaces (an inverted echo of the light theme's cream), cream-ish ink
+   text, same low-chroma pastel accent families just re-lit for a dark
+   background (dark muted fill + a brighter version of the same ink).
+   --accent/--brand-green (the original pale butter-yellow) is restored
+   here on purpose — a bright accent staying vivid against a dark surface
+   was already working, so only light mode's --accent got promoted to the
+   deeper --brand-green-deep (see :root above); dark mode keeps the old
+   value rather than inheriting that change. */
 @media (prefers-color-scheme: dark) {
   :root {
-    /* flat neutral gray, not a green tint — classic app-dark-mode surface */
-    --paper: #1a1a1a;
-    --paper-card: #242424;
-    --paper-well: #2e2e2e;
-    --line: #f2f2ef;
-    --line-soft: #a8a8a4;
-    --border: #3a3a3a;
-    --shadow: rgba(0, 0, 0, 0.5);
+    --duck-mark-url: url('/brand/duck-yellow.png');
+    --paper: #211c12;
+    --paper-card: #2b2418;
+    --paper-well: #332b1c;
+    --line: #f2ecd9;
+    --line-soft: #c9bd9e;
+    --border: rgba(240, 228, 168, 0.14);
+    --shadow: rgba(0, 0, 0, 0.4);
+    --image-outline: rgba(255, 255, 255, 0.1);
+    --accent: var(--brand-green);
+    --accent-contrast: var(--brand-green-ink);
 
     --tag-environment: #23422f;
     --tag-environment-ink: #a9e0bc;
-    --tag-community: #4a3d10;
+    --tag-community: #3c3c3c;
     --tag-community-ink: #f3d873;
     --tag-youth: #223651;
     --tag-youth-ink: #aecbf2;
     --tag-education: #1f3c46;
     --tag-education-ink: #a7dcee;
-    --tag-outdoors: #4a3319;
+    --tag-outdoors: #373737;
     --tag-outdoors-ink: #f0c290;
     --tag-technology: #1e3c38;
     --tag-technology-ink: #9fe0d6;
-    --tag-fitness: #452420;
+    --tag-fitness: #2d2d2d;
     --tag-fitness-ink: #f2b3a7;
-    --tag-food-security: #3c3a14;
+    --tag-food-security: #363636;
     --tag-food-security-ink: #e3dd8e;
     --tag-arts: #362949;
     --tag-arts-ink: #dcc4f0;
     --tag-verified: #23422f;
     --tag-verified-ink: #a9e0bc;
-    --tag-rejected: #3a2420;
+    --tag-rejected: #2a2a2a;
     --tag-rejected-ink: #e08a78;
 
     --rank-iron: #3a4147;
     --rank-iron-ink: #cdd3d6;
-    --rank-bronze: #4a3319;
+    --rank-bronze: #373737;
     --rank-bronze-ink: #edc79c;
     --rank-silver: #3d4348;
     --rank-silver-ink: #d6dadd;
-    --rank-gold: #4a3d10;
+    --rank-gold: #3c3c3c;
     --rank-gold-ink: #f3d873;
     --rank-diamond: #1c3c48;
     --rank-diamond-ink: #a6dcef;
 
-    --accent-soft: #2a332c;
-    --secondary-ink: #f3d873;
-    --success: #6fce93;
-    --warning: #e0ab5c;
-    --danger: #e08a78;
-    --danger-soft: #3a2420;
-    --link: #8fb4ec;
-    --focus-ring: #8fb4ec;
+    --accent-soft: #3d3520;
+    --secondary-ink: #a8bce8;
+    --success: #b9d9a0;
+    --success-soft: #28401f;
+    --warning: #e8b787;
+    --danger: #e8a29c;
+    --danger-soft: #452724;
+    --focus-ring: #6fa8d9;
   }
 }
 :root[data-theme='dark'] {
-  --paper: #1a1a1a;
-  --paper-card: #242424;
-  --paper-well: #2e2e2e;
-  --line: #f2f2ef;
-  --line-soft: #a8a8a4;
-  --border: #3a3a3a;
-  --shadow: rgba(0, 0, 0, 0.5);
+  --duck-mark-url: url('/brand/duck-yellow.png');
+  --paper: #211c12;
+  --paper-card: #2b2418;
+  --paper-well: #332b1c;
+  --line: #f2ecd9;
+  --line-soft: #c9bd9e;
+  --border: rgba(240, 228, 168, 0.14);
+  --shadow: rgba(0, 0, 0, 0.4);
+  --image-outline: rgba(255, 255, 255, 0.1);
+  --accent: var(--brand-green);
+  --accent-contrast: var(--brand-green-ink);
 
   --tag-environment: #23422f;
   --tag-environment-ink: #a9e0bc;
-  --tag-community: #4a3d10;
+  --tag-community: #3c3c3c;
   --tag-community-ink: #f3d873;
   --tag-youth: #223651;
   --tag-youth-ink: #aecbf2;
   --tag-education: #1f3c46;
   --tag-education-ink: #a7dcee;
-  --tag-outdoors: #4a3319;
+  --tag-outdoors: #373737;
   --tag-outdoors-ink: #f0c290;
   --tag-technology: #1e3c38;
   --tag-technology-ink: #9fe0d6;
-  --tag-fitness: #452420;
+  --tag-fitness: #2d2d2d;
   --tag-fitness-ink: #f2b3a7;
-  --tag-food-security: #3c3a14;
+  --tag-food-security: #363636;
   --tag-food-security-ink: #e3dd8e;
   --tag-arts: #362949;
   --tag-arts-ink: #dcc4f0;
-  --tag-rejected: #3a2420;
+  --tag-verified: #23422f;
+  --tag-verified-ink: #a9e0bc;
+  --tag-rejected: #2a2a2a;
   --tag-rejected-ink: #e08a78;
 
-  --accent-soft: #2a332c;
-  --secondary-ink: #f3d873;
-  --success: #6fce93;
-  --warning: #e0ab5c;
-  --danger: #e08a78;
-  --danger-soft: #3a2420;
-  --link: #8fb4ec;
-  --focus-ring: #8fb4ec;
+  --rank-iron: #3a4147;
+  --rank-iron-ink: #cdd3d6;
+  --rank-bronze: #373737;
+  --rank-bronze-ink: #edc79c;
+  --rank-silver: #3d4348;
+  --rank-silver-ink: #d6dadd;
+  --rank-gold: #3c3c3c;
+  --rank-gold-ink: #f3d873;
+  --rank-diamond: #1c3c48;
+  --rank-diamond-ink: #a6dcef;
+
+  --accent-soft: #3d3520;
+  --secondary-ink: #a8bce8;
+  --success: #b9d9a0;
+  --success-soft: #28401f;
+  --warning: #e8b787;
+  --danger: #e8a29c;
+  --danger-soft: #452724;
+  --focus-ring: #6fa8d9;
 }
 :root[data-theme='light'] {
-  --paper: #efe9df;
-  --paper-card: #ffffff;
-  --paper-well: #f3eee3;
-  --line: #223018;
-  --line-soft: #6b6b63;
-  --border: rgba(0, 0, 0, 0.08);
-  --shadow: rgba(34, 48, 24, 0.1);
+  /* TRIAL: mirrors the base :root Cozy Duck Growth values exactly — this
+     block wins over plain :root whenever a "Light" theme is explicitly
+     stored (see theme.js), so it has to carry every trial value too or
+     anyone with a stored preference sees none of them. */
+  --duck-mark-url: url('/brand/duck-brown.png');
+  --paper: #efe5d4;
+  --paper-card: #fff7eb;
+  --paper-well: #fff7eb;
+  --line: #4a3728;
+  --line-soft: #716352;
+  --border: #8b6f4e;
+  --shadow: rgba(87, 73, 31, 0.12);
+  /* Neutral, not theme-tinted on purpose — a photo's own edge shouldn't
+     pick up the brand's brown/yellow cast (that reads as dirt on the
+     image), so this stays pure black regardless of theme. */
+  --image-outline: rgba(0, 0, 0, 0.1);
+  --accent: #f0e0a0;
+  --accent-contrast: #4a3728;
 
   --tag-environment: #dcefdc;
-  --tag-environment-ink: #3f7a49;
+  --tag-environment-ink: #3c7446;
   --tag-community: #f2edc7;
-  --tag-community-ink: #8f7f1e;
+  --tag-community-ink: #776919;
   --tag-youth: #d7e4f7;
   --tag-youth-ink: #1e3a73;
   --tag-education: #d6ecf7;
   --tag-education-ink: #1b4e66;
   --tag-outdoors: #f7e4cf;
-  --tag-outdoors-ink: #b06d26;
+  --tag-outdoors-ink: #91591f;
   --tag-technology: #cfe9e6;
   --tag-technology-ink: #15574f;
   --tag-fitness: #f6d6d0;
@@ -382,9 +470,9 @@
   --tag-arts: #e3d6f0;
   --tag-arts-ink: #48276e;
   --tag-verified: #dcefdc;
-  --tag-verified-ink: #3f7a49;
+  --tag-verified-ink: #3c7446;
   --tag-rejected: #f8e6e3;
-  --tag-rejected-ink: #c0402f;
+  --tag-rejected-ink: #b83e2d;
 
   /* rank ladder — one pair per side-quest tier / leadership rank name */
   --rank-iron: #dfe3e6;
@@ -398,14 +486,14 @@
   --rank-diamond: #d3ecf5;
   --rank-diamond-ink: #144a63;
 
-  --accent-soft: #d4e7d0;
-  --secondary-ink: #6b4e05;
-  --success: #2f8a53;
-  --warning: #a35d16;
-  --danger: #c0402f;
-  --danger-soft: #fbe3df;
-  --link: var(--brand-blue);
-  --focus-ring: var(--brand-blue);
+  --accent-soft: #e6dacb;
+  --secondary-ink: #2e4e8a;
+  --success: #417033;
+  --success-soft: #dcefd2;
+  --warning: #9f4f0d;
+  --danger: #b73a1d;
+  --danger-soft: #f5e2df;
+  --focus-ring: #3d6fa8;
 }
 
 *,
@@ -416,11 +504,28 @@
 
 html {
   overflow-x: hidden;
+  /* macOS renders text heavier than intended by default; harmless
+     everywhere else since other platforms ignore these properties. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* This ships as a Capacitor WebView on top of being a regular site, so the
+   touch specifics matter for real: manipulation skips the ~300ms tap delay
+   still present on some Android WebViews, and a transparent tap-highlight
+   replaces the default grey flash Chrome/WebView draws on every tap (every
+   button already has its own :active press-scale — the OS's own highlight
+   on top of that reads as a double, slightly-off response to the same tap). */
+html,
+body {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   margin: 0;
   font-family: var(--font-body);
+  font-weight: 500;
   background: var(--paper);
   color: var(--line);
   line-height: 1.55;
@@ -443,7 +548,13 @@ body {
 @media (min-width: 860px) {
   #root:has(.bottom-nav) {
     max-width: 1180px;
-    padding: calc(var(--nav-height-desktop) + 40px) 48px 48px;
+    /* Left padding always reserves only the COLLAPSED width — content
+       never reflows when the sidebar expands. The sidebar is `position:
+       fixed` (see .bottom-nav) with its own z-index above the page, so an
+       expanded sidebar overlays on top of this reserved strip instead of
+       pushing it over, the same way .events-map-page already anchors to
+       the collapsed width and lets the sidebar sit above it. */
+    padding: 48px 48px 48px calc(var(--sidebar-width-desktop-collapsed) + 48px);
   }
 }
 
@@ -461,9 +572,19 @@ h1,
 h2,
 h3 {
   font-family: var(--font-heading);
-  font-weight: 700;
+  font-weight: 750;
   letter-spacing: 0;
   margin: 0 0 16px;
+  /* Balances line lengths on short headings so a wrapped title never
+     leaves one orphaned word alone on its own line — quest titles and
+     org names are exactly the unpredictable-length strings this helps. */
+  text-wrap: balance;
+}
+p {
+  /* Prevents a dangling last-word orphan on wrapped body copy (quest
+     descriptions, review text) without balancing every line the way
+     heading text above does. */
+  text-wrap: pretty;
 }
 h1 {
   font-size: 1.9rem;
@@ -541,6 +662,9 @@ label {
   font-weight: 600;
 }
 
+/* No border, matching the rest of the app (buttons/tags/cards) — the
+   --paper-card fill against the deeper --paper page is what defines the
+   field now, same as everything else. */
 input,
 textarea,
 select {
@@ -548,25 +672,22 @@ select {
   font-family: var(--font-body);
   padding: 10px 13px;
   border-radius: var(--radius);
-  border: 1.5px solid var(--border);
+  border: none;
   background: var(--paper-card);
   color: var(--line);
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: box-shadow 0.15s ease;
 }
 
 input:hover,
 textarea:hover,
 select:hover {
-  border-color: var(--line-soft);
+  background: color-mix(in srgb, var(--paper-card) 85%, var(--line) 6%);
 }
 
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: none;
-  border-color: var(--focus-ring);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 25%, transparent);
 }
 
@@ -575,8 +696,16 @@ textarea {
   resize: vertical;
 }
 
+/* The date-occurrence picker (mobile/Quests.jsx, org/Quests.jsx) — sits
+   inline next to a calendar icon/AddToCalendar link rather than in its own
+   labeled field, so the generic input/select padding above just pushed its
+   text away from that icon instead of reading as one unit. */
+.quest-date-select {
+  padding: 0;
+}
+
 fieldset {
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
 }
@@ -588,25 +717,13 @@ fieldset label {
   font-weight: 400;
 }
 
-/* PlaceAutocompleteInput.jsx's container — the google.maps.places.
-   PlaceAutocompleteElement it holds is a custom element with its own
-   shadow-DOM input, so normal descendant selectors can't reach in and
-   restyle it the way input/textarea/select above are. This just gives it
-   a matching outer frame rather than attempting deep shadow-DOM overrides.
-   Deliberately NOT overflow: hidden — the widget's own suggestions
-   dropdown renders positioned against this container, and clipping it
-   here hid every suggestion while still letting the rest of the widget
-   look and work fine (easy to miss without actually typing a query). */
-.place-autocomplete-container {
-  border-radius: var(--radius);
-  border: 1.5px solid var(--border);
-  background: var(--paper-card);
-}
-
-/* PlaceCombobox.jsx's own dropdown — real markup we fully control (unlike
-   PlaceAutocompleteInput.jsx's Google widget above), so it's plain
-   .ink-card + this app's usual list-item hover treatment, no shadow-DOM
-   workarounds needed. The <input> itself needs no dedicated CSS at all —
+/* PlaceCombobox.jsx's own dropdown — real markup we fully control (a
+   plain <input> + this app's usual list-item hover treatment), so unlike
+   the old Google widget this used to wrap for some callers (a closed
+   shadow-DOM element with no reachable inner input to restyle), no
+   special container framing is needed at all — the <input> itself
+   inherits whatever ambient input styling its caller's other fields
+   already have. The <input> itself needs no dedicated CSS at all —
    it's a real <input type="text">, so it already picks up the same
    borderless styling every other row's input gets from
    .quest-form-row-value input[type='text'] (see below). */
@@ -656,58 +773,73 @@ fieldset label {
 /* button, plus .stamp-btn — StampButton.jsx's `as` prop can render this as
    an <a> (e.g. a Link-powered nav CTA) instead of a real <button>, and the
    tag selector alone wouldn't reach that. */
+/* TRIAL v2 — RIPE reference (get-ripe.com): zero border, zero shadow,
+   solid color-block fill only, full pill radius. Definition comes purely
+   from the fill color against its surroundings, never from a border or a
+   drop shadow. Revert target (Cozy Duck Growth v1): border-radius:
+   var(--radius-button), border: 2px solid var(--border), background:
+   var(--paper-card), box-shadow: 0 2px 0 var(--border), plus the
+   :active box-shadow/translate rule below it. */
 button,
 .stamp-btn {
   font: inherit;
   font-family: var(--font-heading);
-  font-weight: 600;
-  padding: 10px 18px;
-  border-radius: var(--radius);
-  border: 1.5px solid var(--border);
-  background: var(--paper-card);
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--paper-well);
   color: var(--line);
   text-decoration: none;
-  display: inline-block;
+  /* inline-block relied on the browser's own default text-align: center
+     for plain-text buttons — fine for those, but an <Icon /> + label
+     button has two inline children with no such default, so they sat
+     left-aligned inside any button wider than its own content instead of
+     centered as a unit. justify-content: center here covers both cases
+     the same way (a single text child included). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
-  box-shadow: 0 1px 2px var(--shadow);
   transition:
-    transform 0.1s ease,
-    box-shadow 0.15s ease,
     background-color 0.15s ease,
-    border-color 0.15s ease;
+    scale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 button:hover:not(:disabled),
 .stamp-btn:hover {
-  border-color: var(--line-soft);
-  box-shadow: 0 4px 12px var(--shadow);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--paper-well) 80%, var(--line) 8%);
 }
 
+/* Every plain <button>/.stamp-btn gets instant press feedback, not just the
+   ones wrapped in StampButton's own Framer Motion whileTap — until now a
+   raw <button> (bottom nav, photo-lightbox close, notification dismiss,
+   quest row taps, feedback rating buttons...) had no press cue at all
+   beyond a border-color fade, which is easy to miss. `scale` (not
+   `transform: scale()`) composes independently of every `transform: none`
+   reset already scattered through this file for the old hover-lift effect,
+   so this applies everywhere for free without fighting those rules. Uses
+   the standalone `scale` property, not `:active { transform: scale() }` —
+   same reasoning. */
 button:active:not(:disabled),
 .stamp-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 2px var(--shadow);
+  scale: 0.96;
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .stamp-btn {
+    transition: background-color 0.15s ease;
+  }
+  button:active:not(:disabled),
+  .stamp-btn:active {
+    scale: 1;
+  }
 }
 
 button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-  box-shadow: none;
-  transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  button,
-  .stamp-btn {
-    transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease;
-  }
-  button:hover:not(:disabled),
-  .stamp-btn:hover {
-    transform: none;
-  }
 }
 
 /* the settings/admin-data/logout nav bar shown above each dashboard */
@@ -725,79 +857,92 @@ nav {
 
 /* ---------- card + chip system ---------- */
 
+/* TRIAL: flat sticker shadow added (revert: remove box-shadow line). */
+/* RIPE reference (get-ripe.com): no border, no shadow — a card is just a
+   solid color block, distinguished from the page purely by its fill.
+   --paper-card now equals --paper (see :root), so cards use --paper-well
+   instead — the one step darker "recessed" tone — or they'd be invisible
+   with the border gone. Revert target: background: var(--paper-card),
+   border: 2px solid var(--border), box-shadow: 0 2px 0 var(--paper-well),
+   and restore the [data-danger] border-color override below. */
 .ink-card {
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: 0 1px 3px var(--shadow);
   padding: 18px 20px;
-  transition:
-    box-shadow 0.15s ease,
-    border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .ink-card[data-danger='true'] {
-  border-color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .ink-btn-primary {
   background: var(--accent);
-  border-color: var(--accent);
   color: var(--accent-contrast);
 }
 .ink-btn-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 88%, black);
-  border-color: color-mix(in srgb, var(--accent) 88%, black);
 }
 
+/* A solid soft-danger pill rather than an outline — no border exists in
+   this system to carry the "this is destructive" signal, so the fill
+   itself has to (still --danger text on top for the strongest cue). */
 .ink-btn-danger {
-  background: transparent;
-  border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .ink-btn-danger:hover:not(:disabled) {
-  background: var(--danger-soft);
+  background: color-mix(in srgb, var(--danger-soft) 80%, var(--danger) 15%);
 }
 
 /* pastel pill for tags/interests — TagStamp.jsx renders this. When rendered
    as a <button> (the selectable interest-picker variant) this deliberately
    overrides the global button treatment — a pill toggles, it doesn't press
    like a real button. */
+/* Unified badge formula with .status-stamp below: same font-size (0.8rem),
+   same padding, same radius, same 2px border weight as every other bordered
+   surface in the app — the two components differ in WHEN they show a
+   fill (toggleable vs. always-on), never in how they're drawn. */
 .tag-stamp {
   display: inline-flex;
   align-items: center;
   font: inherit;
   font-family: var(--font-heading);
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   letter-spacing: 0.01em;
   padding: 5px 13px;
   border-radius: var(--radius-full);
-  border: 1.5px solid transparent;
+  border: none;
   color: var(--tag-ink, var(--line));
   background: var(--tag-color, var(--paper-well));
   cursor: default;
   box-shadow: none;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .tag-stamp:hover,
 .tag-stamp:active {
   box-shadow: none;
   transform: none;
+  /* Opts out of the new global button:active press-scale (see button/
+     .stamp-btn above) — a selectable tag toggles state, it doesn't press
+     like a real button. */
+  scale: 1;
 }
+/* Unselected state used to be a colored outline on a transparent
+   background — no outlines exist in this system anymore, so it's now a
+   solid neutral pill instead; selecting it is the only thing that
+   introduces color, via the filled state below. */
 .tag-stamp[data-selectable='true'] {
   cursor: pointer;
-  background: transparent;
-  border-color: var(--tag-color, var(--border));
+  background: var(--paper-well);
   color: var(--tag-select-ink, var(--line-soft));
 }
 .tag-stamp[data-selectable='true']:hover {
-  background: color-mix(in srgb, var(--tag-color, var(--paper-well)) 35%, transparent);
+  background: color-mix(in srgb, var(--paper-well) 70%, var(--tag-color, var(--line-soft)) 20%);
 }
 .tag-stamp[data-selected='true'] {
-  background: var(--tag-color, var(--paper-well));
-  border-color: var(--tag-color, var(--paper-well));
+  background: var(--tag-color, var(--accent-soft));
   color: var(--tag-ink, var(--line));
 }
 
@@ -810,7 +955,7 @@ nav {
   align-items: center;
   font-family: var(--font-heading);
   font-weight: 600;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   letter-spacing: 0.01em;
   padding: 5px 13px;
   border: none;
@@ -819,9 +964,40 @@ nav {
   background: var(--tag-color, var(--paper-well));
 }
 .status-stamp[data-muted='true'] {
-  background: none;
+  background: var(--paper-well);
   color: var(--line-soft);
-  border: 1.5px solid var(--border);
+}
+
+/* Sizing lives in CSS (via --duck-size), not an inline width/height style,
+   so a caller's own className (e.g. .auth-hero-duck below) can still
+   override the size with a plain CSS rule — an inline style would always
+   win over an external stylesheet rule for the same element/property
+   regardless of source order, silently defeating that override. Declared
+   here, before every place that overrides it (.auth-hero-duck immediately
+   below included), since two same-specificity single-class selectors
+   resolve by source order — a later override would otherwise lose to this
+   base rule if this sat any lower in the file (e.g. next to .lq-logo). */
+.duck-mark {
+  display: inline-block;
+  width: var(--duck-size, 32px);
+  height: var(--duck-size, 32px);
+  background-image: var(--duck-mark-url);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* A line "spoken" by the mascot — used sparingly, at two or three moments
+   that can carry a little personality (a greeting, an empty state), not
+   pasted under every DuckMark in the app. Italic + soft ink is the only
+   differentiation from a normal caption; no speech-bubble chrome, no
+   quote marks — the duck sitting directly above it already makes clear
+   whose line it is. */
+.duck-caption {
+  font-style: italic;
+  color: var(--line-soft);
+  text-align: center;
+  margin: 6px 0 0;
 }
 
 /* ---------- auth screens (Login, Register, Forgot/Reset password) ----------
@@ -857,8 +1033,12 @@ nav {
   gap: 4px;
 }
 .auth-hero-duck {
+  /* Fixed height, not height:auto — DuckMark now renders a background-image
+     span (see .duck-mark), not a real <img>, so there's no intrinsic
+     aspect ratio for height:auto to derive from; it'd just collapse to
+     zero. Explicit and square (the duck PNGs are 1:1) instead. */
   width: 120px;
-  height: auto;
+  height: 120px;
 }
 .auth-hero-word {
   font-family: var(--font-display);
@@ -915,10 +1095,16 @@ nav {
   }
   .auth-hero-duck {
     width: 48px;
+    /* This panel's butter-yellow background (--brand-green below) never
+       changes with the app's light/dark theme, so its foreground can't
+       either — var(--line)/the theme-aware --duck-mark-url would go
+       pale-on-pale the moment dark mode flips --line to a light color.
+       Force the fixed dark-ink duck variant regardless of theme. */
+    --duck-mark-url: url('/brand/duck-brown.png');
   }
   .auth-hero-word {
     font-size: 1.3rem;
-    color: var(--brand-mustard);
+    color: var(--brand-green-ink);
   }
   .auth-card-hero {
     background: var(--brand-green);
@@ -929,12 +1115,22 @@ nav {
   .auth-card-hero p {
     display: block;
     margin: 0;
-    color: #ffffff;
+    /* Same fixed-ink reasoning as .auth-hero-word/.auth-hero-duck above —
+       --brand-green-ink is its own token (not --accent-contrast, which
+       now varies with light/dark mode) precisely because this panel's
+       --brand-green background stays fixed regardless of theme. */
+    color: var(--brand-green-ink);
     font-size: 1rem;
-    opacity: 0.92;
+    opacity: 0.78;
     max-width: 260px;
   }
   .auth-card-form {
+    /* Own background, not the --paper-card inherited from .auth-card —
+       borderless inputs rely on --paper-card fill to read against the
+       page (--paper) behind them; without this override this panel WAS
+       --paper-card too, so its inputs were the exact same color as the
+       panel they sat on and became invisible. */
+    background: var(--paper);
     flex: 1;
     padding: 48px;
     display: flex;
@@ -995,7 +1191,10 @@ nav {
   color: inherit;
 }
 .lq-logo[data-tone='brand'] {
-  color: var(--brand-mustard);
+  /* Meant for placement on the fixed butter-yellow brand surface (see
+     .auth-card-hero) — --brand-green-ink, not --line, since that surface
+     doesn't change with the app's light/dark theme either. */
+  color: var(--brand-green-ink);
 }
 
 /* ---------- Onboarding's step progress (Onboarding.jsx) ---------- */
@@ -1032,7 +1231,19 @@ nav {
   margin: 0;
   font-size: 1.4rem;
 }
-.top-bar-title-hero {
+/* This was designed for TopBar's own `hero` prop but nothing ever actually
+   passed it — every TopBar call site in the app uses a plain title, so this
+   dramatic scale has sat unused since it was written. The everyday screens'
+   own hand-rolled greetings (Home's "Hello, Name", the quest feed's
+   "Explore Quests", any generic .page-greeting) fall back to the plain
+   global h1 (1.9rem, identical to a form section heading) instead —
+   extending this rule to cover them directly gives the screens people
+   actually live in the same presence Landing's hero already has, with no
+   new token needed. */
+.top-bar-title-hero,
+.home-greeting h1,
+.quest-feed-greeting h1,
+.page-greeting h1 {
   margin: 0;
   font-family: var(--font-heading);
   font-weight: 700;
@@ -1053,7 +1264,85 @@ nav {
   .bottom-nav-brand {
     display: flex;
     align-items: center;
-    margin-right: 20px;
+    margin-right: 0;
+    /* On desktop this renders as a <button> (it's the sidebar's own
+       expand/collapse toggle, not a link home — see BottomNav.jsx) —
+       these reset the button chrome an anchor never had, harmless on the
+       mobile <Link> variant since this rule only applies at this
+       breakpoint. */
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  /* The global button:hover:not(:disabled) rule (style.css ~line 800) beats
+     a plain .bottom-nav-brand:hover on specificity (type+2 pseudo-classes
+     vs. class+pseudo-class) — the `button` type selector here matches it
+     so this wins instead of the duck picking up the generic grey hover
+     fill every other button gets. */
+  button.bottom-nav-brand:hover,
+  button.bottom-nav-brand:active {
+    background: none;
+  }
+  .bottom-nav-brand-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    /* Left padding matches .bottom-nav-item's own 14px (its icon sits
+       inside that inset) so the duck lines up with the Home/Quests/Map
+       icons below it instead of sitting 10px further left. */
+    padding: 0 4px 0 14px;
+  }
+  /* Collapsed: icon-only rail — labels, the brand wordmark, and the
+     avatar panel's name/email hide; everything centers instead of
+     left-aligning since there's no label to align it against anymore. */
+  .bottom-nav[data-expanded='false'] {
+    width: var(--sidebar-width-desktop-collapsed);
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-brand-row {
+    /* Reset to symmetric padding — the 14px/4px split above exists only
+       to align with the expanded item icons; centering against that same
+       asymmetric padding would land the duck 10px off true-center here. */
+    padding: 0;
+    justify-content: center;
+  }
+  .bottom-nav[data-expanded='false'] .lq-logo-word {
+    display: none;
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-item {
+    justify-content: center;
+    padding: 10px;
+  }
+  /* :not(.bottom-nav-icon) — the icon itself sits in a wrapping <span> too
+     (see .bottom-nav-icon above, for the unread-count badge's positioning),
+     so a bare "span" selector here was hiding the icon along with the
+     label instead of just the label. */
+  .bottom-nav[data-expanded='false'] .bottom-nav-item > span:not(.bottom-nav-icon) {
+    display: none;
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-avatar-link {
+    justify-content: center;
+    padding: 4px;
+  }
+  .bottom-nav[data-expanded='false'] .bottom-nav-org-name {
+    display: none;
+  }
+  /* Expanded: the link isn't a flex item of anything (its parent,
+     .bottom-nav-avatar-wrap, is a plain block div, not a flex container),
+     so it only ever shrink-to-fits its content by default — giving it the
+     sidebar's full row width here is what gives .bottom-nav-org-name an
+     actual bound to truncate against below, instead of just growing the
+     row to fit a long name and overflowing the sidebar's own edge. */
+  .bottom-nav-avatar-link {
+    width: 100%;
+    min-width: 0;
+  }
+  .bottom-nav-org-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -1063,8 +1352,15 @@ nav {
   right: 0;
   bottom: 0;
   height: var(--nav-height);
-  background: var(--paper-card);
-  border-top: 1.5px solid var(--border);
+  /* Matches the page exactly, not a step down — fully transparent was the
+     other option, but text/icons scrolling directly underneath a see-
+     through fixed bar would put the nav's own labels against whatever
+     color happens to be behind them, unpredictable and sometimes illegible.
+     Same background as the page keeps contrast fixed and predictable while
+     still reading as "no separate bar," just without depending on see-
+     through content to get there. */
+  background: var(--paper);
+  border-top: 2px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -1072,27 +1368,35 @@ nav {
   z-index: 10;
 }
 @media (min-width: 860px) {
-  /* Same component, flipped to a horizontal topbar — icon + label always
-     visible, no collapse/expand. A long label crowding a narrow vertical
-     rail was the reason to collapse it; that constraint doesn't exist once
-     the bar runs the full window width instead. */
+  /* TRIAL: same component, flipped to a left sidebar instead of a
+     horizontal topbar — full window height, items stacked vertically
+     (see .bottom-nav-item's own desktop override below), avatar/profile
+     panel pinned to the bottom (see .bottom-nav-avatar-wrap) rather than
+     floating at the top-right. Revert target: left:0, right:0, top:0,
+     bottom:auto, width:auto, height:var(--nav-height-desktop),
+     flex-direction:row, justify-content:flex-start, align-items:center,
+     gap:10px, padding:0 32px, border-top:none, border-bottom:none,
+     border-right:none. */
   .bottom-nav {
     left: 0;
-    right: 0;
+    right: auto;
     top: 0;
-    bottom: auto;
-    width: auto;
-    height: var(--nav-height-desktop);
-    flex-direction: row;
+    bottom: 0;
+    width: var(--sidebar-width-desktop);
+    height: 100%;
+    flex-direction: column;
+    align-items: stretch;
     justify-content: flex-start;
-    align-items: center;
-    gap: 10px;
-    padding: 0 40px;
+    gap: 4px;
+    padding: 24px 16px;
     border-top: none;
-    border-bottom: 1.5px solid var(--border);
+    border-bottom: none;
+    border-right: 2px solid var(--border);
+    transition: width 0.2s ease;
   }
 }
 .bottom-nav-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1110,13 +1414,32 @@ nav {
   text-decoration: none;
   letter-spacing: 0.01em;
 }
+/* Renders only inside the current item (see BottomNav.jsx) and carries a
+   shared layoutId, so switching tabs slides this one pill from its old
+   position to its new one instead of the old snap-on/snap-off background —
+   the same "every transition gets a considered curve" idea behind the
+   button press easing above, applied to the one persistent nav affordance
+   instead of a one-off marketing hover. */
+.bottom-nav-active-pill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent-soft);
+  border-radius: var(--radius-full);
+  z-index: -1;
+  pointer-events: none;
+}
 @media (min-width: 860px) {
+  /* TRIAL: full-width sidebar row (icon + left-aligned label) instead of a
+     compact horizontal-topbar pill. Revert target: justify-content:center,
+     width:auto, padding:8px 16px, border-radius unset (falls back to the
+     base rule's var(--radius-full)). */
   .bottom-nav-item {
     flex-direction: row;
-    justify-content: center;
-    gap: 9px;
-    width: auto;
-    padding: 10px 18px;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
   }
   .bottom-nav-item svg {
     width: 22px;
@@ -1138,12 +1461,11 @@ nav {
   transform: none;
   box-shadow: none;
 }
-.bottom-nav-item[aria-current='page'] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
 .bottom-nav-item[aria-current='page']:hover:not(:disabled) {
-  background: var(--accent-soft);
+  /* The sliding .bottom-nav-active-pill (see above) already shows
+     selection — the generic hover wash below would otherwise paint a
+     second, static background on top of it. */
+  background: none;
 }
 
 /* Mobile-only "+" FAB (option 1c) — not a create action, a popup revealing
@@ -1167,14 +1489,16 @@ nav {
   border: none;
   border-radius: var(--radius-full);
   background: var(--brand-green);
-  color: #ffffff;
+  /* --brand-green-ink, not --line — --brand-green is a fixed butter-yellow
+     that doesn't change with the app's light/dark theme, so --line
+     flipping to a light color in dark mode would go pale-on-pale here. */
+  color: var(--brand-green-ink);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.6rem;
   font-weight: 300;
   line-height: 1;
-  box-shadow: 0 4px 12px rgba(49, 158, 95, 0.4);
 }
 .bottom-nav-fab:hover {
   transform: none;
@@ -1190,12 +1514,12 @@ nav {
   height: 46px;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   color: var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 10px var(--shadow);
+  box-shadow: none;
   z-index: 11;
 }
 .bottom-nav-fab-circle:hover {
@@ -1209,29 +1533,41 @@ nav {
   background: transparent;
 }
 
-/* A top-right avatar, desktop only, that opens a Profile/Settings dropdown
-   instead of two separate nav pills (see BottomNav.jsx's avatarOnDesktop).
-   Only rendered at >=860px; mobile keeps the normal Profile/Settings tabs. */
+/* Desktop only — opens a Profile/Settings dropdown instead of two separate
+   nav pills (see BottomNav.jsx's avatarOnDesktop). Only rendered at
+   >=860px; mobile keeps the normal Profile/Settings tabs. TRIAL:
+   margin-top: auto pins it to the bottom of the sidebar's vertical flex
+   column (Discord's own user-panel-at-the-bottom shape) — margin-left:
+   auto was the horizontal-topbar equivalent, pushing it to the bar's far
+   right end instead. */
 .bottom-nav-avatar-wrap {
   position: relative;
-  margin-left: auto;
+  margin-left: 0;
+  margin-top: auto;
 }
 .bottom-nav-avatar-link {
   display: flex;
-  align-items: center;
+  /* align-items: center; */
+  justify-content: flex-start;
   gap: 10px;
-  padding: 4px 4px 4px 0;
+  /* Padding and radius match .bottom-nav-item's own desktop row exactly
+     (10px 14px, var(--radius)) — same reasoning as the left-inset fix
+     above, but for the whole row's shape: this button was still using its
+     original pill padding/radius (4px, radius-full), so it read as a
+     visually different control from Home/Quests/Map/Journal above it
+     instead of one more row in the same list. */
+  padding: 10px 14px;
   border: none;
   background: none;
   font: inherit;
   cursor: pointer;
-  border-radius: var(--radius-full);
-  /* This renders as a plain <a> now for user/organization (straight to
-     Profile, no dropdown) — the global `a { color: var(--link) }` rule
-     doesn't reset text-decoration, so without this the initials show a
-     default underline a <button> version of this never had. */
+  border-radius: var(--radius);
   text-decoration: none;
   color: inherit;
+  transition: background-color 0.15s ease;
+}
+.bottom-nav-avatar-link:hover {
+  background: var(--paper-well);
 }
 .bottom-nav-org-name {
   font-family: var(--font-body);
@@ -1245,7 +1581,7 @@ nav {
   height: 40px;
   flex: none;
   border-radius: var(--radius-full);
-  border: 2px solid var(--brand-mustard);
+  border: none;
   background: var(--accent-soft);
   color: var(--accent);
   display: flex;
@@ -1254,45 +1590,156 @@ nav {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.85rem;
+  overflow: hidden;
 }
 .bottom-nav-avatar-link[aria-expanded='true'] .nav-avatar {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
+/* A photo/duck avatar (user, pending_org) matches Profile page's
+   .user-avatar fill exactly — only the organization avatar (plain
+   initials) keeps the accent-soft/accent tinted look above. */
+.nav-avatar-photo {
+  background: var(--paper-card);
+  color: var(--line);
+}
+/* TRIAL: opens upward now, anchored to the bottom-left — the avatar it's
+   attached to sits at the bottom of a sidebar now (see
+   .bottom-nav-avatar-wrap), so popping down off the bottom edge of the
+   screen would clip it. Revert target: top: calc(100% + 10px), right: 0,
+   bottom: auto, left: auto. */
 .bottom-nav-avatar-menu {
   position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  bottom: calc(100% + 10px);
+  left: 0;
+  top: auto;
+  right: auto;
   z-index: 11;
   display: flex;
   flex-direction: column;
   min-width: 170px;
   padding: 6px;
   background: var(--paper-card);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 20px var(--shadow);
+  box-shadow: none;
 }
-.bottom-nav-avatar-menu a {
+/* button included alongside a — Log out is an action, not a route, so it
+   renders as a plain <button role="menuitem">, not a <Link>; same look
+   either way. */
+.bottom-nav-avatar-menu a,
+.bottom-nav-avatar-menu button {
   display: flex;
   align-items: center;
+  /* The global `button { justify-content: center }` base rule (style.css,
+     the icon+label centering fix) otherwise centers Log out — the only
+     real <button> in this menu, since Settings/Edit profile render as
+     <a> and were never affected by that rule. */
+  justify-content: flex-start;
   gap: 10px;
   padding: 9px 12px;
   border-radius: calc(var(--radius) - 4px);
+  width: 100%;
+  background: none;
+  border: none;
+  box-shadow: none;
   color: var(--line);
   text-decoration: none;
+  text-align: left;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.9rem;
 }
 .bottom-nav-avatar-menu a:hover,
+.bottom-nav-avatar-menu button:hover,
 .bottom-nav-avatar-menu a[aria-current='page'] {
   background: var(--accent-soft);
-  color: var(--accent);
 }
-.bottom-nav-avatar-menu a svg {
+.bottom-nav-avatar-menu a svg,
+.bottom-nav-avatar-menu button svg {
   flex: none;
   width: 18px;
   height: 18px;
+}
+/* The badges link sits inline inside the name line (see
+   .bottom-nav-avatar-menu-name), not as its own full-width menu row — the
+   generic `.bottom-nav-avatar-menu a` rule above (display:flex, width:100%,
+   padding) would otherwise stretch it the same as Settings/Edit
+   profile/Log out. Two classes beats that rule's one-class-plus-type
+   specificity, so this wins regardless of source order. */
+.bottom-nav-avatar-menu .bottom-nav-avatar-menu-badges {
+  display: inline-flex;
+  width: auto;
+  padding: 0;
+  gap: 4px !important;
+  border-radius: var(--radius-full);
+}
+.bottom-nav-avatar-menu .bottom-nav-avatar-menu-badges:hover {
+  background: none;
+}
+
+/* Google-account-menu look for the "user" role's dropdown — wider, no
+   border (a soft shadow carries the "floating card" read instead, same
+   elevation-over-outline language Google's own account switcher uses),
+   room for the header below. Only this modifier gets a shadow — the base
+   .bottom-nav-avatar-menu above (pending_org) keeps its plain border,
+   untouched. */
+.bottom-nav-avatar-menu-google {
+  min-width: 260px;
+  padding: 8px;
+  border: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+.bottom-nav-avatar-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 14px;
+}
+/* Compound selector (not a separate .bottom-nav-avatar-menu-photo rule) —
+   .user-avatar's own 64px width/height has equal specificity to a plain
+   class selector, so a same-specificity override here would just lose to
+   whichever rule happens to sit later in the file. */
+.user-avatar.bottom-nav-avatar-menu-photo {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+.bottom-nav-avatar-menu-identity {
+  min-width: 0;
+}
+.bottom-nav-avatar-menu-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--line);
+}
+.bottom-nav-avatar-menu-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bottom-nav-avatar-menu-badges {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: none;
+}
+.bottom-nav-avatar-menu-email {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--line-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bottom-nav-avatar-menu-divider {
+  border-top: 1px solid var(--border);
+  margin: 0 0 6px;
 }
 
 /* Generic page heading block (title + subtitle) — shared by any top-level
@@ -1383,14 +1830,31 @@ nav {
   min-width: 0;
   padding: 0;
   position: relative;
-  /* .ink-card's own border-color (--border) is a near-invisible 8%-opacity
-     black in the light theme — fine for most cards, but a quest row sits
-     directly against the page's own cream background with nothing else to
-     separate them, so it reads as an edge that just stops rather than a
-     bounded card. A stronger, dedicated color-mix here (not a change to
-     --border itself, which cascades to every other card/button/input in
-     the app) keeps this scoped to quest rows specifically. */
-  border-color: color-mix(in srgb, var(--line-soft) 45%, transparent);
+  transition:
+    background-color 0.15s ease,
+    scale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Previously had no hover feedback at all — the row's own background never
+   changed, only the (invisible) overlay button received :hover. Same
+   deepen-toward-line recipe used for input hover elsewhere. */
+.quest-content-col:hover {
+  background: color-mix(in srgb, var(--paper-card) 92%, var(--line) 8%);
+}
+/* The tap target for "open this quest" is .quest-card-overlay — a fully
+   transparent, absolutely-positioned <button> stacked on top of this card
+   (see the comment on .quest-card-overlay below) — so the universal
+   `button:active { scale: 0.96 }` press cue lands on an invisible element
+   and produces no visible feedback at all. :has() lets the actual visible
+   card squish instead, driven by its own child's :active state, which is
+   the only way to do this without restructuring which element is the real
+   button. */
+.quest-content-col:has(.quest-card-overlay:active) {
+  scale: 0.98;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quest-content-col:has(.quest-card-overlay:active) {
+    scale: 1;
+  }
 }
 
 /* Quests.jsx's flat card layout: a stretched-link overlay covers the whole
@@ -1490,6 +1954,18 @@ button.quest-card-head:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
 }
+/* Quest detail's title + Share row (mobile/Quests.jsx's QuestDetailBody,
+   showTitle). Grid, not flex: a two-column 1fr/auto track keeps Share
+   pinned to the right edge next to the title no matter how long the
+   title is, and align-items: start lines Share's icon up with the
+   title's own first line rather than centering it against the whole
+   block once a long title wraps to two lines. */
+.quest-detail-title-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 8px;
+}
 .quest-title {
   font-family: var(--font-heading);
   font-weight: 700;
@@ -1527,7 +2003,7 @@ button.quest-card-head:hover:not(:disabled) {
   align-items: center;
   padding: 3px 12px;
   border-radius: var(--radius-full);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.78rem;
@@ -1563,9 +2039,13 @@ button.quest-card-head:hover:not(:disabled) {
   .quest-chevron {
     display: none;
   }
+  /* Pastel green fill (reusing the tag rack's own --tag-environment pair,
+     not a new color) plus a matching thin border — a teammate's suggestion
+     over the earlier brown/accent-soft treatment, which read too close to
+     the unselected fill. */
   .quest-content-col[data-active='true'] {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    background: var(--tag-environment);
+    border: 1px solid var(--tag-environment-ink);
   }
 }
 
@@ -1967,9 +2447,13 @@ button.quest-card-head:hover:not(:disabled) {
   font-size: 0.88rem;
   color: var(--line-soft);
 }
+/* Icon picks up color, text stays muted — a small point of color on an
+   otherwise plain info row (date/location/capacity). TRIAL: pastel green
+   (reusing --tag-environment-ink, same as the selected-quest state) in
+   place of accent yellow — playing with extending that green further. */
 .quest-meta-row svg {
   flex: none;
-  color: var(--line-soft);
+  color: var(--tag-environment-ink);
 }
 
 /* .quest-meta-row doubling as a clickable link/button (location → map,
@@ -1992,13 +2476,8 @@ button.quest-card-head:hover:not(:disabled) {
   box-shadow: none;
   transform: none;
 }
-/* .quest-meta-row svg pins the icon to --line-soft even inside a
-   .quest-meta-link, so without this the icon wouldn't follow the text's
-   hover color — making it read as a separate, non-interactive decoration
-   instead of part of the same clickable link. */
-.quest-meta-link:hover:not(:disabled) svg {
-  color: var(--line);
-}
+/* The icon stays accent-colored on hover too (see .quest-meta-row svg
+   above) — only the text darkens to show the hover state. */
 
 .quest-description {
   color: var(--line);
@@ -2062,20 +2541,14 @@ button.quest-card-head:hover:not(:disabled) {
 .stat-hero-tile {
   border: none;
   border-radius: var(--radius-lg);
-  box-shadow: 0 2px 6px var(--shadow);
   padding: 16px 18px;
-  color: #ffffff;
+  color: var(--line);
   display: flex;
   flex-direction: column;
   gap: 2px;
   text-decoration: none;
-  transition:
-    transform 0.1s ease,
-    box-shadow 0.15s ease;
 }
 a.stat-hero-tile:hover {
-  box-shadow: 0 4px 12px var(--shadow);
-  transform: translateY(-1px);
   opacity: 1;
 }
 
@@ -2118,19 +2591,15 @@ a.stat-hero-tile:hover {
   flex-direction: column;
   gap: 2px;
   text-decoration: none;
-  transition:
-    transform 0.1s ease,
-    box-shadow 0.15s ease;
 }
 a.org-home-stat-tile:hover {
-  box-shadow: 0 4px 12px var(--shadow);
-  transform: translateY(-1px);
   opacity: 1;
 }
 .stat-hero-number {
   font-family: var(--font-display);
   font-size: 2.4rem;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .stat-hero-label {
   font-family: var(--font-heading);
@@ -2197,23 +2666,6 @@ a.org-home-stat-tile:hover {
   margin-bottom: 14px;
 }
 
-.tag-filter-row {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  gap: 8px;
-  padding-bottom: 4px;
-  margin-bottom: 20px;
-  max-width: 640px;
-  /* Still scrolls horizontally when tags overflow — just without a visible
-     scrollbar track cluttering a row of pills. */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.tag-filter-row::-webkit-scrollbar {
-  display: none;
-}
-
 /* Themed thin scrollbar for the few places content genuinely scrolls
    inside its own box (a quest list and its sticky detail pane beside it) —
    a bare OS scrollbar there is a real signal there's more to see, unlike
@@ -2252,49 +2704,6 @@ a.org-home-stat-tile:hover {
 .quest-detail-pane::-webkit-scrollbar-thumb:hover {
   background: var(--line-soft);
 }
-.tag-filter-row .tag-stamp,
-.tag-filter-row .stamp-btn {
-  flex: none;
-}
-
-/* ScrollableTagRow (EventsMap.jsx) — a scroll-by-one-tap arrow at whichever
-   edge still has more tags past it, shown/hidden per the row's own actual
-   scroll position rather than always both. */
-.tag-filter-row-wrap {
-  position: relative;
-}
-.tag-filter-row-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--paper-card);
-  border: 1.5px solid var(--border);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-  color: var(--line);
-}
-.tag-filter-row-arrow-left {
-  left: -6px;
-}
-.tag-filter-row-arrow-right {
-  right: -6px;
-}
-/* The global button:hover/:active lift (transform: translateY(-1px/0), see
-   the base button rule) would otherwise clobber this button's own
-   translateY(-50%) centering, snapping it up/down on hover/press — pin the
-   transform back to just the centering offset so it stays still. */
-.tag-filter-row-arrow:hover:not(:disabled),
-.tag-filter-row-arrow:active:not(:disabled) {
-  transform: translateY(-50%);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-}
-
 /* ---------- quest filters (Explore Quests) ---------- */
 /* Replaces the old standalone Side Quest toggle + sort <select> + always-
    visible tag row with one Filters icon button opening a panel (desktop:
@@ -2314,11 +2723,16 @@ a.org-home-stat-tile:hover {
 .quest-filter-btn {
   width: 48px;
   height: 48px;
+  /* Without this, the base button rule's padding: 12px 24px (24px each
+     side) alone consumes the entire fixed 48px box-sizing: border-box
+     width, squeezing the icon inside to 0px wide — invisible regardless
+     of its color. */
+  padding: 0;
   flex: none;
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
   background: var(--paper-card);
-  color: var(--line-soft);
+  color: var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2327,9 +2741,11 @@ a.org-home-stat-tile:hover {
   color: var(--line);
   background: var(--paper-well);
 }
+/* Border-only ring for "filters active/panel open" — the icon itself stays
+   brown (matching the border) rather than switching to accent yellow,
+   which read poorly at this size/stroke-weight against the pale panel. */
 .quest-filter-btn[data-filters-active='true'],
 .quest-filter-btn[aria-expanded='true'] {
-  color: var(--accent);
   border-color: var(--accent);
 }
 
@@ -2390,7 +2806,11 @@ a.org-home-stat-tile:hover {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.82rem;
-  color: var(--accent);
+  /* Brown (--line-soft), not the accent yellow — this is a plain text
+     link action, not a selection/CTA, so it takes the same ink color
+     .back-link already uses rather than competing with the pills'
+     selected-state yellow right above it. */
+  color: var(--line-soft);
   background: none;
   border: none;
   padding: 0;
@@ -2400,6 +2820,7 @@ a.org-home-stat-tile:hover {
   box-shadow: none;
 }
 .quest-filter-clear:hover {
+  color: var(--line);
   text-decoration: underline;
   box-shadow: none;
   transform: none;
@@ -2411,11 +2832,32 @@ a.org-home-stat-tile:hover {
   margin-bottom: 0;
 }
 .quest-filter-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 8px;
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.92rem;
-  color: var(--accent);
+  color: var(--line-soft);
+}
+/* The label's own icon is the one spot of color in an otherwise muted
+   row — text stays --line-soft (this is a label, not something selected),
+   the icon alone picks up color so Type/Activity/Sort each get a quick
+   visual anchor without competing with the pills themselves. TRIAL:
+   pastel green (--tag-environment-ink), same experiment as .quest-meta-row
+   svg above, in place of brown. */
+.quest-filter-group-label svg {
+  flex: none;
+  color: var(--tag-environment-ink);
+}
+/* Between Type/Activity/Sort — a plain <hr>, not another CSS-only border,
+   so it's real structural content between groups rather than decoration
+   glued to whichever one happens to render first. */
+.quest-filter-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 22px;
 }
 /* Type/Activity/Sort — the label sits beside its pill row, not stacked
    above it, so each group reads as one line rather than a heading-plus-
@@ -2448,8 +2890,13 @@ a.org-home-stat-tile:hover {
   width: 68px;
   /* Nudges the label's text down to sit level with the first pill row's
      own text, rather than its top edge lining up with the pills' top
-     edge (the pills have their own vertical padding the label doesn't). */
-  padding-top: 9px;
+     edge (the pills have their own vertical padding the label doesn't).
+     Retuned down from 9px now that the pills themselves are smaller (see
+     .quest-filter-pill-row .stamp-btn's own 8px 16px/0.82rem, shrunk from
+     the base button's 12px 24px/1rem for the label-vs-option hierarchy
+     fix) — the old 9px was tuned against the taller pill and started
+     sitting the label noticeably low once the pill shrank under it. */
+  padding-top: 5px;
 }
 .quest-filter-group-inline .quest-filter-pill-row {
   flex: 1;
@@ -2458,6 +2905,18 @@ a.org-home-stat-tile:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* Options within a Type/Activity/Sort group (FilterPill -> .stamp-btn) —
+   without this, they inherited the base button/.stamp-btn font-size
+   (1rem, unset here) at full size, reading BIGGER than their own group's
+   0.92rem label above/beside them. That inverted the hierarchy: the
+   selectable options looked like the heading and the actual heading
+   looked like a footnote. Smaller and one notch lighter than the label
+   restores label-reads-as-heading, options-read-as-choices. */
+.quest-filter-pill-row .stamp-btn {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 8px 16px;
 }
 
 /* ---------- desktop split view: list + detail panel ---------- */
@@ -2474,11 +2933,17 @@ a.org-home-stat-tile:hover {
      greeting/toolbar/tag-filters stay put at natural height, and .quest-list
      (below) becomes the one thing that scrolls internally as more quests
      are added, rather than pushing the whole page taller. */
+  /* TRIAL: no more var(--nav-height-desktop) in these two height calcs —
+     that was reserving vertical space for the old horizontal topbar, which
+     doesn't take any vertical space at all now that BottomNav is a left
+     sidebar (see .bottom-nav's own desktop media query). Left as-is, the
+     pane was a flat 60px shorter than the viewport actually available,
+     cropping its own bottom edge. */
   .quest-feed-main {
     max-width: none;
     display: flex;
     flex-direction: column;
-    height: calc(100vh - var(--nav-height-desktop) - 80px);
+    height: calc(100vh - 80px);
   }
   .quest-list {
     max-width: none;
@@ -2489,7 +2954,7 @@ a.org-home-stat-tile:hover {
   }
   .quest-detail-pane {
     position: sticky;
-    top: calc(var(--nav-height-desktop) + 40px);
+    top: 40px;
     /* Fills the viewport below the header at all times, however short its
        own content is — never leaves blank page background showing
        underneath. Capped at that same height (not just a minimum) with its
@@ -2497,7 +2962,7 @@ a.org-home-stat-tile:hover {
        detail (e.g. a quest with reviews) would otherwise grow the whole
        page tall enough to scroll the sticky list out of view entirely,
        rather than just scrolling its own content. */
-    height: calc(100vh - var(--nav-height-desktop) - 80px);
+    height: calc(100vh - 80px);
     overflow-y: auto;
   }
 }
@@ -2527,7 +2992,7 @@ a.org-home-stat-tile:hover {
 }
 .data-row {
   padding: 14px 16px;
-  border-bottom: 1.5px solid var(--border);
+  border-bottom: 2px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2549,19 +3014,41 @@ a.org-home-stat-tile:hover {
 .data-row-sub {
   margin: 2px 0 0;
   font-size: 0.9rem;
+  color: var(--line-soft);
 }
+/* display: flex + align-items: center here (matching .quest-meta-row's own
+   icon+text rows) — without it, an icon+text .data-stat (org profile's
+   About tab: location/website/email/phone, each an <IconX /> followed by
+   text) fell back to inline layout, and inline SVGs default to
+   vertical-align: baseline. A ~22px icon's bottom then sat on this text's
+   own ~0.78rem baseline instead of centered against its line-height, so
+   the icon rode noticeably high relative to the label beside it. */
 .data-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: 0.78rem;
   color: var(--line-soft);
   white-space: nowrap;
   flex: none;
+  /* Point/submission/attendee counts live here and update live — equal-width
+     digits keep the surrounding layout from twitching as a count changes. */
+  font-variant-numeric: tabular-nums;
+}
+.data-stat svg {
+  flex: none;
 }
 .data-row-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  /* A little more separation than the 8px gap between .data-row's other
+     stacked children (head/sub lines) — those are all description, this
+     is the one interactive zone, and it was reading as just one more line
+     in the same stack instead of a distinct action area. */
+  margin-top: 4px;
 }
 .data-row-actions button {
   padding: 7px 13px;
@@ -2695,7 +3182,7 @@ a.org-home-stat-tile:hover {
   padding: 24px 20px;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 30px var(--shadow);
+  box-shadow: none;
   scrollbar-width: none;
 }
 .pending-review-stack {
@@ -2708,7 +3195,7 @@ a.org-home-stat-tile:hover {
   inset: 0;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
   cursor: grab;
   background: var(--paper-well);
 }
@@ -2767,8 +3254,8 @@ a.org-home-stat-tile:hover {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 2px solid var(--border);
+  box-shadow: none;
 }
 .pending-review-action-reject {
   color: var(--danger);
@@ -2819,7 +3306,7 @@ a.org-home-stat-tile:hover {
   background: rgba(20, 18, 12, 0.55);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 .pending-review-dock:active {
   cursor: grabbing;
@@ -2880,7 +3367,7 @@ a.org-home-stat-tile:hover {
    list + inline step-through rating flow for pending feedback requests
    ---------- */
 .feedback-row {
-  border-bottom: 1.5px solid var(--border);
+  border-bottom: 2px solid var(--border);
 }
 .feedback-row:last-child {
   border-bottom: none;
@@ -2975,7 +3462,7 @@ a.org-home-stat-tile:hover {
   height: 38px;
   padding: 0;
   border-radius: var(--radius);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   background: var(--paper-card);
   font-weight: 600;
   font-size: 0.85rem;
@@ -3103,7 +3590,10 @@ a.org-home-stat-tile:hover {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: 10px;
+  /* Was a hardcoded 10px, drifted from every text button's radius
+     (--radius-button) — icon-only buttons should round the same as
+     every other button, not their own one-off value. */
+  border-radius: var(--radius-button);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3153,6 +3643,39 @@ a.org-home-stat-tile:hover {
   overflow-y: auto;
   text-align: left;
   scrollbar-width: none;
+}
+
+/* EditProfileModal's duck-avatar picker — same selected-state formula as
+   .theme-option (accent border/ring on the active choice) so choosing a
+   duck reads as the same kind of single-select control as the theme
+   picker, not a bespoke one. */
+.duck-skin-picker {
+  display: flex;
+  gap: 10px;
+}
+.duck-skin-option {
+  width: 64px;
+  height: 64px;
+  padding: 4px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--paper-well);
+  overflow: hidden;
+}
+.duck-skin-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Matches UserAvatar's own duck crop (see UserAvatar.jsx) — these
+     portrait illustrations lose their hat/face to a true center crop, so
+     the picker preview should show the same framing the avatar actually
+     applies once picked, not a different one. */
+  object-position: center 10%;
+  display: block;
+}
+.duck-skin-option[data-selected='true'] {
+  border-color: var(--accent-contrast);
+  background: var(--accent);
 }
 
 /* Wider than the shared .detail-modal-content default (org/Quests.jsx's
@@ -3206,16 +3729,13 @@ a.org-home-stat-tile:hover {
 }
 
 /* .photo-lightbox-close normally floats half outside its content (a bare
-   photo, in PhotoGallery.jsx/PendingPhotoSubmissions.jsx — negative offsets
-   look intentional against a borderless image). These containers wrap a
-   bordered card instead, so that same floating-outside look would either
-   hang off the card's edge or (worse, for .detail-modal-content/
-   .events-map-detail-slot) get clipped by its own overflow-y:auto — inset
-   it within the card instead. */
-.qr-modal-content > .photo-lightbox-close,
-.detail-modal-content > .photo-lightbox-close,
-.events-map-detail-slot > .photo-lightbox-close,
-.pending-review-modal > .photo-lightbox-close {
+   photo — negative offsets look intentional against a borderless image).
+   .events-map-detail-slot wraps a bordered card instead (MapQuestOverlay's
+   brief loading/error state, before MapQuestDetailBody's own hero-mounted
+   close/back button takes over), so that same floating-outside look would
+   get clipped by its own overflow-y:auto — inset it within the card
+   instead. */
+.events-map-detail-slot > .photo-lightbox-close {
   top: 10px;
   right: 10px;
 }
@@ -3236,9 +3756,9 @@ a.org-home-stat-tile:hover {
   min-width: 200px;
   padding: 6px;
   background: var(--paper-card);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 20px var(--shadow);
+  box-shadow: none;
 }
 .delete-dropdown-menu button {
   display: block;
@@ -3266,11 +3786,11 @@ a.org-home-stat-tile:hover {
    buttons above is the only extra structure needed; the toggle button
    itself reuses .quest-card-head/.quest-card-titles/.quest-chevron. */
 .quest-expand-section {
-  border-top: 1.5px solid var(--border);
+  border-top: 2px solid var(--border);
   margin-top: 12px;
 }
 
-/* ---------- Check In confirmation (see CheckIn.jsx) ---------- */
+/* ---------- Check In confirmation (see CheckInConfirm.jsx) ---------- */
 .check-in-confirmation {
   display: flex;
   flex-direction: column;
@@ -3286,9 +3806,71 @@ a.org-home-stat-tile:hover {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent);
   margin-bottom: 4px;
+}
+/* A real, unambiguous success green regardless of theme — this app's own
+   --accent is a muted butter-yellow in the light "theme 9a" palette
+   (see style.css's own header note), which doesn't read as "success" the
+   way a checkmark conventionally should. --success/--success-soft are the
+   same semantic-green pair .box-success already uses elsewhere, just as
+   theme-aware CSS custom properties instead of that rule's hardcoded hex
+   values. */
+.check-in-confirmation-icon[data-tone='success'] {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.check-in-confirmation-icon[data-tone='danger'] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* QuestScanner.jsx's own camera view — .quest-scanner-video is the div
+   html5-qrcode itself renders its <video>/<canvas> into, so nothing else
+   should be nested inside it (the library owns that subtree). The error
+   message is instead an absolutely-positioned sibling, overlaid on top of
+   (not below) the live camera feed and pinned near the top of the frame —
+   the first thing visible without looking away from the camera, unlike
+   the plain-below-the-video placement this replaced. */
+.quest-scanner {
+  position: relative;
+  margin-top: 12px;
+}
+.quest-scanner-video {
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.quest-scanner-error {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 20px);
+  max-width: 300px;
+  z-index: 2;
+  margin: 0;
+}
+/* The ordinary "browser's native permission dialog is up" wait, not a
+   problem — same position as .quest-scanner-error (they're never both
+   shown at once) but without the danger fill, since nothing has gone
+   wrong yet. */
+.quest-scanner-status {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 20px);
+  max-width: 300px;
+  z-index: 2;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--paper-card);
+  color: var(--line-soft);
+  font-size: 0.88rem;
+  text-align: center;
 }
 
 .section-heading {
@@ -3296,6 +3878,13 @@ a.org-home-stat-tile:hover {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  /* Matches the 16px margin every plain <h2> already gets for free from the
+     global h1/h2/h3 rule — call sites that need the count-badge layout this
+     row provides were zeroing the h2's own margin to avoid doubling up
+     inside the flex row, then patching the gap back in ad hoc (8px here,
+     12px there), which read as visibly tighter than every other section on
+     the same page. One rule, one value, no more per-call-site guessing. */
+  margin-bottom: 16px;
 }
 
 /* a data-row that's also a <button> (AllUsers' clickable rows) needs to
@@ -3305,7 +3894,7 @@ a.org-home-stat-tile:hover {
    individually, so this wins regardless of source order. */
 button.data-row {
   border: none;
-  border-bottom: 1.5px solid var(--border);
+  border-bottom: 2px solid var(--border);
   border-radius: 0;
   box-shadow: none;
   font-weight: 400;
@@ -3381,7 +3970,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   gap: 9px;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: none;
   border-radius: var(--radius-full);
   padding: 11px 16px;
 }
@@ -3436,6 +4025,15 @@ button.data-row:active:not(:disabled) {
   font-family: var(--font-body);
   color: var(--line);
 }
+/* Without this, the generic input:hover rule (a background-color tint,
+   meant for bordered form fields elsewhere) still applies here on hover
+   even though this field's own resting background is none — a tint
+   would briefly flash in against .quest-search-row's own pill background
+   only while the cursor sits over the text, then vanish again on
+   mouseleave, reading as a glitch rather than a real hover state. */
+.vanish-search-input:hover {
+  background: none;
+}
 .vanish-search-input:focus-visible {
   outline: none;
   box-shadow: none;
@@ -3479,7 +4077,7 @@ button.data-row:active:not(:disabled) {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-button);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3512,11 +4110,12 @@ button.data-row:active:not(:disabled) {
   height: 64px;
   flex: none;
   border-radius: var(--radius-full);
-  border: 3px solid var(--brand-mustard);
+  border: none;
   background: var(--paper-card);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .profile-meta {
@@ -3555,36 +4154,27 @@ button.data-row:active:not(:disabled) {
   height: 16px;
   flex: none;
 }
-.profile-settings-link {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  color: var(--line-soft);
-  flex: none;
-}
-.profile-settings-link:hover {
-  color: var(--line);
-  background: var(--paper-well);
-}
-
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+  /* Grid's default `stretch` was forcing RsvpdQuestsPreview/BadgesPreview
+     (a handful of lines each) to match ProgressCard's height once its own
+     Collapse opens to the full milestone ladder + certificate banner —
+     visible dead space at the bottom of the two short cards on any row
+     they shared with an expanded ProgressCard. Each card now sizes to its
+     own content instead. */
+  align-items: start;
 }
 
-/* The identity card — avatar/name+badges/email/Log out/Edit Profile, one
-   card at every width (used to split into a different desktop-only grid
-   with settings inline in a second column; that's reverted — a gear icon
-   here is simpler and consistent with OrganizationProfile.jsx's own). The
-   gear icon is positioned absolutely off this card's own top-right corner
-   (overriding .profile-settings-link's plain margin-left:auto flow-row
-   position above, which OrganizationProfile.jsx's own header still uses
-   as-is), not stacked in the centered column with everything else. */
+/* The identity card — avatar/name+badges/email/Edit Profile/Settings/
+   Log out, one card at every width (used to split into a different
+   desktop-only grid with settings inline in a second column; that's
+   reverted). Settings used to be a gear icon pinned to this card's own
+   top-right corner — now a plain button in the same stack as the other
+   two, with Log out set apart below a divider since it's a different
+   kind of action (leaving, not managing) from Edit Profile/Settings
+   above it. */
 .profile-identity-card {
   position: relative;
   display: flex;
@@ -3595,11 +4185,29 @@ button.data-row:active:not(:disabled) {
   min-height: 55vh;
   text-align: center;
 }
-.profile-identity-card .profile-settings-link {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  margin-left: 0;
+.profile-identity-divider {
+  width: 70%;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+/* Log out — this card's own fill (--paper-card, via .ink-card) is the
+   exact same value as the base button's own resting fill (--paper-well),
+   so without a border here it'd have no visible edge against the card at
+   all. Matched to a shared fixed width (rather than each sizing to its
+   own label, or stretching to the full card) since "Log out"/"Settings"/
+   "Edit Profile" are all different lengths — comfortably fits the
+   longest label. */
+.profile-identity-card .stamp-btn {
+  width: 70%;
+  border: 1.5px solid var(--border);
+}
+/* Edit Profile is the primary action here (variant='primary', pastel-
+   yellow fill) — that fill already contrasts against the card on its
+   own, so the border above (needed only because the *default* variant's
+   fill is otherwise invisible against the card) would just be a stray
+   outline nothing else in the app puts on a primary button. */
+.profile-identity-card .stamp-btn.ink-btn-primary {
+  border: none;
 }
 .profile-identity-card .profile-name-badges {
   justify-content: center;
@@ -3628,6 +4236,21 @@ button.data-row:active:not(:disabled) {
   height: 64px;
   border-radius: var(--radius-full);
   object-fit: cover;
+  flex: none;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
+}
+/* OrgAvatar's own fallback letter-tile, rendered here with no wrapping
+   size (unlike quest-thumb/attendee-card-avatar elsewhere, which already
+   give it one) — .org-avatar's base rule is width/height:100% of
+   whatever contains it, and this container is a plain flex row
+   (.org-profile-header) with nothing else constraining that slot's size.
+   Without this, a no-logo org's fallback tile stretched to fill the
+   row's remaining width instead of staying a 64px circle like
+   .org-profile-logo above always does. */
+.org-profile-header .org-avatar {
+  width: 64px;
+  height: 64px;
   flex: none;
 }
 .org-profile-header-info {
@@ -3675,10 +4298,16 @@ button.data-row:active:not(:disabled) {
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 10px;
-  border: 1.5px solid var(--border);
   padding: 0;
   background: var(--paper-well);
   width: 100%;
+  /* A neutral outline, not the themed --border — a real photo's edge
+     picking up this app's brown/yellow cast reads as dirt on the image,
+     not as a deliberate frame. outline (not border) keeps this from
+     adding layout width, and the negative offset insets it so it doesn't
+     cover the photo's own edge pixels. */
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 .photo-gallery-thumb img {
   width: 100%;
@@ -3700,7 +4329,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: none;
 }
 .photo-lightbox-backdrop {
   position: fixed;
@@ -3733,11 +4362,26 @@ button.data-row:active:not(:disabled) {
   padding: 0;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--line);
+}
+/* The visible circle stays 32px (any bigger and it overpowers the photo
+   it's closing), but the actual tap target grows to the recommended 44px
+   via an invisible centered pseudo-element rather than resizing the button
+   itself — this is the single most-reused close button in the app (photo
+   lightbox, QR modal, attendees list, map overlay), so it's worth getting
+   right once here. */
+.photo-lightbox-close::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 /* ---------- WelcomeTour (one-time first-run walkthrough) ---------- */
@@ -3758,23 +4402,6 @@ button.data-row:active:not(:disabled) {
   width: 100%;
   text-align: center;
   padding: 34px 24px 22px;
-}
-.tour-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: transparent;
-  color: var(--line-soft);
-  font-size: 1.3rem;
-  line-height: 1;
-  cursor: pointer;
-}
-.tour-close:hover {
-  background: var(--paper-well);
 }
 .tour-icon {
   width: 40px;
@@ -3810,6 +4437,28 @@ button.data-row:active:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Wider tour-backdrop card for OrgOnboarding.jsx's multi-step wizard —
+   same backdrop/close/progress-bar pieces as the leader/org slide tour,
+   just roomier since each step carries a full paragraph rather than one
+   short line, and its own scroll so it never overflows a short viewport. */
+.org-onboarding-card {
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 30px 28px 24px;
+}
+.org-onboarding-slide {
+  text-align: center;
+}
+.org-onboarding-slide h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+.org-onboarding-slide p {
+  margin: 0;
+  color: var(--line-soft);
 }
 
 /* ---------- Settings page ---------- */
@@ -3882,7 +4531,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   gap: 10px;
   background: none;
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   padding: 6px 14px 6px 6px;
   border-radius: var(--radius-full);
   font-family: var(--font-body);
@@ -3932,10 +4581,9 @@ button.data-row:active:not(:disabled) {
   padding: 1px 6px;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--accent-contrast);
   background: var(--accent);
   border-radius: var(--radius-full);
-  box-shadow: var(--shadow);
 }
 .badge-ring[data-state='in-progress'] {
   background: var(--paper-card);
@@ -3949,42 +4597,10 @@ button.data-row:active:not(:disabled) {
   color: var(--line-soft);
 }
 
-.badges-earned-row {
-  display: flex;
-  justify-content: space-around;
-  margin-bottom: 18px;
-}
-.badges-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  justify-items: center;
-  margin-bottom: 20px;
-}
-.badges-desktop-row {
+.badges-row {
   display: flex;
   gap: 22px;
   flex-wrap: wrap;
-}
-.badge-section-pill {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--paper-card);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  padding: 10px 16px;
-  margin-bottom: 14px;
-  font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--line);
-}
-.badge-section-pill[data-tone='muted'] {
-  background: var(--paper-well);
-  color: var(--line-soft);
 }
 .badge-section-title {
   font-family: var(--font-heading);
@@ -3995,8 +4611,11 @@ button.data-row:active:not(:disabled) {
   color: var(--line-soft);
   margin: 0 0 16px;
 }
+/* Was the same --paper-well as the new .ink-card default (see above) —
+   "muted" needs to recede below the default now, not match it, so this
+   blends all the way into the page instead. */
 .ink-card[data-muted='true'] {
-  background: var(--paper-well);
+  background: var(--paper);
 }
 
 /* ---------- rank progression (Profile's ProgressCard, Certificate, admin
@@ -4023,13 +4642,14 @@ button.data-row:active:not(:disabled) {
   background: var(--accent);
 }
 
-/* Vertically centers Home's whole content block in the space between
-   #root's own top/bottom padding (24px top, nav-height + 32px bottom — see
-   #root above) instead of it sitting flush at the top of the page. */
 .home-page {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  /* Centers within the space between #root's own top/bottom padding —
+     24px top, nav-height + 32px bottom (see #root above) — rather than
+     the raw viewport height, so it lands in the actual visible content
+     area above the bottom nav instead of getting pulled down past it. */
   min-height: calc(100vh - var(--nav-height) - 56px);
 }
 /* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
@@ -4046,11 +4666,19 @@ button.data-row:active:not(:disabled) {
 }
 
 /* A must-dismiss popup notice (NotificationBanner.jsx) — a quest RSVP'd to
-   was rescheduled or cancelled. Sits above the greeting, not inside its
-   card, so it reads as an interruption rather than part of the normal
-   layout. */
+   was rescheduled or cancelled. Rendered as PageMotion's sibling, not its
+   child (see mobile/Home.jsx's own note on why) — nested inside, this
+   z-index would only ever be scoped against PageMotion's own new stacking
+   context (its transform triggers one), unable to reach out and outrank
+   .home-quick-actions, a sibling of PageMotion itself. As a sibling of
+   that same HUD instead, z-index here now directly clears its own 5 (a
+   position:fixed HUD floating in the same top area of the mobile Home
+   screen, see style.css's own note there). This should always win against
+   ordinary page-level floating widgets, but still stays well under real
+   modals/lightboxes (30-60 elsewhere in this file). */
 .notification-banner {
   position: relative;
+  z-index: 20;
   margin-bottom: 16px;
 }
 .notification-banner-close {
@@ -4078,11 +4706,139 @@ button.data-row:active:not(:disabled) {
 .home-greeting h1 {
   margin: 12px 0 0;
 }
+/* The member's chosen duck character (see duckSkins.js) — a real <img>,
+   not the line-drawn .duck-mark brand icon (DuckMark), so it needs its
+   own natural aspect ratio (the illustrated ducks aren't square like the
+   brand PNGs) rather than a fixed width+height square. */
+.home-greeting-duck {
+  width: 140px;
+  height: auto;
+}
+
+/* A floating quick-actions HUD (Check in / My quests / Last quest).
+   Mobile: icon-only game-UI quick-slots (bordered, hard offset shadow,
+   gold accent glow + press-down feedback) stacked top-right — top bar is
+   a bottom tab bar here, so that corner is free. Desktop (see the
+   breakpoint below) trades that for a plain list panel instead: a
+   bordered/shadowed card holding all three rows divided by hairlines,
+   since there's room for icon+label to just read on its own rather than
+   needing a slot to pop at a glance. Both float independent of scroll
+   (position:fixed) rather than sitting inline in the page flow. */
+.home-quick-actions {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.home-quick-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--paper-card);
+  color: var(--line);
+  text-decoration: none;
+  box-shadow: 0 3px 0 var(--border);
+  transition:
+    transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+.home-quick-action-icon {
+  display: flex;
+  flex: none;
+}
+.home-quick-action-label {
+  display: none;
+}
+.home-quick-action:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-contrast);
+  background: var(--accent);
+  box-shadow: 0 5px 0 var(--accent-contrast);
+}
+.home-quick-action:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-quick-action {
+    transition:
+      box-shadow 0.15s ease,
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .home-quick-action:hover,
+  .home-quick-action:active {
+    transform: none;
+  }
+}
+@media (min-width: 860px) {
+  /* Desktop swaps the mobile icon-only quick-slots for a floaty list
+     panel — no outer border or shadow, just a soft fill and hairline
+     dividers between rows, rather than three separate chunky buttons;
+     there's room here for labels to just sit readable next to their icon
+     instead of needing a game-HUD slot to read at a glance. */
+  .home-quick-actions {
+    top: 50%;
+    right: -10%;
+    transform: translateY(-50%);
+    gap: 0;
+    min-width: auto;
+    border-radius: var(--radius-lg);
+    background-color: var(--accent-soft);
+    padding: 6px;
+  }
+  .home-quick-action {
+    width: auto;
+    height: auto;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    transform: none;
+  }
+  .home-quick-action:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+  /* The base (mobile) :hover/:active rules above set their own box-shadow
+     and transform for the game-HUD slot look — same selector, same
+     specificity, so without explicitly zeroing those two properties here
+     they'd still win (a later rule only overrides the properties it
+     actually declares, not the whole previous rule), leaving the flat
+     desktop list panel with a leftover chunky-button lift/shadow on
+     hover/press. */
+  .home-quick-action:hover,
+  .home-quick-action:active {
+    box-shadow: none;
+    transform: none;
+  }
+  .home-quick-action:hover {
+    background: var(--accent-soft);
+  }
+  .home-quick-action-label {
+    display: inline;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+}
 
 .rank-milestones {
   display: flex;
   justify-content: space-between;
-  gap: 4px;
+  gap: 8px;
 }
 .rank-milestone {
   display: flex;
@@ -4139,7 +4895,11 @@ button.data-row:active:not(:disabled) {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   padding: 12px 16px;
-  margin-top: 4px;
+  /* This is the "you did it, go get your certificate" moment — it was
+     sitting only 4px under the rank milestones above it, closer than any
+     other two blocks on the page, so it read as crowded rather than as its
+     own callout. */
+  margin-top: 16px;
 }
 
 /* ---------- Diamond certificate (Certificate.jsx) ---------- */
@@ -4160,7 +4920,7 @@ button.data-row:active:not(:disabled) {
   max-width: 100%;
   height: auto;
   border-radius: var(--radius);
-  box-shadow: 0 6px 20px var(--shadow);
+  box-shadow: none;
 }
 
 /* ---------- Landing page (the signed-out root, see Landing.jsx) ---------- */
@@ -4200,7 +4960,7 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-card);
   border: 2.4px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: 4px 4px 0 var(--shadow);
+  box-shadow: none;
   padding: 14px 18px 16px;
   display: flex;
   flex-direction: column;
@@ -4378,25 +5138,8 @@ button.data-row:active:not(:disabled) {
     flex-direction: column;
     gap: 10px;
   }
-  .events-map-mobile-overlays .search-field {
-    max-width: none;
+  .events-map-mobile-overlays .quest-search-row {
     width: 100%;
-  }
-  .events-map-mobile-overlays .tag-filter-row {
-    max-width: none;
-  }
-  /* Same readability fix .events-map-overlays (desktop) already has — an
-     unselected selectable tag is normally `background: transparent` (just
-     a colored outline, meant for the page's own plain paper background),
-     which is see-through to whatever's on the map underneath it here.
-     --paper-card is already the app's own theme-aware white(light)/
-     black(dark) surface token, so this needs no new color logic. The
-     already-selected pill (tone-filled, already opaque) is untouched. */
-  .events-map-mobile-overlays .tag-stamp[data-selectable='true'] {
-    background: var(--paper-card);
-  }
-  .events-map-mobile-overlays .tag-stamp {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
   }
   /* MobileSheet.jsx — a fixed-height sliver always instantiated at this
      same height regardless of collapsed/expanded; MobileSheet's own
@@ -4407,13 +5150,23 @@ button.data-row:active:not(:disabled) {
     left: 0;
     right: 0;
     bottom: 0;
-    height: 95vh;
-    background: var(--paper-card);
+    /* Shorter by default — a mobile *web* browser (see EventsMap.jsx's own
+       data-native, driven by Capacitor.isNativePlatform()) already has its
+       own address bar/chrome eating into the viewport, so this doesn't
+       need to reach as high there. The installed app gets the full 95vh
+       back below, unchanged from before this existed. */
+    height: 85vh;
+    /* Matches --bottom-nav (var(--paper)), not --paper-card — same fix as
+       the desktop sidebar above. */
+    background: var(--paper);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: none;
     z-index: 5;
     display: flex;
     flex-direction: column;
+  }
+  .events-map-sheet[data-native='true'] {
+    height: 95vh;
   }
   .events-map-sheet-handle {
     flex: none;
@@ -4467,10 +5220,10 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-well);
   position: relative;
 }
-/* Shown only if loadMapsLibrary/loadMarkerLibrary actually rejects (see
-   EventsMap.jsx's mapError state) — Google Maps never got a chance to
-   render its own error UI onto this container in that case, since it's
-   never constructed at all. */
+/* Shown only if the MapLibre map's own 'error' event fires (see
+   EventsMap.jsx's mapError state) — a bad/missing MapTiler key or a
+   blocked tile request, with no built-in on-map error UI of its own to
+   fall back to the way Google Maps had. */
 .events-map-error {
   position: absolute;
   inset: 0;
@@ -4496,32 +5249,24 @@ button.data-row:active:not(:disabled) {
   .events-map-page {
     display: flex;
     flex-direction: column;
-    /* border-box (global reset): height includes padding-top below, so
-       this is the box's true total height — top edge lands at the real
-       viewport top (see the negative margin) and bottom edge lands at the
-       real viewport bottom (no fixed bottom nav to clear at this
-       breakpoint, unlike mobile). */
-    height: 100vh;
-    /* The classic "break out of a centered max-width container" trick —
-       #root itself caps at 1180px and centers via margin:0 auto (see its
-       own rule), unlike every other page in the app, this one page needs
-       to reach the TRUE viewport edges on a wider screen, not just
-       #root's own (still page-padding-cancelling) box. width:auto with
-       matching negative left/right margins naturally resolves to exactly
-       100vw regardless of #root's own width; explicit width:100vw backs
-       that up rather than relying on the margin math alone. */
-    width: 100vw;
-    margin-left: calc(-50vw + 50%);
-    margin-right: calc(-50vw + 50%);
-    margin-top: calc(-1 * (var(--nav-height-desktop) + 40px));
-    margin-bottom: -48px;
-    /* Without this, the sidebar's search row and the map's floating
-       overlays rendered right under the fixed desktop topbar (.bottom-nav,
-       position:fixed;top:0) instead of clearing it — the negative margin
-       above cancels ALL of #root's reserved top space, so this puts back
-       just enough (the nav's own height, not the full original padding)
-       to stay visible below it. */
-    padding-top: var(--nav-height-desktop);
+    /* FIXED: the negative-margin breakout trick (width:100vw +
+       margin-left/right: calc(-50vw + 50%)) assumes #root has symmetric
+       left/right padding. #root's padding is asymmetric now (a large
+       padding-left reserved for the sidebar, a small padding-right — see
+       #root:has(.bottom-nav)), so the % in those margin calcs resolved
+       against a skewed containing-block width and landed the page's left
+       edge ~38px past the sidebar's real right edge. position:fixed
+       anchors straight to the viewport instead, independent of #root's
+       padding entirely. Anchored to the sidebar's collapsed width, not
+       its expanded one — the sidebar is a fixed overlay above this page
+       (see .bottom-nav's z-index), so it only ever needs to clear the
+       collapsed rail; chasing the transient expanded width would need
+       its own :has() rule for how briefly it's ever open. */
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width-desktop-collapsed);
+    right: 0;
+    bottom: 0;
     overflow: hidden;
   }
   .events-map-layout {
@@ -4534,7 +5279,10 @@ button.data-row:active:not(:disabled) {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background: var(--paper-card);
+    /* Matches --bottom-nav (var(--paper)), not --paper-card — the sidebar
+       sits directly against the nav bar, and the two were visibly
+       different tones before. */
+    background: var(--paper);
     border-right: 1px solid var(--border);
     padding: 20px;
   }
@@ -4542,8 +5290,7 @@ button.data-row:active:not(:disabled) {
     flex: none;
     margin-bottom: 12px;
   }
-  .events-map-search-row .search-field {
-    max-width: none;
+  .events-map-search-row .quest-search-row {
     width: 100%;
   }
   .events-map-list-pane {
@@ -4573,27 +5320,6 @@ button.data-row:active:not(:disabled) {
   }
   .events-map-overlays .events-map-location-banner {
     margin-bottom: 0;
-  }
-  .events-map-overlays .tag-filter-row {
-    max-width: none;
-    margin-bottom: 0;
-  }
-  /* Individual pills get their own shadow here (unlike every other
-     .tag-stamp use in the app) — grounding for a row that's floating
-     directly over the map, not sitting on a page's plain background. */
-  .events-map-overlays .tag-stamp {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-  }
-  /* An unselected selectable tag is normally `background: transparent` (see
-     .tag-stamp[data-selectable='true']) — just a colored outline, meant to
-     sit on the page's own plain paper background. Floating directly over
-     the map instead, that outline is see-through to whatever's on the map
-     underneath it and hard to read; force an opaque paper background here
-     specifically so the label stays legible regardless of what's on the
-     map behind it. The already-selected pill (tone-filled, already
-     opaque) is untouched. */
-  .events-map-overlays .tag-stamp[data-selectable='true'] {
-    background: var(--paper-card);
   }
 }
 
@@ -4644,6 +5370,8 @@ button.data-row:active:not(:disabled) {
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--paper-well);
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 .quest-hero-img {
   width: 100%;
@@ -4659,31 +5387,30 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
   color: var(--line-soft);
 }
-/* MapQuestOverlay.jsx's close button — floats directly on the hero photo
-   itself (a real lightbox close button, not one hanging in the padding
-   above it), rather than the generic .photo-lightbox-close every other
-   modal in this app uses (which floats relative to the whole bordered
-   card, not specifically the image at its top). Map-only: the Explore
-   Quests detail has no close/back button overlaying its hero. */
-.map-quest-hero-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
+/* Desktop's "Back to Map" (see MapQuestDetailBody.jsx) — the same
+   .back-link treatment used everywhere else in the app, just rendered as
+   a real <button> (onClose is a callback, not a route) rather than
+   BackLink.jsx's <Link>. That means the generic `button` reset earlier in
+   this file (pill padding/radius/fill) applies too and has to be stripped
+   back off here, or it'd paint as a filled pill instead of the plain
+   understated link every other back-link in the app is. Margin-bottom
+   traded for one that matches the hero's own spacing below it. Mobile
+   gets a different, floating-on-the-photo treatment instead
+   (.map-quest-hero-back below) since there it's returning to the sheet's
+   list beneath it, not a full page nav. */
+.map-quest-back-link {
+  margin-bottom: 10px;
   padding: 0;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.85);
-  border: none;
-  color: var(--line);
-  z-index: 1;
+  border-radius: 0;
+  background: none;
 }
-/* Mobile's equivalent (see MapQuestDetailBody.jsx) — same treatment as
-   .map-quest-hero-close, just mirrored to the top-left corner for a
-   back-chevron instead of an X. */
+.map-quest-back-link:hover {
+  background: none;
+}
+/* MapQuestOverlay.jsx's mobile back-chevron — floats directly on the hero
+   photo itself (a real lightbox-style control, not one hanging in the
+   padding above it). Map-only: the Explore Quests detail has no back
+   button overlaying its hero. */
 .map-quest-hero-back {
   position: absolute;
   top: 10px;
@@ -4800,6 +5527,8 @@ button.data-row:active:not(:disabled) {
   flex: none;
   border-radius: var(--radius-full);
   overflow: hidden;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 .map-review-header-text {
   flex: 1;
@@ -4824,7 +5553,7 @@ button.data-row:active:not(:disabled) {
   font-size: 0.85rem;
 }
 .map-review-star-filled {
-  color: var(--brand-mustard);
+  color: var(--accent);
 }
 .map-review-star-empty {
   color: var(--border);
@@ -4843,7 +5572,7 @@ button.data-row:active:not(:disabled) {
   width: 100%;
   height: 220px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   overflow: hidden;
   background: var(--paper-well);
   margin-bottom: 14px;
@@ -4865,7 +5594,7 @@ button.data-row:active:not(:disabled) {
   z-index: 2;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   overflow-y: auto;
   padding: 20px;
 }
@@ -4920,8 +5649,8 @@ button.data-row:active:not(:disabled) {
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1.5px solid var(--border);
-  box-shadow: 0 1px 3px var(--shadow);
+  border: 2px solid var(--border);
+  box-shadow: none;
   aspect-ratio: 4 / 5;
   cursor: pointer;
   background: var(--paper-well);
@@ -4995,7 +5724,7 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: 2px solid var(--border);
   color: var(--line);
 }
 /* Opens upward from the bottom-right trigger, not downward — downward
@@ -5037,7 +5766,7 @@ button.data-row:active:not(:disabled) {
   position: relative;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 30px var(--shadow);
+  box-shadow: none;
   width: min(560px, 100%);
   max-height: 85vh;
   overflow-y: auto;
@@ -5058,7 +5787,7 @@ button.data-row:active:not(:disabled) {
   padding: 0;
   border-radius: var(--radius-full);
   background: var(--paper-card);
-  border: 1.5px solid var(--border);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5124,4 +5853,208 @@ button.data-row:active:not(:disabled) {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* ---------- ImageUploadCard.jsx — single-image drag-and-drop upload with
+   a "vending machine" drop-in animation (the animation's own timing/easing
+   values live in the component; this is just the drop zone's visual
+   states and the stacking order they depend on). z-index mirrors the
+   layering the animation itself assumes: zone (0) < dropped image (10) <
+   dashed border (20) < top mask (30), so the falling image is never drawn
+   on top of the border it's supposed to land inside of, and the mask can
+   hide it entirely while it's still above the card's own rounded top
+   edge. */
+.image-upload-card {
+  width: 100%;
+  max-width: 32rem;
+  margin: 0 auto;
+}
+.image-upload-card-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--paper-card);
+}
+.image-upload-card-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: var(--paper-card);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  z-index: 30;
+  pointer-events: none;
+}
+.image-upload-card-body {
+  padding: 24px;
+}
+.image-upload-card-zone-wrap {
+  position: relative;
+}
+.image-upload-card-zone {
+  position: relative;
+  z-index: 0;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background: var(--paper-well);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.image-upload-card-zone.is-drag-over {
+  background: var(--accent-soft);
+}
+.image-upload-card-zone.is-uploading {
+  background: var(--accent-soft);
+  cursor: default;
+}
+.image-upload-card-icon {
+  color: var(--line-soft);
+  transition: color 0.2s ease;
+}
+.image-upload-card-icon.is-active {
+  color: var(--accent-contrast);
+}
+.image-upload-card-border {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--border);
+  pointer-events: none;
+  transition: border-color 0.2s ease;
+}
+.image-upload-card-border[data-drag-over='true'],
+.image-upload-card-border[data-uploading='true'] {
+  border-color: var(--accent);
+}
+.image-upload-card-drop-layer {
+  position: absolute;
+  z-index: 10;
+}
+.image-upload-card-preview {
+  position: relative;
+  min-width: 320px;
+  max-width: 100%;
+  border-radius: var(--radius);
+  background: var(--paper-well);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.image-upload-card-img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: block;
+}
+.image-upload-card-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 3;
+}
+.image-upload-card-preview:hover .image-upload-card-remove {
+  opacity: 1;
+}
+.image-upload-card-remove:hover {
+  transform: scale(1.1);
+}
+.image-upload-card-filename {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--line-soft);
+}
+.image-upload-card-copy {
+  text-align: left;
+  margin-bottom: 16px;
+}
+.image-upload-card-copy h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+.image-upload-card-copy p {
+  margin: 0;
+  color: var(--line-soft);
+  font-size: 0.9rem;
+}
+
+/* ---------- AvatarCropModal.jsx — pick/crop/save for a round avatar
+   (EditProfileModal's profile picture, OrganizationProfile's logo). The
+   crop area's size comes from aspect-ratio, not a fixed height — react-
+   easy-crop's own Cropper needs a `position: relative` container with a
+   real (non-auto) size either way, aspect-ratio just means this stays
+   square across whatever width the surrounding modal ends up at. ---------- */
+.avatar-crop-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(360px, 100%);
+}
+.avatar-crop-area {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--paper-well);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.avatar-crop-zoom {
+  width: 100%;
+}
+
+/* The circular "click to change" trigger — a member's own photo/duck
+   (UserAvatar) or an org's own logo (OrgAvatar), wrapped in a plain
+   button with a small pencil badge overlaid at the bottom-right corner,
+   the same "here's the current one, tap to replace it" affordance as a
+   typical profile-photo editor. */
+.avatar-edit-trigger {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  background: none;
+}
+/* .user-avatar/.org-avatar both default to their own fixed size (64px) —
+   this trigger wants whichever one it wraps to fill its own 72px button
+   instead. */
+.avatar-edit-trigger .user-avatar,
+.avatar-edit-trigger .org-avatar {
+  width: 100%;
+  height: 100%;
+}
+.avatar-edit-trigger-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--paper-card);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }

@@ -391,6 +391,121 @@ class TestMakeQuestRecurring:
         assert len(result["questIds"]) == 4
 
 
+# All dates here are comfortably in the future (well past this suite's own
+# 2026-07-style fixtures elsewhere) since update_recurring_series compares
+# against the real wall-clock `datetime.now()`, not a simulated one — using
+# a fixed-past-looking year like the rest of this file would make "is this
+# occurrence upcoming" tests fail once real time actually reaches it.
+class TestUpdateRecurringSeries:
+    def test_extending_until_adds_new_upcoming_occurrences(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+        created = call(main.create_recurring_quest, make_request(
+            data=create_quest_payload(eventDate="2030-01-05T14:00", frequency="weekly", until="2030-01-19T00:00"),
+            uid="org-1", role="organization",
+        ))
+        assert len(created["questIds"]) == 3
+
+        result = call(main.update_recurring_series, make_request(
+            data={"seriesId": created["seriesId"], "frequency": "weekly", "until": "2030-02-02T00:00"},
+            uid="org-1", role="organization",
+        ))
+
+        assert result["added"] == 2
+        assert result["removed"] == 0
+        docs = list(fake_firestore.client().collection("quests").where("seriesId", "==", created["seriesId"]).stream())
+        assert len(docs) == 5
+        assert all(d.to_dict()["recurrenceUntil"].day == 2 for d in docs)
+
+    def test_shortening_until_removes_rsvp_free_occurrences(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+        created = call(main.create_recurring_quest, make_request(
+            data=create_quest_payload(eventDate="2030-03-05T14:00", frequency="weekly", until="2030-03-26T00:00"),
+            uid="org-1", role="organization",
+        ))
+        assert len(created["questIds"]) == 4
+
+        result = call(main.update_recurring_series, make_request(
+            data={"seriesId": created["seriesId"], "frequency": "weekly", "until": "2030-03-12T00:00"},
+            uid="org-1", role="organization",
+        ))
+
+        assert result["removed"] == 2
+        docs = list(fake_firestore.client().collection("quests").where("seriesId", "==", created["seriesId"]).stream())
+        assert len(docs) == 2
+
+    def test_blocks_shortening_when_a_removed_date_has_rsvps(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+        created = call(main.create_recurring_quest, make_request(
+            data=create_quest_payload(eventDate="2030-04-02T14:00", frequency="weekly", until="2030-04-23T00:00"),
+            uid="org-1", role="organization",
+        ))
+        # The 3rd occurrence (Apr 16) would be removed by shrinking until
+        # back to Apr 9 — give it an RSVP first so the update should refuse.
+        third_id = sorted(
+            created["questIds"],
+            key=lambda qid: fake_firestore.client().collection("quests").document(qid).get().to_dict()["eventDate"],
+        )[2]
+        fake_firestore.client().collection("quests").document(third_id).update({"rsvpd": ["user-1"]})
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.update_recurring_series, make_request(
+                data={"seriesId": created["seriesId"], "frequency": "weekly", "until": "2030-04-09T00:00"},
+                uid="org-1", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.FAILED_PRECONDITION
+        # Nothing partially applied — still all 4 original occurrences.
+        docs = list(fake_firestore.client().collection("quests").where("seriesId", "==", created["seriesId"]).stream())
+        assert len(docs) == 4
+
+    def test_never_touches_past_occurrences(self, fake_firestore, make_request, call):
+        # future_date deliberately lands on an exact whole-week multiple of
+        # past_date (the series anchor) — update_recurring_series diffs by
+        # exact calendar date against the theoretical weekly sequence, so
+        # an arbitrary (non-week-aligned) future date would look like a
+        # mismatch against the *new* pattern and get "removed" for a
+        # completely different, correct reason unrelated to what this test
+        # is actually checking.
+        past_date = dt.datetime.now(dt.timezone.utc) - dt.timedelta(weeks=3)
+        future_date = past_date + dt.timedelta(weeks=6)  # = now + 3 weeks
+        seed_quest(
+            fake_firestore, "past-occ", orgId="org-1", seriesId="series-past",
+            eventDate=past_date, recurrenceFrequency="weekly", recurrenceUntil=future_date,
+        )
+        seed_quest(
+            fake_firestore, "future-occ", orgId="org-1", seriesId="series-past",
+            eventDate=future_date, recurrenceFrequency="weekly", recurrenceUntil=future_date,
+        )
+
+        result = call(main.update_recurring_series, make_request(
+            data={
+                "seriesId": "series-past",
+                "frequency": "weekly",
+                "until": (future_date + dt.timedelta(weeks=8)).isoformat(),
+            },
+            uid="org-1", role="organization",
+        ))
+
+        assert result["removed"] == 0
+        past_doc = fake_firestore.client().collection("quests").document("past-occ").get().to_dict()
+        assert past_doc["eventDate"] == past_date
+
+    def test_rejects_non_owner(self, fake_firestore, make_request, call):
+        make_org(fake_firestore, "org-1")
+        created = call(main.create_recurring_quest, make_request(
+            data=create_quest_payload(eventDate="2030-05-07T14:00", frequency="weekly", until="2030-05-21T00:00"),
+            uid="org-1", role="organization",
+        ))
+
+        with pytest.raises(https_fn.HttpsError) as exc_info:
+            call(main.update_recurring_series, make_request(
+                data={"seriesId": created["seriesId"], "frequency": "weekly", "until": "2030-06-04T00:00"},
+                uid="org-2", role="organization",
+            ))
+
+        assert exc_info.value.code == https_fn.FunctionsErrorCode.PERMISSION_DENIED
+
+
 class TestDeleteQuest:
     def test_deletes_only_this_occurrence_leaves_series_siblings_intact(self, fake_firestore, make_request, call):
         seed_quest(fake_firestore, "occ-1", orgId="org-1", seriesId="series-1")

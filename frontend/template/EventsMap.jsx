@@ -1,19 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
-import { collection, getDocs } from 'firebase/firestore';
+import { Map as MapLibreMap, Marker } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
 import { useAuth } from './AuthContext.jsx';
-import { groupBySeries, attachSeriesRatings, attachOrgLogos, isUpcoming, toDate } from './questSeries.js';
-import { loadMapsLibrary, loadMarkerLibrary } from './googleMaps.js';
-import { MAP_STYLE, questPinIcon } from './mapStyle.js';
+import {
+  groupBySeries,
+  attachSeriesRatings,
+  attachOrgLogos,
+  isUpcoming,
+  toDate,
+  nextExplorableOccurrence,
+} from './questSeries.js';
+import { MAP_STYLE_URL, createQuestPinElement, createUserPositionElement, paintQuestPin } from './mapStyle.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { OrgAvatar } from './OrgAvatar.jsx';
-import { TagStamp } from './TagStamp.jsx';
 import { DuckMark } from './Logo.jsx';
-import { IconSearch, IconChevron } from './icons.jsx';
+import { VanishSearchInput } from './VanishSearchInput.jsx';
+import { parseSearch } from './searchTags.js';
+import { FilterPill, FilterButton, DesktopFilterPopover, MobileFilterSheet, useFilterPanel } from './FilterPanel.jsx';
+import { IconList } from './icons.jsx';
+import { IS_NATIVE_APP } from './platform.js';
 
 // How tall the sheet's own peeking sliver is when collapsed — handle bar +
 // label, plus enough extra to preview the first quest card's title/org
@@ -37,6 +48,16 @@ const EARTH_RADIUS_KM = 6371;
 // below). See App.jsx's AppRoutes for how this state is actually consumed.
 const MAP_BACKGROUND_LOCATION = { pathname: '/map', search: '', hash: '', state: null, key: 'map-bg' };
 
+// Read imperatively at click time (not derived from any prop/state) — this
+// component matches routes against the fixed MAP_BACKGROUND_LOCATION above,
+// not the real browser location, so it never re-renders when the actual
+// /map/:seriesId URL changes underneath the still-mounted overlay. The real
+// window.location is the only place "is a detail already open" is visible
+// from here.
+function isMapDetailOpen() {
+  return /^\/map\/[^/]+\/?$/.test(window.location.pathname);
+}
+
 function haversineKm(a, b) {
   const toRad = (deg) => (deg * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -51,76 +72,6 @@ function formatDistance(km) {
   if (km == null) return null;
   const miles = km * 0.621371;
   return miles < 0.1 ? 'Here' : `${miles.toFixed(1)} mi`;
-}
-
-// Wraps .tag-filter-row with a scroll-by-one-tap arrow at whichever edge
-// still has more content past it (Google Maps' own category-shortcut row
-// does the same on desktop) — hidden entirely once there's nothing further
-// that way, so it never shows a dead-end arrow. A plain scroll-position
-// check rather than IntersectionObserver-per-chip: this row is small (a
-// dozen tags at most), so re-measuring the whole container on every
-// scroll/resize is cheap.
-//
-// `arrows` is off on mobile — a touch swipe is already the natural way to
-// scroll this row there, and a pair of tap targets floating over it would
-// just be redundant chrome competing with the pills themselves.
-function ScrollableTagRow({ children, arrows = true }) {
-  const scrollRef = useRef(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  function updateScrollState() {
-    const el = scrollRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }
-
-  useEffect(() => {
-    if (!arrows) return undefined;
-    updateScrollState();
-    const el = scrollRef.current;
-    if (!el) return undefined;
-    el.addEventListener('scroll', updateScrollState, { passive: true });
-    window.addEventListener('resize', updateScrollState);
-    return () => {
-      el.removeEventListener('scroll', updateScrollState);
-      window.removeEventListener('resize', updateScrollState);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [children, arrows]);
-
-  if (!arrows) {
-    return <div className="tag-filter-row">{children}</div>;
-  }
-
-  return (
-    <div className="tag-filter-row-wrap">
-      <div className="tag-filter-row" ref={scrollRef}>
-        {children}
-      </div>
-      {canScrollLeft && (
-        <button
-          type="button"
-          className="tag-filter-row-arrow tag-filter-row-arrow-left"
-          onClick={() => scrollRef.current?.scrollBy({ left: -220, behavior: 'smooth' })}
-          aria-label="Scroll tags left"
-        >
-          <IconChevron style={{ transform: 'rotate(90deg)' }} />
-        </button>
-      )}
-      {canScrollRight && (
-        <button
-          type="button"
-          className="tag-filter-row-arrow tag-filter-row-arrow-right"
-          onClick={() => scrollRef.current?.scrollBy({ left: 220, behavior: 'smooth' })}
-          aria-label="Scroll tags right"
-        >
-          <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-        </button>
-      )}
-    </div>
-  );
 }
 
 // A draggable bottom sheet (mobile only) containing the quest list/detail —
@@ -158,6 +109,14 @@ function MobileSheet({ expanded, onExpandedChange, children }) {
     <motion.div
       ref={sheetRef}
       className="events-map-sheet"
+      // Shorter by default (see .events-map-sheet[data-native] in
+      // style.css) — a mobile *web* browser already has its own address
+      // bar/chrome eating into the viewport, so this sheet doesn't need to
+      // reach as high as it does inside the installed Capacitor app, which
+      // has the full screen to itself. peekOffset above is measured off
+      // this element's real rendered height either way, so nothing else
+      // here needs to know which case it is.
+      data-native={IS_NATIVE_APP ? 'true' : undefined}
       style={{ y }}
       animate={{ y: expanded ? 0 : peekOffset }}
       transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 34 }}
@@ -184,6 +143,44 @@ function MobileSheet({ expanded, onExpandedChange, children }) {
   );
 }
 
+const MAP_SEARCH_PLACEHOLDERS = ['Search nearby quests', 'Try a title', 'Try #outdoors'];
+
+const MAP_SORT_OPTIONS = [
+  { value: 'nearest', label: 'Nearest' },
+  { value: 'soonest', label: 'Soonest' },
+];
+
+// Sort only — no Type/Activity group here (see EventsMap's own comment on
+// activeFilterCount) — same shared pill/panel structure as Explore Quests'
+// own three-group panel (see mobile/Quests.jsx's FilterPanelContent), just
+// one group instead of three.
+function MapFilterPanelContent({ sort, onSelectSort, activeFilterCount, onClearAll }) {
+  return (
+    <div className="quest-filter-panel">
+      <div className="quest-filter-panel-header">
+        <h2>Filters</h2>
+        {activeFilterCount > 0 && (
+          <button type="button" className="quest-filter-clear" onClick={onClearAll}>
+            Clear all
+          </button>
+        )}
+      </div>
+      <div className="quest-filter-group quest-filter-group-inline">
+        <p className="quest-filter-group-label">
+          <IconList width={14} height={14} /> Sort
+        </p>
+        <div className="quest-filter-pill-row">
+          {MAP_SORT_OPTIONS.map((opt) => (
+            <FilterPill key={opt.value} selected={sort === opt.value} onClick={() => onSelectSort(opt.value)}>
+              {opt.label}
+            </FilterPill>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // A DoorDash-style "what's near me" view for quests, rather than the plain
 // feed (Quests.jsx) — the two are deliberately separate screens: this one
 // answers "where," the feed answers "what." Only quests with real
@@ -198,6 +195,8 @@ function MobileSheet({ expanded, onExpandedChange, children }) {
 export function EventsMap() {
   const { user, loading } = useAuth();
   const isDesktop = useIsDesktop();
+  const reduce = useReducedMotion();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const hasFocusedFromParamRef = useRef(false);
   const [seriesList, setSeriesList] = useState(null);
@@ -208,7 +207,14 @@ export function EventsMap() {
   const [mapError, setMapError] = useState(null);
   const [dataError, setDataError] = useState(null);
   const [search, setSearch] = useState('');
-  const [activeTag, setActiveTag] = useState(null);
+  // 'nearest'/'soonest' — a true sort, always exactly one active, same
+  // pattern as Explore Quests' own Sort group (see mobile/Quests.jsx).
+  // Defaults to 'nearest' — the page's original (and only) behavior before
+  // this was ever a choice: distance-first once location is known, falling
+  // back to soonest-date when it isn't (see withDistance below).
+  const [sort, setSort] = useState('nearest');
+  const { open: filterPanelOpen, setOpen: setFilterPanelOpen, wrapRef: filterWrapRef, btnRef: filterBtnRef } =
+    useFilterPanel(isDesktop);
   // Mobile only (see MobileSheet) — collapsed means "exploring the map"
   // (search/tags float over it instead), expanded means "browsing the
   // quest list/detail" (the sheet itself is the focus, search/tags hide).
@@ -216,7 +222,6 @@ export function EventsMap() {
 
   const mapContainerRef = useRef(null);
   const mapObjRef = useRef(null);
-  const markerCtorRef = useRef(null);
   const markersRef = useRef(new Map());
   const userMarkerRef = useRef(null);
   const hasCenteredOnUserRef = useRef(false);
@@ -246,8 +251,12 @@ export function EventsMap() {
       getDocs(collection(db, 'quests')),
       getDocs(collection(db, 'questSeries')),
       getDocs(collection(db, 'organizations')),
+      // Same query mobile/Quests.jsx's own Past Attended filter uses — an
+      // eventId this map filters out below needs to match whichever
+      // occurrence a user actually checked into, not just RSVP'd to.
+      getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid))),
     ])
-      .then(([questsSnap, seriesSnap, orgsSnap]) => {
+      .then(([questsSnap, seriesSnap, orgsSnap, attendanceSnap]) => {
         // Filtered to upcoming occurrences BEFORE grouping, not after — a
         // recurring series' `primary` (groupBySeries' own earliest-occurrence
         // pick) is the *first ever* occurrence otherwise, which for a series
@@ -262,10 +271,23 @@ export function EventsMap() {
         const quests = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         const seriesAgg = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         const logoByOrgId = new Map(orgsSnap.docs.map((d) => [d.id, d.data().logoUrl]));
+        const attendedEventIds = new Set(attendanceSnap.docs.map((d) => d.data().eventId));
+        // The map is for exploring what to do next, not a second copy of
+        // "my quests" — a series someone's already RSVP'd to (or already
+        // attended) has nothing left to explore here. A recurring series
+        // still shows if it has another upcoming date that's neither, just
+        // pointed at that date instead of its (already-spoken-for) earliest
+        // one — see nextExplorableOccurrence.
         const groups = attachOrgLogos(
           attachSeriesRatings(groupBySeries(quests), seriesAgg),
           logoByOrgId,
-        ).filter((g) => g.primary.lat != null && g.primary.lng != null);
+        )
+          .map((g) => {
+            const primary = nextExplorableOccurrence(g, user.uid, attendedEventIds);
+            return primary ? { ...g, primary } : null;
+          })
+          .filter(Boolean)
+          .filter((g) => g.primary.lat != null && g.primary.lng != null);
         setSeriesList(groups);
       })
       .catch((err) => {
@@ -276,6 +298,9 @@ export function EventsMap() {
       });
   }, [user]);
 
+  // 'soonest' always sorts by date — Nearest still falls back to date when
+  // distance isn't known yet (location denied/pending), same as before this
+  // was an explicit choice rather than the page's only behavior.
   const withDistance = useMemo(() => {
     if (!seriesList) return [];
     return [...seriesList]
@@ -284,26 +309,27 @@ export function EventsMap() {
         distanceKm: userPos ? haversineKm(userPos, { lat: g.primary.lat, lng: g.primary.lng }) : null,
       }))
       .sort((a, b) => {
+        if (sort === 'soonest') return toDate(a.primary.eventDate) - toDate(b.primary.eventDate);
         if (a.distanceKm == null && b.distanceKm == null) return toDate(a.primary.eventDate) - toDate(b.primary.eventDate);
         if (a.distanceKm == null) return 1;
         if (b.distanceKm == null) return -1;
         return a.distanceKm - b.distanceKm;
       });
-  }, [seriesList, userPos]);
+  }, [seriesList, userPos, sort]);
 
   // Tags/search narrow what's plotted and listed together — searching
   // "kitchen" should hide non-matching pins too, not just list rows, so the
-  // map stays in sync with what's actually visible below it.
-  const availableTags = useMemo(() => {
-    const seen = new Set();
-    withDistance.forEach((g) => (g.primary.tags || []).forEach((t) => seen.add(t)));
-    return [...seen];
-  }, [withDistance]);
+  // map stays in sync with what's actually visible below it. Tags come from
+  // a #token in the search text itself now (see VanishSearchInput/
+  // parseSearch below), same as Explore Quests — no separate tag picker.
+  const { tags: searchTags, text: searchText } = useMemo(() => parseSearch(search), [search]);
 
   const visibleSeries = useMemo(() => {
     let list = withDistance;
-    if (activeTag) list = list.filter((g) => (g.primary.tags || []).includes(activeTag));
-    const q = search.trim().toLowerCase();
+    if (searchTags.length > 0) {
+      list = list.filter((g) => searchTags.some((tag) => (g.primary.tags || []).includes(tag)));
+    }
+    const q = searchText.trim().toLowerCase();
     if (q) {
       list = list.filter((g) => {
         const { title, orgName, location } = g.primary;
@@ -311,44 +337,53 @@ export function EventsMap() {
       });
     }
     return list;
-  }, [withDistance, activeTag, search]);
+  }, [withDistance, searchTags, searchText]);
 
   // Create the map exactly once, as soon as the container div exists — not
   // gated on quests/location being ready yet, so the map itself appears
-  // immediately and markers just populate a moment later.
+  // immediately and markers just populate a moment later. Unlike the old
+  // Google loader (an async script-injection dance), maplibre-gl is a
+  // regular import — the constructor runs synchronously, so there's no
+  // "wait for the library to load" step; we still wait for the map's own
+  // 'load' event (its style/tiles finishing their first fetch) before
+  // flipping mapReady, so markers aren't added before there's a map to
+  // add them to.
+  //
+  // Depends on `loading`, not []: this component returns <LoadingSpinner/>
+  // (no .events-map-container in the tree at all) for as long as useAuth()
+  // is still resolving, and a []-deps effect only ever gets ONE chance to
+  // run, tied to the very first commit — if that first commit happens to
+  // be the loading-spinner render (a real race on a fresh login → navigate
+  // flow, not just theoretical), mapContainerRef.current is null forever
+  // after and the map silently never gets created. Re-running once loading
+  // flips to false catches the container that actually exists by then;
+  // the mapObjRef.current guard above still prevents creating it twice.
   useEffect(() => {
-    if (!mapContainerRef.current || mapObjRef.current) return;
-    let cancelled = false;
-    Promise.all([loadMapsLibrary(), loadMarkerLibrary()])
-      .then(([{ Map }, { Marker }]) => {
-        if (cancelled || !mapContainerRef.current) return;
-        // The classic Marker, not AdvancedMarkerElement — the latter silently
-        // refuses to render at all without a Map ID (a specific resource
-        // created in the Cloud Console's Map Management page, not an
-        // arbitrary string), confirmed via the runtime's own console warning.
-        // Marker needs no such setup and is still fully supported.
-        markerCtorRef.current = Marker;
-        mapObjRef.current = new Map(mapContainerRef.current, {
-          center: FALLBACK_CENTER,
-          zoom: 4,
-          styles: MAP_STYLE,
-          disableDefaultUI: true,
-          zoomControl: true,
-        });
-        setMapReady(true);
-      })
-      .catch((err) => {
-        // Without this, a rejected loadMapsLibrary/loadMarkerLibrary (bad or
-        // missing API key, quota, a blocked script) left mapReady false
-        // forever with zero indication why — just this app's own plain
-        // --paper-well background sitting there silently, since Google's own
-        // usual on-map error overlay never has a map to attach to yet.
-        if (!cancelled) setMapError(err.message || 'Could not load the map.');
-      });
+    if (!mapContainerRef.current || mapObjRef.current) return undefined;
+    const map = new MapLibreMap({
+      container: mapContainerRef.current,
+      style: MAP_STYLE_URL,
+      center: [FALLBACK_CENTER.lng, FALLBACK_CENTER.lat],
+      zoom: 4,
+    });
+    // No NavigationControl (MapLibre's zoom +/- buttons) — pinch/scroll/
+    // double-click zoom still all work, this just removes the on-screen
+    // button pair. MapLibre has no "default UI" to disable the way Google
+    // Maps did (disableDefaultUI:true); every control is opt-in, so this is
+    // simply not opting in, not disabling anything.
+    mapObjRef.current = map;
+    map.on('load', () => setMapReady(true));
+    map.on('error', (e) => {
+      // Without this, a bad/missing MapTiler key or a blocked tile request
+      // left mapReady false forever with zero indication why — just this
+      // app's own plain --paper-well background sitting there silently.
+      setMapError(e.error?.message || 'Could not load the map.');
+    });
     return () => {
-      cancelled = true;
+      map.remove();
+      mapObjRef.current = null;
     };
-  }, []);
+  }, [loading]);
 
   function focusSeries(seriesId) {
     setSelectedSeriesId(seriesId);
@@ -358,8 +393,19 @@ export function EventsMap() {
     setSheetExpanded(true);
     const g = visibleSeries.find((s) => s.seriesId === seriesId);
     if (g && mapObjRef.current) {
-      mapObjRef.current.panTo({ lat: g.primary.lat, lng: g.primary.lng });
-      mapObjRef.current.setZoom(14);
+      // MapLibre (like most non-Google map libraries) takes coordinates as
+      // [lng, lat] — the opposite order from Google's {lat, lng} object.
+      // Easy to get backwards; every coordinate pair below is deliberately
+      // written as [lng, lat] for that reason.
+      //
+      // One combined easeTo({center, zoom}), not separate panTo()+setZoom()
+      // calls — panTo() is an *animated* transition, and calling setZoom()
+      // on the very next line interrupts/cancels that in-flight animation
+      // before it ever reaches the new center (setZoom itself is instant,
+      // so it wins the race — zoom changes, but the pan silently never
+      // completes). easeTo animates both center and zoom together as one
+      // transition, so there's nothing to interrupt it.
+      mapObjRef.current.easeTo({ center: [g.primary.lng, g.primary.lat], zoom: 14 });
     }
   }
 
@@ -370,38 +416,76 @@ export function EventsMap() {
   // focusSeries, navigation happens right alongside it.
   useEffect(() => {
     if (!mapReady) return;
+    // marker.remove() — MapLibre's teardown method, in place of Google's
+    // marker.setMap(null).
     markersRef.current.forEach((marker) => {
-      marker.setMap(null);
+      marker.remove();
     });
     markersRef.current = new Map();
 
     visibleSeries.forEach((g) => {
-      const marker = new markerCtorRef.current({
-        map: mapObjRef.current,
-        position: { lat: g.primary.lat, lng: g.primary.lng },
-        title: g.primary.title,
-        icon: questPinIcon(g.primary.orgId || g.seriesId),
+      const el = createQuestPinElement(g.primary.orgId || g.seriesId);
+      // A plain HTML title attribute stands in for Google Marker's own
+      // `title` (a native hover tooltip) — MapLibre's Marker has no
+      // built-in equivalent option, but the underlying DOM element is ours
+      // to set attributes on directly.
+      el.title = g.primary.title;
+      // Same destination a list row's own <Link> navigates to (see the
+      // Link below) — clicking a pin now opens that quest's detail overlay
+      // directly, not just pan+select. Clicking a second, different marker
+      // while one detail is already open *replaces* that history entry
+      // instead of pushing a new one on top — otherwise each marker→marker
+      // click stacks another entry, and the overlay's own close button
+      // (a single navigate(-1)) would have to unwind that whole stack one
+      // quest at a time instead of going straight back to the list.
+      el.addEventListener('click', () => {
+        focusSeries(g.seriesId);
+        navigate(`/map/${g.seriesId}`, {
+          state: { backgroundLocation: MAP_BACKGROUND_LOCATION },
+          replace: isMapDetailOpen(),
+        });
       });
-      marker.addListener('click', () => focusSeries(g.seriesId));
+      // anchor: 'bottom' — the pin's pointed tip (not its visual center)
+      // lands exactly on the coordinate, matching the old Google icon's
+      // own bottom-center anchor point.
+      const marker = new Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([g.primary.lng, g.primary.lat])
+        .addTo(mapObjRef.current);
       markersRef.current.set(g.seriesId, marker);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, visibleSeries]);
 
   // Whichever pin/row is currently selected gets a visibly bigger icon (see
-  // questPinIcon's own `selected` param), and its list row scrolls into
+  // paintQuestPin's own `selected` param), and its list row scrolls into
   // view — covers "clicking a pin highlights + scrolls to the matching
   // card," the other direction (a row's own click) is already in view by
   // construction. Runs after the marker-rebuild effect above on the same
   // render, so it's always reapplying against the freshly built markers,
   // never a stale set.
+  //
+  // MapLibre's Marker has no marker.setIcon() the way Google's did — a
+  // Marker keeps one DOM element for its whole life, so "selected" is a
+  // style repaint on that same element (marker.getElement()) rather than
+  // swapping in a new icon.
   useEffect(() => {
     markersRef.current.forEach((marker, seriesId) => {
       const g = visibleSeries.find((v) => v.seriesId === seriesId);
       if (!g) return;
-      marker.setIcon(questPinIcon(g.primary.orgId || g.seriesId, seriesId === selectedSeriesId));
+      paintQuestPin(marker.getElement(), g.primary.orgId || g.seriesId, seriesId === selectedSeriesId);
     });
-    if (selectedSeriesId) {
+    // Skipped while a quest's detail overlay is open (isMapDetailOpen) —
+    // the list row being scrolled to is completely covered by
+    // MapQuestOverlay's portal at that point, so this had no visible
+    // purpose, but scrollIntoView() still programmatically moved the
+    // pane's real scrollTop regardless of its `overflow: hidden` (that
+    // CSS only blocks *user*-driven scroll, not a script setting
+    // scrollTop/calling scrollIntoView directly). Since the detail slot
+    // is `position: absolute; inset: 0` *inside* that same pane, every
+    // one of those scrolls dragged the open detail card up and out of
+    // view along with it — worse with each successive marker click, since
+    // scrollTop kept climbing to whichever row was clicked next.
+    if (selectedSeriesId && !isMapDetailOpen()) {
       rowRefs.current.get(selectedSeriesId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedSeriesId, visibleSeries]);
@@ -412,27 +496,34 @@ export function EventsMap() {
   // to watchPosition) wouldn't keep yanking the view back.
   useEffect(() => {
     if (!mapReady || !userPos) return;
-    if (userMarkerRef.current) userMarkerRef.current.setMap(null);
-    userMarkerRef.current = new markerCtorRef.current({
-      map: mapObjRef.current,
-      position: userPos,
-      zIndex: 999,
-      title: 'You are here',
-      // A plain filled circle icon rather than a quest-pin-shaped default
-      // marker — "you" should read as visually distinct from "a quest is
-      // here" at a glance. window.google is guaranteed loaded by this
-      // point (this effect only runs once mapReady is true).
-      icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: '#4285F4',
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 3,
-      },
-    });
+    if (userMarkerRef.current) userMarkerRef.current.remove();
+    // A plain filled circle element rather than a quest-pin-shaped
+    // marker — "you" should read as visually distinct from "a quest is
+    // here" at a glance.
+    const el = createUserPositionElement();
+    el.title = 'You are here';
+    // No zIndex option on MapLibre's Marker (unlike Google's) — a marker
+    // element is just an absolutely-positioned DOM node, so a plain CSS
+    // z-index on it works the same way and keeps this one on top of quest
+    // pins even after the marker-rebuild effect above re-runs later.
+    //
+    // Deliberately a small value, not 999 — .events-map-pane (this
+    // marker's containing map element) has no z-index of its own, so it
+    // never establishes its own stacking context; a very high z-index
+    // here doesn't stay contained to "above the quest pins," it escapes
+    // upward and gets compared directly against the app's own UI chrome
+    // stacked above the whole map (.events-map-sheet at 5, its own
+    // .events-map-detail-slot at 2) — which is exactly what made this
+    // blue dot render on top of the quest detail sheet on mobile. Quest
+    // pins have no z-index of their own at all (plain DOM order), so any
+    // small positive value already sits above them; this only needs to
+    // stay safely under 2.
+    el.style.zIndex = '1';
+    userMarkerRef.current = new Marker({ element: el })
+      .setLngLat([userPos.lng, userPos.lat])
+      .addTo(mapObjRef.current);
     if (!hasCenteredOnUserRef.current) {
-      mapObjRef.current.setCenter(userPos);
+      mapObjRef.current.setCenter([userPos.lng, userPos.lat]);
       mapObjRef.current.setZoom(12);
       hasCenteredOnUserRef.current = true;
     }
@@ -441,19 +532,35 @@ export function EventsMap() {
   // Absent a live position, center on the nearest thing to "somewhere
   // useful" once quests actually load — the first upcoming quest with
   // coordinates beats the continental-US default.
+  //
+  // Bug fixed here (pre-existing, not introduced by the MapLibre
+  // migration — the old Google Maps version had the identical race):
+  // hasCenteredOnUserRef only ever got set from the *real geolocation*
+  // effect above, so without location permission granted, this effect
+  // could fire again on any later change to `withDistance` (e.g. a
+  // Firestore read settling a moment after mount) and silently override
+  // wherever the org had just manually panned to by clicking a pin/row —
+  // it looked like clicking a pin "did nothing" or centered on the wrong
+  // quest. Marking the ref here too means *any* one-time initial
+  // auto-center (real position or this fallback, whichever fires first)
+  // permanently disables both — only an explicit focusSeries() pan moves
+  // the view after that.
   useEffect(() => {
     if (!mapReady || hasCenteredOnUserRef.current || withDistance.length === 0) return;
-    mapObjRef.current.setCenter({ lat: withDistance[0].primary.lat, lng: withDistance[0].primary.lng });
+    mapObjRef.current.setCenter([withDistance[0].primary.lng, withDistance[0].primary.lat]);
     mapObjRef.current.setZoom(11);
+    hasCenteredOnUserRef.current = true;
   }, [mapReady, withDistance]);
 
   // The map/list swap from stacked to side-by-side (see .events-map-layout,
   // style.css) resizes the map's container without the window itself
-  // resizing — Google Maps doesn't notice that on its own and leaves tiles
-  // laid out for the old size until nudged.
+  // resizing — the map doesn't notice that on its own and leaves tiles
+  // laid out for the old size until nudged. MapLibre has this as a plain
+  // method directly on the map instance — no event-trigger workaround
+  // needed the way Google's API required.
   useEffect(() => {
     if (!mapReady) return;
-    window.google.maps.event.trigger(mapObjRef.current, 'resize');
+    mapObjRef.current.resize();
   }, [mapReady, isDesktop]);
 
   // Deep-linked from a quest's location row (e.g. org/Quests.jsx's detail
@@ -476,35 +583,49 @@ export function EventsMap() {
   if (!user) return <Navigate to="/login" replace />;
 
   // Built once and placed differently per breakpoint below, rather than
-  // duplicated: mobile keeps them in normal document flow above the map
-  // (unchanged); desktop moves the search into the sidebar card and floats
-  // the tag row + location banner directly over the map instead (see
-  // App.jsx-style breakpoint branching used throughout this codebase, e.g.
-  // mobile/Quests.jsx's own desktop/mobile split).
-  const searchField = (
-    <div className="search-field">
-      <IconSearch />
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search"
-        aria-label="Search nearby quests"
-      />
-    </div>
-  );
+  // duplicated: mobile keeps it in normal document flow above the map
+  // (unchanged); desktop moves it into the sidebar card and floats the
+  // location banner directly over the map instead (see App.jsx-style
+  // breakpoint branching used throughout this codebase, e.g.
+  // mobile/Quests.jsx's own desktop/mobile split). Same Filters-button
+  // pattern as Explore Quests (see FilterPanel.jsx) — Sort only here
+  // (Nearest/Soonest), no Type/Activity: every quest on this page is
+  // already "nearby," there's nothing else here to type- or activity-
+  // filter by.
+  const activeFilterCount = sort !== 'nearest' ? 1 : 0;
 
-  const tagFilterRow = availableTags.length > 0 && (
-    <ScrollableTagRow arrows={isDesktop}>
-      <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
-        All
-      </TagStamp>
-      {availableTags.map((tag) => (
-        <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
-          {tag}
-        </TagStamp>
-      ))}
-    </ScrollableTagRow>
+  function clearMapFilters() {
+    setSort('nearest');
+    setSearch((prev) => parseSearch(prev).text);
+  }
+
+  const searchAndFilter = (
+    <div className="quest-search-row">
+      <VanishSearchInput
+        value={search}
+        onChange={setSearch}
+        placeholders={MAP_SEARCH_PLACEHOLDERS}
+        ariaLabel="Search nearby quests"
+      />
+      <div className="quest-filter-wrap" ref={filterWrapRef}>
+        <FilterButton
+          btnRef={filterBtnRef}
+          open={filterPanelOpen}
+          onToggle={() => setFilterPanelOpen((o) => !o)}
+          activeCount={activeFilterCount}
+        />
+        {filterPanelOpen && isDesktop && (
+          <DesktopFilterPopover>
+            <MapFilterPanelContent
+              sort={sort}
+              onSelectSort={setSort}
+              activeFilterCount={activeFilterCount}
+              onClearAll={clearMapFilters}
+            />
+          </DesktopFilterPopover>
+        )}
+      </div>
+    </div>
   );
 
   const locationBanner = (locationState === 'denied' || locationState === 'unavailable') && (
@@ -525,7 +646,7 @@ export function EventsMap() {
   const listContent = dataError ? (
     <p className="box-danger">{dataError}</p>
   ) : seriesList === null ? (
-    <LoadingSpinner label="Loading nearby quests..." />
+    <LoadingSpinner label="Loading nearby quests…" />
   ) : withDistance.length === 0 ? (
     <div className="quest-empty">
       <DuckMark size={96} />
@@ -533,13 +654,13 @@ export function EventsMap() {
       <p>Once an organization posts a quest with a real address, it'll show up here.</p>
     </div>
   ) : visibleSeries.length === 0 ? (
-    <p>No quests match that filter.</p>
+    <p>Nothing matches that — try widening your filters.</p>
   ) : (
     <div className="events-map-list">
-      {visibleSeries.map((g) => {
+      {visibleSeries.map((g, index) => {
         const isOpen = g.seriesId === selectedSeriesId;
         return (
-          <div
+          <motion.div
             key={g.seriesId}
             className="ink-card events-map-list-row"
             data-active={isOpen ? 'true' : undefined}
@@ -547,12 +668,33 @@ export function EventsMap() {
               if (el) rowRefs.current.set(g.seriesId, el);
               else rowRefs.current.delete(g.seriesId);
             }}
+            initial={reduce ? false : { opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{
+              duration: 0.3,
+              ease: [0.23, 1, 0.32, 1],
+              delay: Math.min(index, 5) * 0.04,
+            }}
           >
             <Link
               to={`/map/${g.seriesId}`}
               state={{ backgroundLocation: MAP_BACKGROUND_LOCATION }}
               className="events-map-list-row-head"
-              onClick={() => focusSeries(g.seriesId)}
+              onClick={(e) => {
+                focusSeries(g.seriesId);
+                // Same replace-instead-of-push guard as the pin click above,
+                // for a plain click — a modifier/middle click (open in a new
+                // tab) is left to the browser's own default <Link> handling,
+                // since that's a fresh tab with its own history anyway.
+                if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+                  e.preventDefault();
+                  navigate(`/map/${g.seriesId}`, {
+                    state: { backgroundLocation: MAP_BACKGROUND_LOCATION },
+                    replace: isMapDetailOpen(),
+                  });
+                }
+              }}
             >
               <div className="quest-thumb">
                 <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} logoUrl={g.orgLogoUrl} />
@@ -563,7 +705,7 @@ export function EventsMap() {
               </div>
               {g.distanceKm != null && <span className="events-map-list-distance">{formatDistance(g.distanceKm)}</span>}
             </Link>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -579,7 +721,7 @@ export function EventsMap() {
             reserved for it in this full-bleed layout). */}
         {isDesktop && (
           <div className="events-map-sidebar">
-            {hasListControls && <div className="events-map-search-row">{searchField}</div>}
+            {hasListControls && <div className="events-map-search-row">{searchAndFilter}</div>}
             {/* id is MapQuestOverlay.jsx's portal target — its detail view
                 renders straight into this node so opening a quest reads as
                 a view switch in place of the list, not a modal floating on
@@ -591,38 +733,40 @@ export function EventsMap() {
         )}
 
         <div className="events-map-pane">
-          <div className="events-map-container" ref={mapContainerRef}>
+          {/* data-lenis-prevent: Google Maps handles wheel/touch itself
+              (scroll-to-zoom) — this div has no CSS overflow for Lenis's
+              own nested-scroll detection to notice, so without this
+              attribute Lenis intercepts the wheel event for page scroll
+              before the map ever sees it. */}
+          <div className="events-map-container" ref={mapContainerRef} data-lenis-prevent>
             {mapError && (
               <div className="events-map-error">
                 <p className="box-danger">{mapError}</p>
               </div>
             )}
           </div>
-          {/* Desktop only — floating over the map itself, like Google Maps'
-              own category-shortcut row and any-warning banners; one
-              wrapper so both stack vertically instead of overlapping when
-              both show at once. Mobile's equivalent floats over the full-
-              screen map directly, below, since there's no separate map pane
-              to nest it inside there. */}
-          {isDesktop && (locationBanner || tagFilterRow) && (
+          {/* Desktop only — floating over the map itself, for the location
+              banner alone now (search/filter live in the sidebar above
+              instead — see events-map-search-row). Mobile's equivalent
+              floats over the full-screen map directly, below, since there's
+              no separate map pane to nest it inside there. */}
+          {isDesktop && locationBanner && (
             <div className="events-map-overlays">
               {locationBanner}
-              {tagFilterRow}
             </div>
           )}
         </div>
 
         {/* Mobile: the map fills the whole screen behind everything else.
-            Search + tags float over it, but only while "exploring the
-            map" (the sheet below is still collapsed) — once it's dragged/
-            tapped open to browse the list (or a quest's detail), these
-            hide so the sheet itself is the focus, matching Google Maps'
-            own mobile behavior. */}
+            Search/filter float over it, but only while "exploring the map"
+            (the sheet below is still collapsed) — once it's dragged/tapped
+            open to browse the list (or a quest's detail), these hide so the
+            sheet itself is the focus, matching Google Maps' own mobile
+            behavior. */}
         {!isDesktop && !sheetExpanded && (locationBanner || hasListControls) && (
           <div className="events-map-mobile-overlays">
             {locationBanner}
-            {hasListControls && searchField}
-            {tagFilterRow}
+            {hasListControls && searchAndFilter}
           </div>
         )}
 
@@ -632,6 +776,17 @@ export function EventsMap() {
               <div className="events-map-list-pane-inner">{listContent}</div>
             </div>
           </MobileSheet>
+        )}
+
+        {filterPanelOpen && !isDesktop && (
+          <MobileFilterSheet onClose={() => setFilterPanelOpen(false)}>
+            <MapFilterPanelContent
+              sort={sort}
+              onSelectSort={setSort}
+              activeFilterCount={activeFilterCount}
+              onClearAll={clearMapFilters}
+            />
+          </MobileFilterSheet>
         )}
       </div>
     </div>

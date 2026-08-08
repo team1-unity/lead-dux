@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
-import { groupBySeries, attachSeriesRatings, isUpcoming } from './questSeries.js';
+import { useAuth } from './AuthContext.jsx';
+import { groupBySeries, attachSeriesRatings, isUpcoming, nextExplorableOccurrence } from './questSeries.js';
 
 // Fetches one quest series by id for a signed-in map-detail view
 // (MapQuestPage.jsx and MapQuestOverlay.jsx) — same independent-fetch shape
@@ -21,11 +22,13 @@ import { groupBySeries, attachSeriesRatings, isUpcoming } from './questSeries.js
 // to any signed-in reader (see firestore.rules), so there's nothing to pick
 // and choose here.
 export function useMapQuestSeries(seriesId) {
+  const { user } = useAuth();
   const [series, setSeries] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!user) return undefined;
     let cancelled = false;
     setSeries(null);
     setNotFound(false);
@@ -34,8 +37,14 @@ export function useMapQuestSeries(seriesId) {
     Promise.all([
       getDocs(query(collection(db, 'quests'), where('seriesId', '==', seriesId))),
       getDoc(doc(db, 'questSeries', seriesId)),
+      // Same eventId set EventsMap.jsx's own list-loading effect builds —
+      // this view's `primary` needs to agree with the list's own resolved
+      // "next explorable date" for the same series, not fall back to
+      // groupBySeries' plain earliest-upcoming pick regardless of whether
+      // that date is already spoken for.
+      getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid))),
     ])
-      .then(([questsSnap, seriesAggSnap]) => {
+      .then(([questsSnap, seriesAggSnap, attendanceSnap]) => {
         if (cancelled) return;
         // Filtered to upcoming occurrences before grouping — same reason
         // EventsMap.jsx's own list-loading effect does this (see its
@@ -43,16 +52,25 @@ export function useMapQuestSeries(seriesId) {
         // ever) could be a date long past for a series already in progress.
         // This view has no date picker (nobody RSVPs from the map, see
         // MapQuestDetailBody), so `primary` needs to already be the soonest
-        // upcoming date, not the series' original start. A series with
-        // nothing upcoming left behaves the same as one that's been deleted —
-        // there's nothing this view can usefully show either way.
+        // *explorable* upcoming date — one the viewer hasn't already RSVP'd
+        // to or attended (see nextExplorableOccurrence) — not just the
+        // series' earliest upcoming one regardless of that. A series with
+        // nothing left to explore behaves the same as one that's been
+        // deleted — there's nothing this view can usefully show either way.
         const quests = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         if (quests.length === 0) {
           setNotFound(true);
           return;
         }
         const seriesDocsById = new Map([[seriesId, seriesAggSnap.exists() ? seriesAggSnap.data() : {}]]);
-        const [grouped] = attachSeriesRatings(groupBySeries(quests), seriesDocsById);
+        const [rated] = attachSeriesRatings(groupBySeries(quests), seriesDocsById);
+        const attendedEventIds = new Set(attendanceSnap.docs.map((d) => d.data().eventId));
+        const primary = nextExplorableOccurrence(rated, user.uid, attendedEventIds);
+        if (!primary) {
+          setNotFound(true);
+          return;
+        }
+        const grouped = { ...rated, primary };
         const orgId = grouped.primary.orgId;
         if (!orgId) {
           setSeries({ ...grouped, org: null });
@@ -79,7 +97,7 @@ export function useMapQuestSeries(seriesId) {
     return () => {
       cancelled = true;
     };
-  }, [seriesId]);
+  }, [seriesId, user]);
 
   return { series, notFound, error };
 }
