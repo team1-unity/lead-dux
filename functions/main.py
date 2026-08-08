@@ -1889,17 +1889,14 @@ def _record_rsvp(transaction, quest_ref, uid):
 # rsvpd list. Only "user" accounts RSVP; organizations/admins just manage
 # or view quests.
 #
-# min_instances=1 overrides the file-wide default (min_instances=0 from
-# set_global_options above) for this one function only — RSVP is one of the
-# most frequent taps in the app, and a cold start here (spinning up a fresh
-# container, which has to load this whole module — including the qrcode and
-# genai SDKs this function never touches) was adding several seconds on top
-# of the couple of Firestore round-trips this actually needs. Keeping one
-# instance warm trades a small constant cost for cutting that out on most
-# calls; it's deliberately not set globally, since that would keep an
-# instance warm for every one of this file's 50+ functions instead of just
-# this latency-sensitive one.
-@https_fn.on_call(min_instances=1)
+# A cold start here (a fresh container loading this whole module —
+# including the qrcode and genai SDKs this function never touches) can add
+# several seconds on top of the couple of Firestore round-trips this
+# actually needs. min_instances=1 would keep one instance warm to avoid
+# that, at the cost of paying for it to sit idle 24/7 instead of scaling to
+# zero like every other function here — deliberately left at the file's
+# default (0) for now pending a decision on that tradeoff.
+@https_fn.on_call()
 def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
 
@@ -2072,11 +2069,10 @@ def refresh_event_qr_code(req: https_fn.CallableRequest) -> dict:
 # already-checked-in code again succeeds with alreadyCheckedIn=True rather
 # than erroring, since a double scan is an expected accident, not an attack.
 #
-# min_instances=1 for the same reason as rsvp_to_quest above — check-in is
-# at least as frequent a tap as RSVP, so it pays the same cold-start cost
-# (a fresh container loading this whole module, qrcode/genai included)
-# without this override.
-@https_fn.on_call(min_instances=1)
+# Same cold-start tradeoff as rsvp_to_quest above (check-in is at least as
+# frequent a tap) — left at the default (min_instances=0) for the same
+# reason, pending a decision on the recurring cost of keeping it warm.
+@https_fn.on_call()
 def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
 
