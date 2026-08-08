@@ -5,7 +5,7 @@ import { db } from './firebaseapp.jsx';
 import { useAuth } from './AuthContext.jsx';
 import { callMarkIntroSeen } from './fetch.jsx';
 import { StampButton } from './StampButton.jsx';
-import { IconCheck, IconGrid, IconJournal, IconList, IconQrCode, IconTrophy } from './icons.jsx';
+import { IconJournal, IconList, IconQrCode, IconTrophy } from './icons.jsx';
 
 // pending_org sees the exact same quest-list interface a leader does while
 // waiting on approval (see BottomNav.jsx's role maps) — the leader tour is
@@ -35,38 +35,24 @@ const LEADER_SLIDES = [
   },
 ];
 
-const ORG_SLIDES = [
-  {
-    icon: IconGrid,
-    title: 'Welcome! This is your Dashboard',
-    body: 'Create quests for your organization, then generate a QR code volunteers scan to check in when they arrive.',
-  },
-  {
-    icon: IconCheck,
-    title: 'Review photo submissions',
-    body: 'Approve or reject the proof-of-participation photos volunteers upload after a quest — approving awards their bonus points.',
-  },
-  {
-    icon: IconJournal,
-    title: 'Reflect in your Journal',
-    body: "Once a quest occurrence has happened, write a private reflection on how hosting it went — visible only to you.",
-  },
-];
-
-// A one-time feature walkthrough shown the first time a leader or
-// organization lands on their real home screen — never again after that
-// (see mark_intro_seen in functions/main.py). Mounted once in AppShell, a
-// sibling of every signed-in route, so it appears above whichever specific
-// page happens to render first regardless of role. Re-evaluates whenever
-// `role` changes (not just on mount) so it also picks up the live
-// onboarding_user -> user transition within the same session, not only a
-// fresh page load.
+// A one-time feature walkthrough shown the first time a leader lands on
+// their real home screen — never again after that (see mark_intro_seen in
+// functions/main.py). Mounted once in AppShell, a sibling of every
+// signed-in route, so it appears above whichever specific page happens to
+// render first regardless of role. Re-evaluates whenever `role` changes
+// (not just on mount) so it also picks up the live onboarding_user -> user
+// transition within the same session, not only a fresh page load.
+//
+// organization no longer has a branch here — see frontend/org/
+// OrgOnboarding.jsx, a full multi-step wizard mounted alongside this one
+// in AppShell, which replaced the old 3-slide ORG_SLIDES (it only ever
+// covered a third of what an org can actually do).
 export function WelcomeTour() {
   const { user, role } = useAuth();
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
 
-  const slides = role === 'organization' ? ORG_SLIDES : LEADER_ROLES.includes(role) ? LEADER_SLIDES : null;
+  const slides = LEADER_ROLES.includes(role) ? LEADER_SLIDES : null;
 
   useEffect(() => {
     setStep(0);
@@ -75,8 +61,7 @@ export function WelcomeTour() {
       return undefined;
     }
     let cancelled = false;
-    const collectionName = role === 'organization' ? 'organizations' : 'users';
-    getDoc(doc(db, collectionName, user.uid)).then((snap) => {
+    getDoc(doc(db, 'users', user.uid)).then((snap) => {
       if (!cancelled) setVisible(!snap.exists() || !snap.data().introSeen);
     });
     return () => {
@@ -104,9 +89,6 @@ export function WelcomeTour() {
     <AnimatePresence>
       <div className="tour-backdrop" role="dialog" aria-modal="true" aria-label="Welcome walkthrough">
         <TourCard slide={slide} Icon={Icon}>
-          <button type="button" className="tour-close" onClick={dismiss} aria-label="Close">
-            &times;
-          </button>
           <div className="tour-dots">
             {slides.map((_, i) => (
               <span key={i} className="tour-dot" data-active={i === step ? 'true' : 'false'} />

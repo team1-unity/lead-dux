@@ -57,7 +57,7 @@ export function SharedQuest() {
     }
   }
 
-  if (authLoading || (!quest && !notFound)) return <LoadingSpinner label="Loading quest..." />;
+  if (authLoading || (!quest && !notFound)) return <LoadingSpinner label="Loading quest…" />;
 
   // Covers both "unpublished/inactive" cases a shared link can point at —
   // the quest doc no longer exists (deleted) or it does but its event

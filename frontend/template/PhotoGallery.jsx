@@ -15,7 +15,7 @@ export function PhotoGallery({ photos = [], onDelete }) {
   const [openIndex, setOpenIndex] = useState(null);
 
   if (photos.length === 0) {
-    return <p className="data-stat">No photos yet — check back after the next event.</p>;
+    return <p className="data-stat">No photos yet — the next event will start the gallery.</p>;
   }
 
   return (
@@ -50,14 +50,6 @@ export function PhotoGallery({ photos = [], onDelete }) {
         <LightboxBackdrop onClose={() => setOpenIndex(null)} label="Photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={photos[openIndex]} alt="" className="photo-lightbox-image" />
-            <button
-              type="button"
-              className="photo-lightbox-close"
-              onClick={() => setOpenIndex(null)}
-              aria-label="Close"
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}

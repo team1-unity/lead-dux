@@ -1,9 +1,9 @@
 import { motion, useReducedMotion } from 'framer-motion';
 
-// Replaces bare "Loading..." text everywhere data is being fetched. Under
+// Replaces bare "Loading…" text everywhere data is being fetched. Under
 // reduced motion, the ring holds still rather than spinning — the label
 // alone still communicates the state.
-export function LoadingSpinner({ label = 'Loading...' }) {
+export function LoadingSpinner({ label = 'Loading…' }) {
   const reduce = useReducedMotion();
   return (
     <div className="loading-spinner-row" role="status">

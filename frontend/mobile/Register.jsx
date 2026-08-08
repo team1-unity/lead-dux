@@ -6,6 +6,7 @@ import { useAuth } from '@shared/AuthContext.jsx';
 import { getAuthErrorMessage } from '@shared/authErrors.js';
 import { AuthShell } from '@shared/AuthShell.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
+import { IconGoogle } from '@shared/icons.jsx';
 
 export function Register() {
   const [name, setName] = useState('');
@@ -91,11 +92,16 @@ export function Register() {
         </label>
         {error && <p className="box-danger">{error}</p>}
         <StampButton type="submit" variant="primary" disabled={submitting}>
-          {submitting ? 'Creating account...' : 'Create account'}
+          {submitting ? 'Creating account…' : 'Create account'}
         </StampButton>
       </form>
-      <StampButton type="button" onClick={handleGoogleRegister} disabled={submitting} style={{ marginTop: 10, width: '100%' }}>
-        Sign up with Google
+      <StampButton
+        type="button"
+        onClick={handleGoogleRegister}
+        disabled={submitting}
+        style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+      >
+        <IconGoogle /> Sign up with Google
       </StampButton>
     </AuthShell>
   );

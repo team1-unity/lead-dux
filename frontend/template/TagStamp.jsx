@@ -16,7 +16,12 @@ function toneStyle(tone) {
   return {
     '--tag-color': `var(--tag-${key})`,
     '--tag-ink': `var(--tag-${key}-ink)`,
-    '--tag-select-ink': `var(--tag-${key}-ink)`,
+    // Deliberately NOT set to --tag-{key}-ink here — that ink is tuned for
+    // text on the tag's own solid fill (often cream/white), which goes
+    // invisible on the unselected/outline state's near-page background.
+    // Leaving --tag-select-ink unset lets style.css's own fallback
+    // (var(--tag-select-ink, var(--line-soft))) apply instead — one
+    // neutral that's readable against the page regardless of tone.
   };
 }
 

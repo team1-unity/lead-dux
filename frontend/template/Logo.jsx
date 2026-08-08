@@ -1,15 +1,21 @@
-// The LEAD-DUX brand mark: a duck on a pond, from the real brand asset
-// (frontend/app/public/brand/duck-mark.png) — a transparent-background PNG,
-// so it drops onto any surface/theme without a color-matched background.
+// The LEAD-DUX brand mark: a hand-drawn duck outline. Two theme-matched
+// PNGs (frontend/app/public/brand/duck-brown.png for light,
+// duck-yellow.png for dark — a brown line reads as almost invisible
+// against a dark surface) selected via the --duck-mark-url token in
+// style.css, the same mechanism every other themed value in this file
+// uses — a plain <img src> can't react to a CSS media query/data-theme
+// switch on its own, so this renders as a sized, background-image div
+// instead so the token can drive which file actually shows. Size is set
+// via the --duck-size custom property (see .duck-mark in style.css)
+// rather than an inline width/height, so a caller's own className (e.g.
+// .auth-hero-duck) can still override the size with a plain CSS rule.
 export function DuckMark({ size = 32, className }) {
   return (
-    <img
-      src="/brand/duck-mark.png"
-      width={size}
-      height={(size * 889) / 1322}
-      className={className}
-      alt=""
+    <span
+      className={['duck-mark', className].filter(Boolean).join(' ')}
+      role="img"
       aria-hidden="true"
+      style={{ '--duck-size': `${size}px` }}
     />
   );
 }

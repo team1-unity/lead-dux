@@ -19,7 +19,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
-import { IconDots, IconX } from '@shared/icons.jsx';
+import { IconDots } from '@shared/icons.jsx';
 
 // Fixed defaults, same for every entry — not configurable per quest. See
 // AI_README.md's "Quest Journal" section: answer one, all, or none of
@@ -121,7 +121,6 @@ function FeedbackStatus({ entry }) {
     </div>
   );
 }
-
 
 // True count of columns to lay entries out into — 1 narrow / 2 mid / 3
 // wide. Kept as a fixed number (not a CSS auto-fit grid) since the
@@ -444,21 +443,13 @@ function ExpandedJournalEntry({ entry, onClose }) {
             setEditing(true);
           }}
         />
-        <button
-          type='button'
-          className='journal-expanded-close'
-          onClick={onClose}
-          aria-label='Close'
-        >
-          <IconX width={18} height={18} />
-        </button>
         <motion.div
           layoutId={`journal-content-${entry.id}`}
           initial={reduce ? false : { opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: reduce ? 0 : 0.25, ease: 'easeInOut' }}
         >
-          <h2 style={{ marginTop: 0, paddingRight: 40 }}>{entry.questTitle}</h2>
+          <h2 style={{ marginTop: 0 }}>{entry.questTitle}</h2>
 
           <div className='journal-reflection'>
             {/* <h3>Your Reflection</h3> */}
@@ -497,7 +488,7 @@ function ExpandedJournalEntry({ entry, onClose }) {
                     onClick={saveReflection}
                     disabled={saving}
                   >
-                    {saving ? 'Saving...' : 'Save reflection'}
+                    {saving ? 'Saving…' : 'Save reflection'}
                   </StampButton>
                   {savedBody.trim() && (
                     <StampButton type='button' onClick={cancelEditing} disabled={saving}>
@@ -596,15 +587,7 @@ function ThumbnailPicker({ entry, onClose }) {
         style={{ width: 'min(420px, 100%)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type='button'
-          className='journal-expanded-close'
-          onClick={onClose}
-          aria-label='Close'
-        >
-          <IconX width={18} height={18} />
-        </button>
-        <h3 style={{ marginTop: 0, paddingRight: 28 }}>Choose a background picture</h3>
+        <h3 style={{ marginTop: 0 }}>Choose a background picture</h3>
         {error && <p className='box-danger'>{error}</p>}
         <input
           ref={fileInputRef}
@@ -615,11 +598,12 @@ function ThumbnailPicker({ entry, onClose }) {
         />
         <StampButton
           type='button'
+          variant='primary'
           onClick={() => fileInputRef.current?.click()}
           disabled={Boolean(saving)}
           style={{ marginBottom: 12 }}
         >
-          {saving === 'upload' ? 'Uploading...' : 'Upload your own photo'}
+          {saving === 'upload' ? 'Uploading…' : 'Upload your own photo'}
         </StampButton>
         <div className='journal-thumbnail-picker-grid'>
           <button
@@ -720,7 +704,7 @@ export function Journal() {
     <PageMotion>
       <TopBar title='Journal' />
       {entries === null ? (
-        <LoadingSpinner label='Loading your journal...' />
+        <LoadingSpinner label='Loading your journal…' />
       ) : entries.length === 0 ? (
         <div className='quest-empty'>
           <h2>No Entries Yet</h2>

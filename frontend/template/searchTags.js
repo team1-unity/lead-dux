@@ -1,9 +1,8 @@
-// Extracts #tag tokens from a search box (e.g. "#wellness volunteer" ->
-// tags: ['wellness'], text: 'volunteer') — shared between mobile/Quests.jsx
-// and EventsMap.jsx, both of which let someone search by tag straight from
-// the search field (via VanishSearchInput's #-hinted placeholders) instead
-// of a separate tag-picker UI. Multiple #tokens OR together wherever this
-// is consumed.
+// Shared by every quest-browsing search field that supports #tag tokens
+// (mobile/Quests.jsx, EventsMap.jsx) — a #token (e.g. "#wellness volunteer")
+// pulls tag(s) out of the raw search text; whatever's left over is still
+// matched against title/orgName/location the same as a plain search.
+// Multiple #tokens OR together.
 export function parseSearch(raw) {
   const tags = [];
   const text = raw

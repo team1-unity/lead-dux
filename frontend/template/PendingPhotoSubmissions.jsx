@@ -5,8 +5,9 @@ import { db, storage } from './firebaseapp.jsx';
 import { callApprovePhotoSubmission, callRejectPhotoSubmission } from './fetch.jsx';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
+import { Collapse } from './Collapse.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconChevron, IconX } from './icons.jsx';
+import { IconChevron } from './icons.jsx';
 
 // Flat submission rows grouped into one entry per quest — matches the
 // wireframe's Title (quest) → grid-of-users shape instead of one long flat
@@ -26,10 +27,13 @@ function groupByQuest(rows) {
 // backdrop/close pattern as PhotoGallery.jsx's), with reflection (side
 // quests only) and Approve/Decline always visible below it rather than
 // gated behind an expand step.
-function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
+function SubmissionCard({ submission, url, busy, allowGalleryKeep, onApprove, onReject }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  // Defaults on: an org reviewing its own submissions is far more often
+  // building its gallery than not, and un-checking is one click either way.
+  const [keepForGallery, setKeepForGallery] = useState(true);
 
   return (
     <div className="ink-card submission-card">
@@ -48,9 +52,28 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
       )}
       {/* Side quests only — organization submissions have no reflection field at all. */}
       {submission.reflection && <p className="data-row-sub">{submission.reflection}</p>}
+      {/* Org-owned quests only — a side quest has no gallery to add to (see
+          this component's own module note), so admin's side-quest review
+          never gets this checkbox. */}
+      {allowGalleryKeep && (
+        <label className="flex items-center gap-sm field-optional" style={{ marginTop: 8 }}>
+          <input
+            type="checkbox"
+            checked={keepForGallery}
+            onChange={(e) => setKeepForGallery(e.target.checked)}
+            disabled={busy}
+          />
+          Add to gallery if approved
+        </label>
+      )}
       <div className="data-row-actions" style={{ marginTop: 8 }}>
-        <StampButton type="button" variant="primary" onClick={onApprove} disabled={busy}>
-          {busy ? 'Approving...' : 'Approve'}
+        <StampButton
+          type="button"
+          variant="primary"
+          onClick={() => onApprove(allowGalleryKeep && keepForGallery)}
+          disabled={busy}
+        >
+          {busy ? 'Approving…' : 'Approve'}
         </StampButton>
         <StampButton type="button" variant="danger" onClick={() => setRejecting((v) => !v)} disabled={busy}>
           Reject
@@ -60,7 +83,7 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
         <div className="flex flex-col gap-sm" style={{ marginTop: 8 }}>
           <textarea placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <StampButton type="button" variant="danger" onClick={() => onReject(reason)} disabled={busy}>
-            {busy ? 'Rejecting...' : 'Confirm reject'}
+            {busy ? 'Rejecting…' : 'Confirm reject'}
           </StampButton>
         </div>
       )}
@@ -69,14 +92,6 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
         <LightboxBackdrop onClose={() => setLightboxOpen(false)} label="Submitted photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={url} alt="Submitted proof" className="photo-lightbox-image" />
-            <button
-              type="button"
-              className="photo-lightbox-close"
-              onClick={() => setLightboxOpen(false)}
-              aria-label="Close"
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}
@@ -88,7 +103,7 @@ function SubmissionCard({ submission, url, busy, onApprove, onReject }) {
 // the grid of its individual submitters. Open by default: a reviewer
 // landing on this page wants to see what's waiting, not click through an
 // extra layer of collapse first.
-function QuestSubmissionGroup({ group, urls, busyId, onApprove, onReject }) {
+function QuestSubmissionGroup({ group, urls, busyId, allowGalleryKeep, onApprove, onReject }) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -109,7 +124,7 @@ function QuestSubmissionGroup({ group, urls, busyId, onApprove, onReject }) {
         <IconChevron className="quest-chevron" data-open={open ? 'true' : 'false'} />
       </button>
 
-      {open && (
+      <Collapse open={open}>
         <div className="submission-grid" style={{ marginTop: 12 }}>
           {group.items.map((s) => (
             <SubmissionCard
@@ -117,12 +132,13 @@ function QuestSubmissionGroup({ group, urls, busyId, onApprove, onReject }) {
               submission={s}
               url={urls[s.id]}
               busy={busyId === s.id}
-              onApprove={() => onApprove(s)}
+              allowGalleryKeep={allowGalleryKeep}
+              onApprove={(addToGallery) => onApprove(s, addToGallery)}
               onReject={(reason) => onReject(s, reason)}
             />
           ))}
         </div>
-      )}
+      </Collapse>
     </section>
   );
 }
@@ -134,7 +150,12 @@ function QuestSubmissionGroup({ group, urls, busyId, onApprove, onReject }) {
 // quests — scopeField="isDefault", scopeValue={true}); approve/reject are
 // gated server-side by ownership, this component just scopes which
 // pending submissions are queried for.
-export function PendingPhotoSubmissions({ scopeField, scopeValue, title = 'Pending photo submissions' }) {
+export function PendingPhotoSubmissions({
+  scopeField,
+  scopeValue,
+  title = 'Pending photo submissions',
+  allowGalleryKeep = false,
+}) {
   const [submissions, setSubmissions] = useState(null);
   const [urls, setUrls] = useState({});
   const [busyId, setBusyId] = useState(null);
@@ -163,10 +184,10 @@ export function PendingPhotoSubmissions({ scopeField, scopeValue, title = 'Pendi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeField, scopeValue]);
 
-  async function approve(s) {
+  async function approve(s, addToGallery) {
     setBusyId(s.id);
     try {
-      await callApprovePhotoSubmission({ questId: s.questId, userId: s.userId });
+      await callApprovePhotoSubmission({ questId: s.questId, userId: s.userId, addToGallery });
       await load();
     } finally {
       setBusyId(null);
@@ -183,7 +204,7 @@ export function PendingPhotoSubmissions({ scopeField, scopeValue, title = 'Pendi
     }
   }
 
-  if (!submissions) return <LoadingSpinner label="Loading photo submissions..." />;
+  if (!submissions) return <LoadingSpinner label="Loading photo submissions…" />;
 
   const groups = groupByQuest(submissions);
 
@@ -200,6 +221,7 @@ export function PendingPhotoSubmissions({ scopeField, scopeValue, title = 'Pendi
               group={group}
               urls={urls}
               busyId={busyId}
+              allowGalleryKeep={allowGalleryKeep}
               onApprove={approve}
               onReject={reject}
             />

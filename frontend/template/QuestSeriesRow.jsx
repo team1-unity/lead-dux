@@ -4,7 +4,7 @@ import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
 import { LightboxBackdrop } from './LightboxBackdrop.jsx';
-import { IconShare, IconCheck, IconCopy, IconX } from './icons.jsx';
+import { IconShare, IconCheck } from './icons.jsx';
 
 export function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
@@ -23,7 +23,7 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
       <p style={{ margin: 0 }}>{message}</p>
       <div className="flex gap-sm" style={{ marginTop: 10 }}>
         <StampButton type="button" variant="danger" disabled={submitting} onClick={onConfirm}>
-          {submitting ? 'Working...' : confirmLabel}
+          {submitting ? 'Working…' : confirmLabel}
         </StampButton>
         <StampButton type="button" onClick={onCancel} disabled={submitting}>
           Cancel
@@ -39,63 +39,31 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
 // call needed to build it: every quest doc already carries its own
 // seriesId, so there's nothing to fetch that isn't already on hand here.
 //
-// Used to copy straight to the clipboard on click, with the button's own
-// icon flipping to a checkmark for 2s as the only feedback — that read as
-// ambiguous (did it work? what happened?) without a real next step to
-// look at. Now: the Web Share API's native share sheet where it's
-// available (a real OS-level "here's what happened, pick where it goes"
-// UI, and still a single tap), falling back to a small modal showing the
-// actual link plus its own dedicated Copy button where Share isn't
-// available (most desktop browsers) — either way there's now something
-// concrete on screen confirming what the click did, not just an icon
-// swap.
+// navigator.share() (the OS's own share sheet — Messages/Mail/whatever's
+// installed) when the platform supports it, same user gesture requirement
+// as the old direct-to-clipboard copy. Falls back to a modal with the
+// real link plus its own dedicated Copy button on desktop browsers that
+// don't implement the Web Share API at all. `iconOnly` swaps the label
+// for a small icon button (used inline in org/Quests.jsx's icon trio).
+// `questTitle` is passed straight through to navigator.share()'s own title
+// field — optional, since not every call site always has it on hand.
 export function ShareButton({ seriesId, questTitle, iconOnly = false, disabled = false }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const url = `${window.location.origin}/share/${seriesId}`;
 
-  function handleClick() {
+  async function share() {
     if (navigator.share) {
-      // Best-effort — a user backing out of the share sheet rejects this
-      // promise (AbortError), which isn't a real failure worth surfacing.
-      navigator.share({ title: questTitle, url }).catch(() => {});
+      try {
+        await navigator.share({ title: questTitle, url });
+      } catch {
+        // AbortError from the user dismissing the share sheet — not a real
+        // failure, nothing to show for it.
+      }
       return;
     }
     setModalOpen(true);
   }
-
-  return (
-    <>
-      {iconOnly ? (
-        <button
-          type="button"
-          className="quest-icon-btn"
-          onClick={handleClick}
-          disabled={disabled}
-          aria-label="Share quest"
-          title="Share"
-        >
-          <IconShare />
-        </button>
-      ) : (
-        <StampButton type="button" onClick={handleClick} disabled={disabled}>
-          Share quest
-        </StampButton>
-      )}
-      {modalOpen && (
-        <ShareLinkModal url={url} questTitle={questTitle} onClose={() => setModalOpen(false)} />
-      )}
-    </>
-  );
-}
-
-// The navigator.share fallback — a plain, real link plus a dedicated Copy
-// button (rather than copying on some other click and hoping that's
-// obvious), so there's no ambiguity about what a click here does or
-// whether it worked. Copy's own confirmation (label + icon swap to a
-// checkmark, 2s) lives on the button people actually pressed, not
-// somewhere else on the modal they might not be looking at.
-function ShareLinkModal({ url, questTitle, onClose }) {
-  const [copied, setCopied] = useState(false);
 
   async function copy() {
     await navigator.clipboard.writeText(url);
@@ -104,38 +72,43 @@ function ShareLinkModal({ url, questTitle, onClose }) {
   }
 
   return (
-    <LightboxBackdrop onClose={onClose} label="Share quest">
-      <div
-        className="detail-modal-content share-link-modal ink-card flex flex-col gap-sm"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ margin: 0 }}>Share {questTitle ? `"${questTitle}"` : 'this quest'}</h3>
-        <p style={{ margin: '4px 0 0' }}>Anyone with this link can view it, even signed out.</p>
-        <div className="share-link-row">
-          <input
-            type="text"
-            readOnly
-            value={url}
-            aria-label="Quest share link"
-            onFocus={(e) => e.target.select()}
-          />
-          <StampButton type="button" variant="primary" onClick={copy}>
-            {copied ? (
-              <>
-                <IconCheck width={16} height={16} /> Copied!
-              </>
-            ) : (
-              <>
-                <IconCopy width={16} height={16} /> Copy
-              </>
-            )}
-          </StampButton>
-        </div>
-        <button type="button" className="photo-lightbox-close" onClick={onClose} aria-label="Close">
-          <IconX width={18} height={18} />
+    <>
+      {iconOnly ? (
+        <button
+          type="button"
+          className="quest-icon-btn"
+          onClick={share}
+          disabled={disabled}
+          aria-label="Share"
+          title="Share"
+        >
+          <IconShare />
         </button>
-      </div>
-    </LightboxBackdrop>
+      ) : (
+        <StampButton type="button" onClick={share} disabled={disabled}>
+          Share quest
+        </StampButton>
+      )}
+      {modalOpen && (
+        <LightboxBackdrop onClose={() => setModalOpen(false)} label="Share quest">
+          <div className="detail-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="ink-card flex flex-col gap-md">
+              <h3 style={{ margin: 0 }}>Share {questTitle || 'this quest'}</h3>
+              <p style={{ wordBreak: 'break-all' }}>{url}</p>
+              <StampButton type="button" variant="primary" onClick={copy}>
+                {copied ? (
+                  <>
+                    <IconCheck width={16} height={16} /> Copied!
+                  </>
+                ) : (
+                  'Copy link'
+                )}
+              </StampButton>
+            </div>
+          </div>
+        </LightboxBackdrop>
+      )}
+    </>
   );
 }
 
@@ -218,10 +191,10 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             shows for quests that predate that change. */}
         {!selected.qrToken ? (
           <StampButton type="button" variant="primary" onClick={a.generateQr} disabled={a.qrBusy}>
-            {a.qrBusy ? 'Generating...' : 'Generate QR Code'}
+            {a.qrBusy ? 'Generating…' : 'Generate QR Code'}
           </StampButton>
         ) : (
-          <StampButton type="button" onClick={a.viewQr} disabled={a.qrBusy}>
+          <StampButton type="button" variant="primary" onClick={a.viewQr} disabled={a.qrBusy}>
             {a.qrOpen ? 'Hide QR Code' : 'View QR Code'}
           </StampButton>
         )}
@@ -304,7 +277,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           </label>
           {a.recurError && <p className="box-danger">{a.recurError}</p>}
           <StampButton type="submit" variant="primary" disabled={a.recurSubmitting}>
-            {a.recurSubmitting ? 'Saving...' : 'Make recurring'}
+            {a.recurSubmitting ? 'Saving…' : 'Make recurring'}
           </StampButton>
         </form>
       )}
@@ -324,7 +297,7 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           {confirmingRefresh && (
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
-              confirmLabel={a.qrBusy ? 'Working...' : 'Yes, regenerate'}
+              confirmLabel={a.qrBusy ? 'Working…' : 'Yes, regenerate'}
               submitting={a.qrBusy}
               onConfirm={() => {
                 a.refreshQr();

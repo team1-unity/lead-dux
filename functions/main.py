@@ -84,6 +84,17 @@ def _require_admin(req: https_fn.CallableRequest):
 
 DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
 
+# The event QR encodes a real URL (see _make_qr_data_uri) rather than a raw
+# JSON payload, specifically so it's scannable by a phone's own native
+# camera app, not just this app's in-app scanner (QuestScanner.jsx) —
+# whichever one decodes it just opens/navigates to this same link, landing
+# on CheckInConfirm.jsx. Hardcoded to the real production Hosting URL
+# (this project's one deployment, per .firebaserc) rather than derived from
+# the request — there's no "request origin" to derive it from here, this
+# runs once at QR-generation time, for a code that's meant to be printed/
+# displayed at a real in-person event either way.
+CHECKIN_BASE_URL = "https://lead-dux.web.app"
+
 # Point System & Feedback (see AI_README.md) ---------------------------------
 #
 # Three sources count toward a user's points: a flat amount for completing
@@ -164,13 +175,21 @@ def _qr_expires_at(event_date: datetime, event_end_time: datetime | None) -> dat
     return _to_utc(event_date) + timedelta(hours=DEFAULT_EVENT_WINDOW_HOURS)
 
 
-def _make_qr_data_uri(quest_id: str, token: str, version: int) -> str:
-    # No uid in the payload — this QR belongs to the event, not to whoever
-    # happens to scan it. `v` (qrTokenVersion) rides along purely as a
-    # sanity check for check_in_to_event; the token itself is what actually
-    # gets validated (see the constant-time compare there).
-    payload = json.dumps({"questId": quest_id, "token": token, "v": version})
-    image = qrcode.make(payload)
+def _check_in_url(quest_id: str, token: str) -> str:
+    # No uid in the URL — this QR belongs to the event, not to whoever
+    # happens to scan it. qrTokenVersion doesn't ride along here (it never
+    # actually gated anything in check_in_to_event — only the token itself
+    # is validated, via the constant-time compare there); a stale/refreshed
+    # QR is already caught by the token simply no longer matching. Split out
+    # from _make_qr_data_uri as its own pure function so the URL shape
+    # itself is directly unit-testable without decoding a rendered QR image
+    # back to text (this repo has no QR-decoding dependency, only qrcode
+    # for encoding).
+    return f"{CHECKIN_BASE_URL}/check-in/{quest_id}/{token}"
+
+
+def _make_qr_data_uri(quest_id: str, token: str) -> str:
+    image = qrcode.make(_check_in_url(quest_id, token))
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -613,6 +632,13 @@ ACCOMMODATION_OPTIONS = {
     "wheelchair-accessible", "asl-interpretation", "accessible-parking", "sensory-friendly", "elevator-access",
 }
 ACCOMMODATION_DETAILS_MAX_LENGTH = 500
+
+# The illustrated duck characters a member can pick for their own avatar
+# fallback (see UserAvatar.jsx/duckSkins.js on the frontend, and
+# update_user_profile below) — "duck1" (straw hat) is the default for
+# anyone who hasn't picked one yet. Whitelisted server-side so a client
+# can't write an arbitrary string here.
+DUCK_SKINS = {"duck1", "duck2", "duck3"}
 
 
 def _validate_accommodation_tags(value, field_name):
@@ -1208,6 +1234,140 @@ def make_quest_recurring(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "seriesId": series_id, "questIds": quest_ids}
 
 
+# Callable from the org/admin quest-edit form's Recurring section (see
+# CreateQuestForm.jsx — this used to be permanently read-only once a series
+# existed; update_quest's own module note explains why frequency/until
+# still can't be touched from *that* function specifically, but editing a
+# pattern is exactly what this one is for instead).
+#
+# Diffs the new frequency/until against whichever occurrences already
+# exist for this series and adds/removes dates to match — anchored to the
+# series' own first (earliest) occurrence, which never moves; only
+# frequency/until change. Past occurrences (already happened) are never
+# touched regardless of the new pattern — they're historical record, not
+# something a schedule change should be able to retroactively rewrite, the
+# same "this date vs. the whole series" granularity delete_quest/
+# delete_quest_series already draw.
+#
+# Blocks the whole update (nothing partially applies) if any occurrence
+# that the new pattern would remove already has at least one RSVP —
+# silently dropping someone's RSVP because an org shortened a series is
+# worse than telling the org to sort those out first (cancel that date
+# individually via delete_quest, or wait for attendees to un-RSVP) before
+# shrinking the series around them.
+@https_fn.on_call()
+def update_recurring_series(req: https_fn.CallableRequest) -> dict:
+    _require_auth(req)
+
+    series_id = req.data.get("seriesId")
+    if not series_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "seriesId is required.",
+        )
+
+    db = firestore.client()
+    occurrence_docs = list(db.collection("quests").where("seriesId", "==", series_id).stream())
+    if not occurrence_docs:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            f"No series {series_id}.",
+        )
+    quests_by_id = {doc.id: doc.to_dict() for doc in occurrence_docs}
+    first = min(quests_by_id.values(), key=lambda q: q["eventDate"])
+
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and first.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only edit your own organization's quests.",
+        )
+
+    tz = first.get("timezone") or "UTC"
+    zone = ZoneInfo(tz)
+    frequency = _validate_frequency(req.data.get("frequency"))
+    until = _parse_event_datetime(req.data.get("until"), "until", tz)
+    target_dates = _generate_series_dates(first["eventDate"], frequency, until, tz)
+    target_date_keys = {d.astimezone(zone).date() for d in target_dates}
+
+    now = datetime.now(timezone.utc)
+    existing_by_date_key = {
+        quest["eventDate"].astimezone(zone).date(): (doc_id, quest)
+        for doc_id, quest in quests_by_id.items()
+    }
+
+    # Only ever consider occurrences that haven't happened yet — a past
+    # date missing from the new pattern isn't "removed," it already
+    # happened under whatever pattern was in effect at the time.
+    to_remove = [
+        (doc_id, quest)
+        for date_key, (doc_id, quest) in existing_by_date_key.items()
+        if quest["eventDate"] >= now and date_key not in target_date_keys
+    ]
+    conflicts = [(doc_id, quest) for doc_id, quest in to_remove if quest.get("rsvpd")]
+    if conflicts:
+        details = "; ".join(
+            f"{quest['eventDate'].astimezone(zone).strftime('%b %-d, %Y')} "
+            f"({len(quest['rsvpd'])} RSVP'd)"
+            for _, quest in conflicts
+        )
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            f"Can't shrink this series — these dates already have RSVPs: {details}. "
+            "Cancel those dates individually first, then try again.",
+        )
+
+    to_add = [
+        d for d in target_dates
+        if d >= now and d.astimezone(zone).date() not in existing_by_date_key
+    ]
+    duration = (
+        first["eventEndTime"] - first["eventDate"]
+        if first.get("eventEndTime") is not None
+        else None
+    )
+
+    # Not batched with the writes below — _delete_quest's own attendance/
+    # feedback/journal cleanup queries don't compose with an in-flight
+    # batch (same reason delete_quest_series loops plain deletes instead
+    # of batching them). Every occurrence here is already confirmed
+    # rsvpd-free above, so there's nothing time-sensitive about doing
+    # these one at a time first.
+    for doc_id, _quest in to_remove:
+        _delete_quest(db, db.collection("quests").document(doc_id))
+
+    removed_ids = {doc_id for doc_id, _quest in to_remove}
+    batch = db.batch()
+    for occurrence_date in to_add:
+        doc_ref = db.collection("quests").document()
+        occurrence_end = occurrence_date + duration if duration is not None else None
+        batch.set(doc_ref, _quest_doc_fields(
+            title=first["title"], description=first["description"], tags=first.get("tags", []),
+            location=first.get("location", ""), tz=tz, capacity=first.get("capacity"),
+            series_id=series_id, recurrence_frequency=frequency, recurrence_until=until,
+            event_date=occurrence_date, event_end_time=occurrence_end,
+            org_id=first.get("orgId"), org_name=first.get("orgName"), is_default=first.get("isDefault", False),
+            tier=first.get("tier"), place_id=first.get("placeId"),
+            lat=first.get("lat"), lng=first.get("lng"),
+            accommodation_tags=first.get("accommodationTags"), accommodation_details=first.get("accommodationDetails"),
+        ))
+    # Every doc in a series shares recurrenceFrequency/recurrenceUntil (see
+    # _quest_doc_fields) — including the ones just removed would be
+    # redundant, and past occurrences get updated too so nothing in the
+    # series is left pointing at a stale pattern.
+    for doc_id in quests_by_id:
+        if doc_id in removed_ids:
+            continue
+        batch.update(db.collection("quests").document(doc_id), {
+            "recurrenceFrequency": frequency,
+            "recurrenceUntil": until,
+        })
+    batch.commit()
+
+    return {"success": True, "added": len(to_add), "removed": len(to_remove)}
+
+
 # One-time (well — re-runnable, but idempotent) admin utility: every quest
 # that has a placeId already had a real place selected via Places
 # Autocomplete, but coordinates weren't captured client-side until the map
@@ -1486,6 +1646,92 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# Shared by add_quest_series_cover_photo/remove_quest_series_cover_photo
+# below — a series has no single "owner" doc of its own to check ownership
+# against (questSeries/{seriesId} only exists once someone's added a review
+# or a cover photo), so ownership is checked against any one occurrence in
+# the series instead.
+def _require_owning_org_or_admin_for_series(db, series_id: str, req: https_fn.CallableRequest):
+    quest_snap = next(iter(db.collection("quests").where("seriesId", "==", series_id).limit(1).stream()), None)
+    if quest_snap is None:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, f"No quest series {series_id}.")
+    quest = quest_snap.to_dict()
+
+    role = req.auth.token.get("role")
+    is_owning_org = role == "organization" and quest.get("orgId") == req.auth.uid
+    if role != "admin" and not is_owning_org:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "You can only edit your own organization's quests.",
+        )
+
+
+# Callable from CreateQuestForm.jsx — adds one photo to a quest series' own
+# cover-photo gallery. Lives on questSeries/{seriesId} rather than duplicated
+# across every occurrence's own quests/{id} doc: a series' cover photos are
+# one shared set, the same level reviews already aggregate at (see
+# submit_review's own note on this doc), not something that could ever drift
+# between dates the way per-occurrence fields (capacity, RSVPs) legitimately
+# can. An org can add as many as it wants — no cap here, same as
+# organizations.photos (add_organization_photo) has none either.
+#
+# coverPhotos holds resolved download URLs, not Storage paths — same "store
+# the plain URL" choice organizations.logoUrl already made (see
+# update_organization_profile), since every reader here (questSeries.js's
+# attachSeriesRatings) needs to render the first one synchronously across a
+# whole list of quests, not resolve a path per card. merge=True since a
+# series with no reviews or cover photos yet has no questSeries doc at all
+# (same reasoning as submit_review's own merge=True there) — set() would
+# otherwise fail outright on a series that's never been rated.
+@https_fn.on_call()
+def add_quest_series_cover_photo(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    series_id = req.data.get("seriesId")
+    cover_photo_url = req.data.get("coverPhotoUrl")
+    if not series_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "seriesId is required.",
+        )
+    if not isinstance(cover_photo_url, str) or not cover_photo_url:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "coverPhotoUrl is required.",
+        )
+
+    db = firestore.client()
+    _require_owning_org_or_admin_for_series(db, series_id, req)
+
+    db.collection("questSeries").document(series_id).set(
+        {"coverPhotos": firestore.ArrayUnion([cover_photo_url])}, merge=True,
+    )
+    return {"success": True}
+
+
+# Callable from CreateQuestForm.jsx — removes one photo from a quest
+# series' cover-photo gallery (see add_quest_series_cover_photo above).
+@https_fn.on_call()
+def remove_quest_series_cover_photo(req: https_fn.CallableRequest) -> dict:
+    _require_role(req, "organization", "admin")
+
+    series_id = req.data.get("seriesId")
+    cover_photo_url = req.data.get("coverPhotoUrl")
+    if not series_id or not cover_photo_url:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "seriesId and coverPhotoUrl are required.",
+        )
+
+    db = firestore.client()
+    _require_owning_org_or_admin_for_series(db, series_id, req)
+
+    db.collection("questSeries").document(series_id).set(
+        {"coverPhotos": firestore.ArrayRemove([cover_photo_url])}, merge=True,
+    )
+    return {"success": True}
+
+
 # Callable from the org dashboard (own quests only) and the admin dashboard
 # (any quest, including default neighborhood ones). Deletes just this one
 # occurrence — see delete_quest_series to remove an entire recurring series
@@ -1743,7 +1989,7 @@ def generate_event_qr_code(req: https_fn.CallableRequest) -> dict:
         token = secrets.token_urlsafe(24)
         ref.update({"qrToken": token, "qrTokenVersion": version})
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
 # Callable from the org dashboard's "View QR Code" button — re-renders
@@ -1762,7 +2008,7 @@ def get_event_qr_code(req: https_fn.CallableRequest) -> dict:
             "No QR code has been generated for this quest yet.",
         )
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, quest.get("qrTokenVersion", 0))}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
 # Callable from the org dashboard's "Refresh QR Code" button — mints a new
@@ -1781,17 +2027,18 @@ def refresh_event_qr_code(req: https_fn.CallableRequest) -> dict:
     version = quest.get("qrTokenVersion", 0) + 1
     ref.update({"qrToken": token, "qrTokenVersion": version})
 
-    return {"success": True, "qr": _make_qr_data_uri(ref.id, token, version)}
+    return {"success": True, "qr": _make_qr_data_uri(ref.id, token)}
 
 
-# Callable from the new user-facing "Scan QR Code" flow (see
-# frontend/template/QuestScanner.jsx) — any signed-in user, not just an
-# org/admin, since the whole point of this redesign is that attendees scan
-# themselves in. questId/token/v come from decoding the event's QR image
-# client-side (see _make_qr_data_uri for the payload shape). Idempotent:
-# scanning an already-checked-in code again succeeds with
-# alreadyCheckedIn=True rather than erroring, since a double scan is an
-# expected accident, not an attack.
+# Callable from CheckInConfirm.jsx (frontend/app/src) — any signed-in user,
+# not just an org/admin, since the whole point of this redesign is that
+# attendees scan themselves in. That page is reached either by opening the
+# event QR's own URL directly (any camera app can scan it — see
+# _make_qr_data_uri) or via this app's own in-app scanner
+# (frontend/template/QuestScanner.jsx), which just decodes the same URL and
+# navigates there instead of calling this itself. Idempotent: scanning an
+# already-checked-in code again succeeds with alreadyCheckedIn=True rather
+# than erroring, since a double scan is an expected accident, not an attack.
 @https_fn.on_call()
 def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -1881,6 +2128,7 @@ def check_in_to_event(req: https_fn.CallableRequest) -> dict:
         "qrToken": token,
         "createdAt": firestore.SERVER_TIMESTAMP,
     })
+    _record_quest_attended(db, uid, quest.get("tags") or [])
 
     return {"success": True, "alreadyCheckedIn": False, "pointsAwarded": base_points}
 
@@ -2140,6 +2388,7 @@ def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
                 "qrToken": None,
                 "createdAt": firestore.SERVER_TIMESTAMP,
             })
+            _record_quest_attended(db, submitter_uid, quest.get("tags") or [])
     else:
         total_points = PHOTO_BONUS_POINTS
 
@@ -2168,6 +2417,22 @@ def approve_photo_submission(req: https_fn.CallableRequest) -> dict:
         journal_snap = journal_ref.get()
         if journal_snap.exists and not journal_snap.to_dict().get("thumbnailUrl"):
             journal_ref.update({"thumbnailUrl": submission["storagePath"]})
+
+    # Optional "keep this for my gallery" choice, made right here at
+    # approval time instead of requiring a second trip to the approved-
+    # submissions list (see add_submission_to_gallery, which still exists
+    # for exactly that later-decision case). Org-owned quests only — a side
+    # quest's orgId is always None, and admin review of one never carries
+    # this flag from the frontend anyway (see PendingPhotoSubmissions.jsx's
+    # allowGalleryKeep), but the orgId/role/ownership check here is what
+    # actually enforces it, not just frontend intent.
+    if (
+        bool(req.data.get("addToGallery"))
+        and quest.get("orgId")
+        and req.auth.token.get("role") == "organization"
+        and quest.get("orgId") == req.auth.uid
+    ):
+        _promote_submission_to_gallery(ref, submission, req.auth.uid)
 
     return {"success": True}
 
@@ -2614,13 +2879,76 @@ def submit_feedback_request_response(req: https_fn.CallableRequest) -> dict:
 # AI-ranked ordering of organization quests on the Quests page — not a
 # client-callable itself; the frontend never asks for a fresh ranking, it
 # only ever reads whatever's already on the user doc (recommendedQuestOrder,
-# below). Triggered as a side effect of submit_onboarding/update_interests/
-# update_accommodation_needs, the three places that change what this
-# ranking is based on — see _refresh_quest_recommendations, which every
-# call site actually calls, since it never raises. Only ranks organization
-# quests: side quests are generic/tier-based, not location- or
-# org-specific, so they keep the plain client-side tag-overlap sort (see
-# relevanceScore in Quests.jsx) instead.
+# below). Only ranks organization quests: side quests are generic/tier-
+# based, not location- or org-specific, so they keep the plain client-side
+# tag-overlap sort (see relevanceScore in Quests.jsx) instead.
+#
+# What this used to be based on: a "user" manually curated an `interests`
+# list from Settings, and every single save re-ran this whole Gemini call
+# (see update_interests, now removed, and update_accommodation_needs, which
+# still does the same for the accessibility/location fields it owns).
+# That's gone for interests specifically — there's no Settings control for
+# it anymore, so it can't drift out of sync with actual behavior the way a
+# stated-once, rarely-revisited preference can, and it can't be used to
+# force a fresh (costly) Gemini call on demand either. `interests` itself
+# still exists as a field (set once at onboarding — see submit_onboarding)
+# and still rides along in the prompt below as a cold-start hint for a
+# brand-new "user" with no attendance history yet, but it's no longer the
+# headline signal or a refresh trigger.
+#
+# What actually triggers a refresh now: real quest attendance. Every
+# RECOMMENDATION_REFRESH_INTERVAL-th quest a "user" completes (see
+# _record_quest_attended, called from check_in_to_event and
+# approve_photo_submission — the only two places a NEW attendance record
+# gets created) re-runs this. Recommendations respond to what someone
+# actually did, not a preference they set once and maybe never revisit, and
+# a real LLM call happens for at most 1-in-N attended quests instead of on
+# every settings save — the actual point of counting attendance at all,
+# not just a side benefit.
+RECOMMENDATION_REFRESH_INTERVAL = 5
+
+
+# attendedTagCounts is a plain {tag: count} map, not a dotted-field-path
+# Increment — quest tags are free text (CreateQuestForm never restricts
+# them to a fixed vocabulary), so a tag containing a literal "." would
+# otherwise be misread as a nested-map path by a dotted update() key.
+# Reading, mutating, and rewriting the whole map inside this transaction
+# sidesteps that entirely: every key here is a plain dict key, never parsed
+# as a path.
+def _apply_quest_attended(transaction, user_ref, tags):
+    snap = user_ref.get(transaction=transaction)
+    data = snap.to_dict() if snap.exists else {}
+    count = data.get("questsAttended", 0) + 1
+    tag_counts = dict(data.get("attendedTagCounts") or {})
+    for tag in tags:
+        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    transaction.update(user_ref, {"questsAttended": count, "attendedTagCounts": tag_counts})
+    return count
+
+
+# Called from check_in_to_event/approve_photo_submission's own attendance-
+# doc-creation branches only — i.e. exactly once per genuinely NEW
+# attendance record, never on a repeat check-in or the org-quest +5 photo
+# bonus that follows a check-in already counted (see both call sites' own
+# notes on why attendance-doc existence, not points awarded, is what "new"
+# means here). Same atomic read-increment-write shape as _apply_points/
+# _award_points above, kept separate from that one since points get
+# awarded from places (the feedback-request bonus, add_submission_to_gallery)
+# that have nothing to do with completing a quest and shouldn't bump this.
+#
+# `tags` (the just-attended quest's own tags) feeds attendedTagCounts — a
+# running, frequency-weighted tally of what this person has actually done,
+# read both by _generate_quest_recommendations below (the AI call, gated to
+# every RECOMMENDATION_REFRESH_INTERVAL-th quest) and by the frontend's own
+# relevanceScore fallback (every quest, no gate at all — see
+# mobile/Quests.jsx) for whatever an AI refresh hasn't ranked yet.
+def _record_quest_attended(db, uid: str, tags: list) -> None:
+    count = firestore.transactional(_apply_quest_attended)(
+        db.transaction(), db.collection("users").document(uid), tags,
+    )
+    if count % RECOMMENDATION_REFRESH_INTERVAL == 0:
+        _refresh_quest_recommendations(db, uid)
+
 
 AI_RECOMMENDATION_CANDIDATE_LIMIT = 40  # keeps the prompt bounded regardless of catalog size
 
@@ -2678,12 +3006,13 @@ def _generate_quest_recommendations(db, uid: str) -> None:
     series_id_by_candidate_id = dict(zip((c["id"] for c in candidates), ranked_series_ids))
 
     # "Volunteer activity" signal — tags from quests this user has actually
-    # completed before, alongside their stated interests/profile.
-    attended_tags = set()
-    for doc in db.collection("attendance").where("userId", "==", uid).stream():
-        quest_snap = db.collection("quests").document(doc.to_dict()["eventId"]).get()
-        if quest_snap.exists:
-            attended_tags.update(quest_snap.to_dict().get("tags") or [])
+    # completed before, most-attended-first. The primary signal now (see the
+    # module note above RECOMMENDATION_REFRESH_INTERVAL): real behavior, not
+    # a stated-once preference. Reads the running attendedTagCounts tally
+    # (see _record_quest_attended) rather than re-scanning the whole
+    # attendance collection on every refresh — same data, far fewer reads.
+    attended_tag_counts = user.get("attendedTagCounts") or {}
+    attended_tags = sorted(attended_tag_counts, key=attended_tag_counts.get, reverse=True)
 
     candidate_lines = "\n".join(
         f'- questId "{c["id"]}": "{c.get("title")}" ({c.get("description")}) — '
@@ -2693,17 +3022,19 @@ def _generate_quest_recommendations(db, uid: str) -> None:
     )
     prompt = (
         "Rank the following volunteer quests for this specific person, most relevant first, based "
-        "on their profile below. Weigh their stated interests most heavily, then their experience "
-        "level, motivation, group preference, and leadership goal, and how well each quest's own "
-        "tags/description align with those.\n\n"
-        f"Interests: {user.get('interests') or []}\n"
+        "on their profile below. Weigh the tags from quests they've actually completed before most "
+        "heavily — that's real behavior, not a stated preference. Their onboarding interests are a "
+        "fallback for when they have little or no completed-quest history yet, not a primary signal. "
+        "After that, weigh their experience level, motivation, group preference, and leadership goal, "
+        "and how well each quest's own tags/description align with all of the above.\n\n"
+        f"Tags from quests they've completed before, most-attended first: {attended_tags or 'none yet'}\n"
+        f"Interests stated at onboarding (fallback only): {user.get('interests') or []}\n"
         f"Lives near: {user.get('location') or 'unspecified'}\n"
         f"Experience level: {user.get('experienceLevel') or 'unspecified'}\n"
         f"Motivation: {user.get('motivation') or 'unspecified'}\n"
         f"Group preference: {user.get('groupPreference') or 'unspecified'}\n"
         f"Leadership goal: {user.get('leaderGoal') or 'unspecified'}\n"
-        f"Accessibility needs: {user.get('accommodationNeeds') or []}\n"
-        f"Tags from quests they've completed before: {sorted(attended_tags) or 'none yet'}\n\n"
+        f"Accessibility needs: {user.get('accommodationNeeds') or []}\n\n"
         f"Quests to rank:\n{candidate_lines}\n\n"
         "Return every questId listed above exactly once, ordered most-to-least relevant, each with "
         "a brief (one sentence) reason."
@@ -3190,8 +3521,8 @@ def submit_review(req: https_fn.CallableRequest) -> dict:
 
 # Callable from the quest list — lets a member see their own review for
 # this specific occurrence (e.g. after navigating away and back), same
-# self-only shape as update_interests. No targetUid, so there's nothing to
-# escalate. Scoped to questId, not the whole series — a member who's
+# self-only shape as update_accommodation_needs. No targetUid, so there's
+# nothing to escalate. Scoped to questId, not the whole series — a member who's
 # reviewed one date but not another should still see the submission form
 # for the un-reviewed one.
 @https_fn.on_call()
@@ -3478,36 +3809,17 @@ def remove_organization_photo(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
-# Callable from Settings — lets an already-onboarded "user" change their
-# interests after the fact (onboarding only ever sets them once).
-@https_fn.on_call()
-def update_interests(req: https_fn.CallableRequest) -> dict:
-    _require_role(req, "user")
-
-    interests = req.data.get("interests")
-    if not isinstance(interests, list) or not interests:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "interests must be a non-empty list.",
-        )
-
-    db = firestore.client()
-    db.collection("users").document(req.auth.uid).update({
-        "interests": interests,
-        "updatedAt": firestore.SERVER_TIMESTAMP,
-    })
-    _refresh_quest_recommendations(db, req.auth.uid)
-    return {"success": True}
-
-
 # Callable from Profile — lets an already-onboarded "user" change their
 # accommodation needs and/or location after the fact (onboarding only ever
-# sets them once). Unlike update_interests, an empty accommodationNeeds list
-# is valid (it means "no needs anymore"), and location/placeId/lat/lng are
-# only touched when actually present in the request — see
-# update_organization_profile above for the same "present key = change it"
-# shape. Both feed _has_enough_accessible_org_quests, so keeping them
-# current matters for the side-quest-limit relaxation, not just display.
+# sets them once). An empty accommodationNeeds list is valid (it means "no
+# needs anymore"), and location/placeId/lat/lng are only touched when
+# actually present in the request — see update_organization_profile above
+# for the same "present key = change it" shape. Both feed
+# _has_enough_accessible_org_quests, so keeping them current matters for the
+# side-quest-limit relaxation, not just display. Interests has no equivalent
+# callable of its own anymore — see the module note above
+# _generate_quest_recommendations for why recommendations no longer change
+# in reaction to a settings edit at all.
 @https_fn.on_call()
 def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -3546,15 +3858,17 @@ def update_accommodation_needs(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
-# Callable from Profile's "Edit Profile" — a member's own display name and
-# profile picture. Email/password are Firebase Auth's own concern, not
-# Firestore, so the frontend calls updateEmail/updatePassword directly
-# against the client SDK instead of going through here (see Profile.jsx) —
-# this is only for the two fields that actually live on users/{uid}.
-# photoURL is a resolved download URL, not a storage path — same "store
-# the plain URL, not something to resolve later" choice organizations.
-# logoUrl already made, for the same reason (fewer places need to know how
-# to resolve a path).
+# Callable from Profile's "Edit Profile" — a member's own display name,
+# profile picture, and chosen duck avatar fallback. Email/password are
+# Firebase Auth's own concern, not Firestore, so the frontend calls
+# updateEmail/updatePassword directly against the client SDK instead of
+# going through here (see Profile.jsx) — this is only for the fields that
+# actually live on users/{uid}. photoURL is a resolved download URL, not a
+# storage path — same "store the plain URL, not something to resolve
+# later" choice organizations.logoUrl already made, for the same reason
+# (fewer places need to know how to resolve a path). duckSkin only ever
+# matters once photoURL is unset (see UserAvatar.jsx) — whitelisted
+# against DUCK_SKINS above rather than accepting any string.
 @https_fn.on_call()
 def update_user_profile(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -3576,11 +3890,19 @@ def update_user_profile(req: https_fn.CallableRequest) -> dict:
                 "photoURL must be a string or null.",
             )
         update["photoURL"] = photo_url
+    if "duckSkin" in req.data:
+        duck_skin = req.data.get("duckSkin")
+        if duck_skin not in DUCK_SKINS:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                f"duckSkin must be one of {sorted(DUCK_SKINS)}.",
+            )
+        update["duckSkin"] = duck_skin
 
     if not update:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            "Provide a name and/or photoURL to update.",
+            "Provide a name, photoURL, and/or duckSkin to update.",
         )
 
     firestore.client().collection("users").document(req.auth.uid).update(update)
