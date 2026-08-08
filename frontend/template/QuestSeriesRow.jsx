@@ -3,7 +3,8 @@ import { useQuestSeriesActions } from './useQuestSeriesActions.js';
 import { formatRecurrence } from './questSeries.js';
 import { StampButton } from './StampButton.jsx';
 import { AddToCalendar } from './AddToCalendar.jsx';
-import { IconShare, IconCheck } from './icons.jsx';
+import { LightboxBackdrop } from './LightboxBackdrop.jsx';
+import { IconShare, IconCheck, IconCopy, IconX } from './icons.jsx';
 
 export function formatEventDate(isoOrTimestamp) {
   if (!isoOrTimestamp) return null;
@@ -38,41 +39,103 @@ export function ConfirmBox({ message, confirmLabel, onConfirm, onCancel, submitt
 // call needed to build it: every quest doc already carries its own
 // seriesId, so there's nothing to fetch that isn't already on hand here.
 //
-// Copies straight to the clipboard on click rather than opening a panel
-// with a copy button inside it — the click itself is the user gesture the
-// Clipboard API needs, so there's nothing a separate "Copy" button would
-// add except an extra step. `iconOnly` swaps the label for a small icon
-// button (used inline in org/Quests.jsx's icon trio) that flips to a
-// checkmark for the same 2s instead of changing text.
-export function ShareButton({ seriesId, iconOnly = false, disabled = false }) {
+// Used to copy straight to the clipboard on click, with the button's own
+// icon flipping to a checkmark for 2s as the only feedback — that read as
+// ambiguous (did it work? what happened?) without a real next step to
+// look at. Now: the Web Share API's native share sheet where it's
+// available (a real OS-level "here's what happened, pick where it goes"
+// UI, and still a single tap), falling back to a small modal showing the
+// actual link plus its own dedicated Copy button where Share isn't
+// available (most desktop browsers) — either way there's now something
+// concrete on screen confirming what the click did, not just an icon
+// swap.
+export function ShareButton({ seriesId, questTitle, iconOnly = false, disabled = false }) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const url = `${window.location.origin}/share/${seriesId}`;
+
+  function handleClick() {
+    if (navigator.share) {
+      // Best-effort — a user backing out of the share sheet rejects this
+      // promise (AbortError), which isn't a real failure worth surfacing.
+      navigator.share({ title: questTitle, url }).catch(() => {});
+      return;
+    }
+    setModalOpen(true);
+  }
+
+  return (
+    <>
+      {iconOnly ? (
+        <button
+          type="button"
+          className="quest-icon-btn"
+          onClick={handleClick}
+          disabled={disabled}
+          aria-label="Share quest"
+          title="Share"
+        >
+          <IconShare />
+        </button>
+      ) : (
+        <StampButton type="button" onClick={handleClick} disabled={disabled}>
+          Share quest
+        </StampButton>
+      )}
+      {modalOpen && (
+        <ShareLinkModal url={url} questTitle={questTitle} onClose={() => setModalOpen(false)} />
+      )}
+    </>
+  );
+}
+
+// The navigator.share fallback — a plain, real link plus a dedicated Copy
+// button (rather than copying on some other click and hoping that's
+// obvious), so there's no ambiguity about what a click here does or
+// whether it worked. Copy's own confirmation (label + icon swap to a
+// checkmark, 2s) lives on the button people actually pressed, not
+// somewhere else on the modal they might not be looking at.
+function ShareLinkModal({ url, questTitle, onClose }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
-    const url = `${window.location.origin}/share/${seriesId}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (iconOnly) {
-    return (
-      <button
-        type="button"
-        className="quest-icon-btn"
-        onClick={copy}
-        disabled={disabled}
-        aria-label={copied ? 'Link copied' : 'Copy share link'}
-        title={copied ? 'Copied!' : 'Share'}
-      >
-        {copied ? <IconCheck /> : <IconShare />}
-      </button>
-    );
-  }
-
   return (
-    <StampButton type="button" onClick={copy} disabled={disabled}>
-      {copied ? 'Copied!' : 'Share quest'}
-    </StampButton>
+    <LightboxBackdrop onClose={onClose} label="Share quest">
+      <div
+        className="detail-modal-content share-link-modal ink-card flex flex-col gap-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ margin: 0 }}>Share {questTitle ? `"${questTitle}"` : 'this quest'}</h3>
+        <p style={{ margin: '4px 0 0' }}>Anyone with this link can view it, even signed out.</p>
+        <div className="share-link-row">
+          <input
+            type="text"
+            readOnly
+            value={url}
+            aria-label="Quest share link"
+            onFocus={(e) => e.target.select()}
+          />
+          <StampButton type="button" variant="primary" onClick={copy}>
+            {copied ? (
+              <>
+                <IconCheck width={16} height={16} /> Copied!
+              </>
+            ) : (
+              <>
+                <IconCopy width={16} height={16} /> Copy
+              </>
+            )}
+          </StampButton>
+        </div>
+        <button type="button" className="photo-lightbox-close" onClick={onClose} aria-label="Close">
+          <IconX width={18} height={18} />
+        </button>
+      </div>
+    </LightboxBackdrop>
   );
 }
 
@@ -147,7 +210,9 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
             {a.reviewsOpen ? 'Hide reviews' : 'View reviews'}
           </StampButton>
         )}
-        {primary.orgId && <ShareButton seriesId={primary.seriesId} disabled={a.busy} />}
+        {primary.orgId && (
+          <ShareButton seriesId={primary.seriesId} questTitle={primary.title} disabled={a.busy} />
+        )}
         {/* Every quest created from now on already has a qrToken minted at
             creation time (see _quest_doc_fields) — "Generate" only ever
             shows for quests that predate that change. */}

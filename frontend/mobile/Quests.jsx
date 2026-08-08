@@ -31,12 +31,16 @@ import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { accommodationLabel } from '@shared/accommodations.js';
 import { RankProgressCard } from '@shared/RankProgressCard.jsx';
 import { VanishSearchInput } from '@shared/VanishSearchInput.jsx';
+import { parseSearch } from '@shared/searchTags.js';
+import { FilterPill, DesktopFilterPopover, MobileFilterSheet } from '@shared/FilterPanel.jsx';
 import {
   IconCalendar,
   IconUsers,
   IconCheck,
   IconAlert,
   IconFilter,
+  IconGrid,
+  IconList,
   IconLock,
   IconX,
 } from '@shared/icons.jsx';
@@ -674,13 +678,15 @@ export function QuestDetailBody({
           <p className='quest-title' style={{ fontSize: '1.25rem', margin: 0 }}>
             {primary.title}
           </p>
-          {!primary.isDefault && <ShareButton seriesId={primary.seriesId} iconOnly />}
+          {!primary.isDefault && (
+            <ShareButton seriesId={primary.seriesId} questTitle={primary.title} iconOnly />
+          )}
         </div>
       ) : (
         !primary.isDefault && (
           <div style={{ position: 'relative', minHeight: 36 }}>
             <div className='quest-detail-icon-actions'>
-              <ShareButton seriesId={primary.seriesId} iconOnly />
+              <ShareButton seriesId={primary.seriesId} questTitle={primary.title} iconOnly />
             </div>
           </div>
         )
@@ -1082,44 +1088,13 @@ const SORT_OPTIONS = [
 ];
 
 // Tags used to have their own picker in the filter panel — now they're
-// searched straight from the search bar instead (see VanishSearchInput),
-// as one fewer group to juggle. A #token (e.g. "#wellness volunteer")
-// pulls tag(s) out of the raw search text; whatever's left over is still
-// matched against title/orgName/location the same as before (see
-// visibleSeries below). Multiple #tokens OR together, same as the old
-// picker's multi-select behavior.
-function parseSearch(raw) {
-  const tags = [];
-  const text = raw
-    .replace(/#([a-z0-9-]+)/gi, (_match, tag) => {
-      tags.push(tag.toLowerCase());
-      return '';
-    })
-    .trim();
-  return { tags, text };
-}
-
-// One selected/unselected pill look, reused for TYPE/SORT & ACTIVITY
-// below — just StampButton's own existing primary-vs-default variant, so
-// "selected" is the same accent-filled look every other pill toggle in
-// the app already has (see ThemePicker's theme-option row), not a new
-// style invented just for this panel. `disabled` is only ever used for
-// Soonest while Past Attended is active (see the Sort & Activity group
-// below) — a real <button disabled>, not just a color/opacity change, so
-// it's actually unclickable, not merely styled to look that way.
-function FilterPill({ selected, disabled, onClick, children }) {
-  return (
-    <StampButton
-      type='button'
-      variant={selected ? 'primary' : 'default'}
-      aria-pressed={selected}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </StampButton>
-  );
-}
+// searched straight from the search bar instead (see VanishSearchInput
+// and parseSearch, shared with EventsMap.jsx's own #tag search — see
+// @shared/searchTags.js), as one fewer group to juggle. A #token (e.g.
+// "#wellness volunteer") pulls tag(s) out of the raw search text;
+// whatever's left over is still matched against title/orgName/location
+// the same as before (see visibleSeries below). Multiple #tokens OR
+// together, same as the old picker's multi-select behavior.
 
 // The actual filter controls, identical on both surfaces (desktop popover
 // and mobile sheet — see DesktopFilterPopover/MobileFilterSheet below);
@@ -1171,7 +1146,10 @@ function FilterPanelContent({
       </div>
 
       <div className='quest-filter-group quest-filter-group-inline'>
-        <p className='quest-filter-group-label'>Type</p>
+        <p className='quest-filter-group-label'>
+          <IconGrid width={15} height={15} aria-hidden='true' />
+          Type
+        </p>
         <div className='quest-filter-pill-row'>
           <FilterPill selected={segment === 'org'} onClick={() => onSelectSegment('org')}>
             Quests
@@ -1183,7 +1161,10 @@ function FilterPanelContent({
       </div>
 
       <div className='quest-filter-group quest-filter-group-inline'>
-        <p className='quest-filter-group-label'>Activity</p>
+        <p className='quest-filter-group-label'>
+          <IconCalendar width={15} height={15} aria-hidden='true' />
+          Activity
+        </p>
         <div className='quest-filter-pill-row'>
           <FilterPill
             selected={activity === 'past'}
@@ -1201,7 +1182,10 @@ function FilterPanelContent({
       </div>
 
       <div className='quest-filter-group quest-filter-group-inline'>
-        <p className='quest-filter-group-label'>Sort</p>
+        <p className='quest-filter-group-label'>
+          <IconList width={15} height={15} aria-hidden='true' />
+          Sort
+        </p>
         <div className='quest-filter-pill-row'>
           {SORT_OPTIONS.map((opt) => (
             <FilterPill
@@ -1216,42 +1200,6 @@ function FilterPanelContent({
         </div>
       </div>
     </div>
-  );
-}
-
-// Desktop presentation: an anchored popover, not a full-screen modal — it
-// covers a corner of the page, not all of it, so (unlike
-// LightboxBackdrop's full-viewport dim) there's no backdrop at all here.
-// Closing on outside click/Escape is handled by the caller (see Quests()'s
-// own effect, which watches the whole wrapping .quest-filter-wrap element
-// this renders inside of — no ref of its own needed here).
-function DesktopFilterPopover({ children }) {
-  return (
-    <div className='quest-filter-popover' role='dialog' aria-label='Filters'>
-      {children}
-    </div>
-  );
-}
-
-// Mobile presentation: a centered modal card, the same full-viewport
-// backdrop every other modal in this app already uses (see
-// LightboxBackdrop — backdrop tap/Escape-to-close, and its default
-// centered layout, come for free from there, no override needed), same
-// treatment as Attendees/QR/EditProfile's own modals rather than a bottom
-// sheet (a sheet flush against the screen edges read as a clipped/cut-off
-// box, not a deliberate surface). Filtering itself is already live/instant
-// (all client-side, no network re-query), so "Done" is only a dismiss
-// action, not a gate on when selections take effect.
-function MobileFilterSheet({ onClose, children }) {
-  return (
-    <LightboxBackdrop onClose={onClose} label='Filters'>
-      <div className='quest-filter-sheet' onClick={(e) => e.stopPropagation()}>
-        {children}
-        <StampButton type='button' variant='primary' style={{ width: '100%' }} onClick={onClose}>
-          Done
-        </StampButton>
-      </div>
-    </LightboxBackdrop>
   );
 }
 

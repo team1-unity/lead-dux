@@ -665,9 +665,15 @@ export function Journal() {
   const [openId, setOpenId] = useState(null);
   const reduce = useReducedMotion();
   const columnCount = useColumnCount();
+  // Also disabled with just 0-1 entries (not only reduced-motion or a
+  // single-column layout) — a couple of columns each barely taller than
+  // the viewport give the drift almost nothing to work with, so it reads
+  // as an unintentional wobble rather than a deliberate effect. Treating
+  // `entries === null` (still loading) the same as "0 entries" is
+  // harmless: there's nothing to visibly offset yet either way.
   const { offsets: columnOffsets } = useParallaxColumnOffsets(
     columnCount,
-    reduce || columnCount === 1,
+    reduce || columnCount === 1 || (entries?.length ?? 0) <= 1,
   );
 
   useEffect(() => {

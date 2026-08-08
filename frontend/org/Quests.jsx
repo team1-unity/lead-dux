@@ -19,6 +19,7 @@ import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { LocationLink } from '@shared/LocationLink.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
+import { VanishSearchInput } from '@shared/VanishSearchInput.jsx';
 import {
   IconPlus,
   IconEdit,
@@ -152,7 +153,12 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           text is actually gated on showTitle. */}
       <div style={{ position: 'relative', minHeight: 36 }}>
         <div className='quest-detail-icon-actions'>
-          <ShareButton seriesId={primary.seriesId} iconOnly disabled={a.busy} />
+          <ShareButton
+            seriesId={primary.seriesId}
+            questTitle={primary.title}
+            iconOnly
+            disabled={a.busy}
+          />
           <button
             type='button'
             className='quest-icon-btn'
@@ -471,6 +477,14 @@ function OrgQuests({ creating, setCreating }) {
   const [quests, setQuests] = useState(null);
   const [seriesAggregates, setSeriesAggregates] = useState(new Map());
   const [openSeriesId, setOpenSeriesId] = useState(null);
+  // An org's own quest list had no search at all before — fine when
+  // there are only a handful, but it doesn't scale the way member-facing
+  // Explore Quests already needed to. Title/location only (no tag/sort/
+  // activity panel like Explore Quests' own Filters button) — an org's
+  // list is already just its own quests in one fixed, sensible order
+  // (soonest-next-first, then past), so finding one by name is the actual
+  // gap, not a whole filtering system.
+  const [search, setSearch] = useState('');
 
   async function load() {
     const [questsSnap, seriesSnap] = await Promise.all([
@@ -492,12 +506,21 @@ function OrgQuests({ creating, setCreating }) {
     [quests, seriesAggregates],
   );
 
+  const visibleSeriesList = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return seriesList;
+    return seriesList.filter((s) => {
+      const { title, location } = s.primary;
+      return [title, location].some((field) => (field || '').toLowerCase().includes(q));
+    });
+  }, [seriesList, search]);
+
   if (!quests) return <LoadingSpinner label='Loading your quests...' />;
 
   const activeSeriesId = isDesktop
-    ? (openSeriesId ?? seriesList[0]?.seriesId ?? null)
+    ? (openSeriesId ?? visibleSeriesList[0]?.seriesId ?? null)
     : openSeriesId;
-  const activeSeries = seriesList.find((s) => s.seriesId === activeSeriesId) || null;
+  const activeSeries = visibleSeriesList.find((s) => s.seriesId === activeSeriesId) || null;
 
   async function afterCreated() {
     setCreating(false);
@@ -532,31 +555,50 @@ function OrgQuests({ creating, setCreating }) {
         {seriesList.length === 0 ? (
           <p>You haven't created any quests yet.</p>
         ) : (
-          <motion.ul className='quest-list' variants={listVariants} initial='hidden' animate='show'>
-            {seriesList.map((series) => (
-              <QuestSeriesListItem
-                key={series.seriesId}
-                series={series}
-                isOpen={!isDesktop && openSeriesId === series.seriesId}
-                isActive={isDesktop && activeSeriesId === series.seriesId}
-                onSelect={() => {
-                  // Picking a quest from the list always means "show me this
-                  // one" — if the create-quest form was open, it's cancelled
-                  // (its draft is autosaved, so nothing is lost) rather than
-                  // leaving the organizer stuck looking at the form while a
-                  // different row highlights as selected underneath it.
-                  setCreating(false);
-                  setOpenSeriesId(
-                    !isDesktop && openSeriesId === series.seriesId ? null : series.seriesId,
-                  );
-                }}
+          <>
+            <VanishSearchInput
+              value={search}
+              onChange={setSearch}
+              placeholders={['Search your quests']}
+              ariaLabel='Search your quests'
+            />
+            {visibleSeriesList.length === 0 ? (
+              <p style={{ marginTop: 16 }}>No quests match that search.</p>
+            ) : (
+              <motion.ul
+                className='quest-list'
+                style={{ marginTop: 16 }}
+                variants={listVariants}
+                initial='hidden'
+                animate='show'
               >
-                {!isDesktop && openSeriesId === series.seriesId && (
-                  <QuestSeriesDetailPane series={series} onChanged={load} />
-                )}
-              </QuestSeriesListItem>
-            ))}
-          </motion.ul>
+                {visibleSeriesList.map((series) => (
+                  <QuestSeriesListItem
+                    key={series.seriesId}
+                    series={series}
+                    isOpen={!isDesktop && openSeriesId === series.seriesId}
+                    isActive={isDesktop && activeSeriesId === series.seriesId}
+                    onSelect={() => {
+                      // Picking a quest from the list always means "show me
+                      // this one" — if the create-quest form was open, it's
+                      // cancelled (its draft is autosaved, so nothing is
+                      // lost) rather than leaving the organizer stuck
+                      // looking at the form while a different row
+                      // highlights as selected underneath it.
+                      setCreating(false);
+                      setOpenSeriesId(
+                        !isDesktop && openSeriesId === series.seriesId ? null : series.seriesId,
+                      );
+                    }}
+                  >
+                    {!isDesktop && openSeriesId === series.seriesId && (
+                      <QuestSeriesDetailPane series={series} onChanged={load} />
+                    )}
+                  </QuestSeriesListItem>
+                ))}
+              </motion.ul>
+            )}
+          </>
         )}
       </div>
 

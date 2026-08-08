@@ -12,9 +12,11 @@ import { useIsDesktop } from './useIsDesktop.js';
 import { LoadingSpinner } from './LoadingSpinner.jsx';
 import { StampButton } from './StampButton.jsx';
 import { OrgAvatar } from './OrgAvatar.jsx';
-import { TagStamp } from './TagStamp.jsx';
 import { DuckMark } from './Logo.jsx';
-import { IconSearch, IconChevron } from './icons.jsx';
+import { VanishSearchInput } from './VanishSearchInput.jsx';
+import { parseSearch } from './searchTags.js';
+import { FilterPill, DesktopFilterPopover, MobileFilterSheet } from './FilterPanel.jsx';
+import { IconFilter, IconList } from './icons.jsx';
 
 // How tall the sheet's own peeking sliver is when collapsed — handle bar +
 // label, plus enough extra to preview the first quest card's title/org
@@ -64,72 +66,47 @@ function formatDistance(km) {
   return miles < 0.1 ? 'Here' : `${miles.toFixed(1)} mi`;
 }
 
-// Wraps .tag-filter-row with a scroll-by-one-tap arrow at whichever edge
-// still has more content past it (Google Maps' own category-shortcut row
-// does the same on desktop) — hidden entirely once there's nothing further
-// that way, so it never shows a dead-end arrow. A plain scroll-position
-// check rather than IntersectionObserver-per-chip: this row is small (a
-// dozen tags at most), so re-measuring the whole container on every
-// scroll/resize is cheap.
-//
-// `arrows` is off on mobile — a touch swipe is already the natural way to
-// scroll this row there, and a pair of tap targets floating over it would
-// just be redundant chrome competing with the pills themselves.
-function ScrollableTagRow({ children, arrows = true }) {
-  const scrollRef = useRef(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
+// Sort options for the map's own Filters panel — "Nearest" only really
+// means anything once a real position exists (see withDistance below);
+// "Soonest" is the plain chronological fallback withDistance already used
+// when no distance was available, now selectable on purpose instead of
+// only ever being an automatic fallback.
+const MAP_SORT_OPTIONS = [
+  { value: 'nearest', label: 'Nearest' },
+  { value: 'soonest', label: 'Soonest' },
+];
 
-  function updateScrollState() {
-    const el = scrollRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }
-
-  useEffect(() => {
-    if (!arrows) return undefined;
-    updateScrollState();
-    const el = scrollRef.current;
-    if (!el) return undefined;
-    el.addEventListener('scroll', updateScrollState, { passive: true });
-    window.addEventListener('resize', updateScrollState);
-    return () => {
-      el.removeEventListener('scroll', updateScrollState);
-      window.removeEventListener('resize', updateScrollState);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [children, arrows]);
-
-  if (!arrows) {
-    return <div className="tag-filter-row">{children}</div>;
-  }
-
+// The map's own Filters panel content — just Sort, unlike Explore Quests'
+// Type/Activity/Sort (see mobile/Quests.jsx's own FilterPanelContent):
+// there's no side-quest/RSVP'd-quest equivalent here, every quest with
+// real coordinates shows on the map the same way. Tags are searched via
+// #token in the search bar instead (see VanishSearchInput/parseSearch),
+// not a picker in this panel either — same reasoning as Explore Quests.
+function MapFilterPanelContent({ sort, onSelectSort, activeFilterCount, onClearAll }) {
   return (
-    <div className="tag-filter-row-wrap">
-      <div className="tag-filter-row" ref={scrollRef}>
-        {children}
+    <div className="quest-filter-panel">
+      <div className="quest-filter-panel-header">
+        <h2>Filters</h2>
+        {activeFilterCount > 0 && (
+          <button type="button" className="quest-filter-clear" onClick={onClearAll}>
+            Clear all
+          </button>
+        )}
       </div>
-      {canScrollLeft && (
-        <button
-          type="button"
-          className="tag-filter-row-arrow tag-filter-row-arrow-left"
-          onClick={() => scrollRef.current?.scrollBy({ left: -220, behavior: 'smooth' })}
-          aria-label="Scroll tags left"
-        >
-          <IconChevron style={{ transform: 'rotate(90deg)' }} />
-        </button>
-      )}
-      {canScrollRight && (
-        <button
-          type="button"
-          className="tag-filter-row-arrow tag-filter-row-arrow-right"
-          onClick={() => scrollRef.current?.scrollBy({ left: 220, behavior: 'smooth' })}
-          aria-label="Scroll tags right"
-        >
-          <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-        </button>
-      )}
+
+      <div className="quest-filter-group quest-filter-group-inline">
+        <p className="quest-filter-group-label">
+          <IconList width={15} height={15} aria-hidden="true" />
+          Sort
+        </p>
+        <div className="quest-filter-pill-row">
+          {MAP_SORT_OPTIONS.map((opt) => (
+            <FilterPill key={opt.value} selected={sort === opt.value} onClick={() => onSelectSort(opt.value)}>
+              {opt.label}
+            </FilterPill>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -220,7 +197,12 @@ export function EventsMap() {
   const [mapError, setMapError] = useState(null);
   const [dataError, setDataError] = useState(null);
   const [search, setSearch] = useState('');
-  const [activeTag, setActiveTag] = useState(null);
+  // 'nearest' (default — the old always-on behavior) or 'soonest', picked
+  // from the Filters panel below (see MapFilterPanelContent).
+  const [sort, setSort] = useState('nearest');
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const filterWrapRef = useRef(null);
+  const filterBtnRef = useRef(null);
   // Mobile only (see MobileSheet) — collapsed means "exploring the map"
   // (search/tags float over it instead), expanded means "browsing the
   // quest list/detail" (the sheet itself is the focus, search/tags hide).
@@ -287,6 +269,12 @@ export function EventsMap() {
       });
   }, [user]);
 
+  // Sorted nearest-first (falling back to soonest for anything without a
+  // distance) by default — this is also what the "center on nearest
+  // useful thing" effect further below assumes index 0 to be, so this
+  // default sort stays applied here regardless of the Filters panel's own
+  // `sort` state; visibleSeries re-sorts on top of this only for
+  // 'soonest' (see below), leaving 'nearest' as this same order.
   const withDistance = useMemo(() => {
     if (!seriesList) return [];
     return [...seriesList]
@@ -304,25 +292,64 @@ export function EventsMap() {
 
   // Tags/search narrow what's plotted and listed together — searching
   // "kitchen" should hide non-matching pins too, not just list rows, so the
-  // map stays in sync with what's actually visible below it.
+  // map stays in sync with what's actually visible below it. Tags are
+  // pulled out of the search text itself via a #token (see
+  // VanishSearchInput/parseSearch, shared with mobile/Quests.jsx's own
+  // #tag search) rather than a separate picker.
   const availableTags = useMemo(() => {
     const seen = new Set();
     withDistance.forEach((g) => (g.primary.tags || []).forEach((t) => seen.add(t)));
     return [...seen];
   }, [withDistance]);
 
+  const { tags: searchTags, text: searchText } = useMemo(() => parseSearch(search), [search]);
+
+  const activeFilterCount = (sort !== 'nearest' ? 1 : 0) + (searchTags.length > 0 ? 1 : 0);
+
   const visibleSeries = useMemo(() => {
     let list = withDistance;
-    if (activeTag) list = list.filter((g) => (g.primary.tags || []).includes(activeTag));
-    const q = search.trim().toLowerCase();
+    if (searchTags.length > 0) {
+      list = list.filter((g) => (g.primary.tags || []).some((t) => searchTags.includes(t.toLowerCase())));
+    }
+    const q = searchText.toLowerCase();
     if (q) {
       list = list.filter((g) => {
         const { title, orgName, location } = g.primary;
         return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
       });
     }
+    if (sort === 'soonest') {
+      list = [...list].sort((a, b) => toDate(a.primary.eventDate) - toDate(b.primary.eventDate));
+    }
     return list;
-  }, [withDistance, activeTag, search]);
+  }, [withDistance, searchTags, searchText, sort]);
+
+  function clearAllFilters() {
+    setSort('nearest');
+    setSearch((prev) => parseSearch(prev).text);
+  }
+
+  // Closes the filter popover on an outside click or Escape — only wired
+  // up on desktop; the mobile modal gets the same behavior for free from
+  // LightboxBackdrop (backdrop tap / Escape). Same pattern as
+  // mobile/Quests.jsx's own Filters button.
+  useEffect(() => {
+    if (!filterPanelOpen || !isDesktop) return undefined;
+    function onPointerDown(e) {
+      if (filterWrapRef.current && !filterWrapRef.current.contains(e.target)) {
+        setFilterPanelOpen(false);
+      }
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setFilterPanelOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [filterPanelOpen, isDesktop]);
 
   // Create the map exactly once, as soon as the container div exists — not
   // gated on quests/location being ready yet, so the map itself appears
@@ -555,36 +582,67 @@ export function EventsMap() {
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
 
+  // What VanishSearchInput's placeholder cycles through — same pattern as
+  // mobile/Quests.jsx's own search bar.
+  const searchPlaceholders = [
+    'Search',
+    ...availableTags.slice(0, 4).map((tag) => `Try #${tag}`),
+  ];
+
   // Built once and placed differently per breakpoint below, rather than
   // duplicated: mobile keeps them in normal document flow above the map
   // (unchanged); desktop moves the search into the sidebar card and floats
-  // the tag row + location banner directly over the map instead (see
-  // App.jsx-style breakpoint branching used throughout this codebase, e.g.
-  // mobile/Quests.jsx's own desktop/mobile split).
-  const searchField = (
-    <div className="search-field">
-      <IconSearch />
-      <input
-        type="search"
+  // the location banner directly over the map instead (see App.jsx-style
+  // breakpoint branching used throughout this codebase, e.g. mobile/
+  // Quests.jsx's own desktop/mobile split). The old always-visible tag row
+  // is gone — tags are searched via #token in the search bar now (same
+  // VanishSearchInput/#tag pattern as Explore Quests), and Sort lives in
+  // the Filters button's own panel (see MapFilterPanelContent) instead of
+  // a separate control.
+  const searchRow = (
+    <div className="quest-search-row">
+      <VanishSearchInput
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search"
-        aria-label="Search nearby quests"
+        onChange={setSearch}
+        placeholders={searchPlaceholders}
+        ariaLabel="Search nearby quests"
       />
+      <div className="quest-filter-wrap" ref={filterWrapRef}>
+        <button
+          ref={filterBtnRef}
+          type="button"
+          className="quest-filter-btn"
+          aria-haspopup="dialog"
+          aria-expanded={filterPanelOpen}
+          aria-label={`Filters, ${activeFilterCount} active`}
+          data-filters-active={activeFilterCount > 0 ? 'true' : undefined}
+          onClick={() => setFilterPanelOpen((o) => !o)}
+        >
+          <IconFilter width={22} height={22} />
+        </button>
+        {filterPanelOpen && isDesktop && (
+          <DesktopFilterPopover>
+            <MapFilterPanelContent
+              sort={sort}
+              onSelectSort={setSort}
+              activeFilterCount={activeFilterCount}
+              onClearAll={clearAllFilters}
+            />
+          </DesktopFilterPopover>
+        )}
+      </div>
     </div>
   );
 
-  const tagFilterRow = availableTags.length > 0 && (
-    <ScrollableTagRow arrows={isDesktop}>
-      <TagStamp selectable selected={activeTag === null} onClick={() => setActiveTag(null)}>
-        All
-      </TagStamp>
-      {availableTags.map((tag) => (
-        <TagStamp key={tag} tone={tag} selectable selected={activeTag === tag} onClick={() => setActiveTag(tag)}>
-          {tag}
-        </TagStamp>
-      ))}
-    </ScrollableTagRow>
+  const filterSheet = filterPanelOpen && !isDesktop && (
+    <MobileFilterSheet onClose={() => setFilterPanelOpen(false)}>
+      <MapFilterPanelContent
+        sort={sort}
+        onSelectSort={setSort}
+        activeFilterCount={activeFilterCount}
+        onClearAll={clearAllFilters}
+      />
+    </MobileFilterSheet>
   );
 
   const locationBanner = (locationState === 'denied' || locationState === 'unavailable') && (
@@ -672,7 +730,7 @@ export function EventsMap() {
             reserved for it in this full-bleed layout). */}
         {isDesktop && (
           <div className="events-map-sidebar">
-            {hasListControls && <div className="events-map-search-row">{searchField}</div>}
+            {hasListControls && searchRow}
             {/* id is MapQuestOverlay.jsx's portal target — its detail view
                 renders straight into this node so opening a quest reads as
                 a view switch in place of the list, not a modal floating on
@@ -697,25 +755,23 @@ export function EventsMap() {
               both show at once. Mobile's equivalent floats over the full-
               screen map directly, below, since there's no separate map pane
               to nest it inside there. */}
-          {isDesktop && (locationBanner || tagFilterRow) && (
+          {isDesktop && locationBanner && (
             <div className="events-map-overlays">
               {locationBanner}
-              {tagFilterRow}
             </div>
           )}
         </div>
 
         {/* Mobile: the map fills the whole screen behind everything else.
-            Search + tags float over it, but only while "exploring the
-            map" (the sheet below is still collapsed) — once it's dragged/
-            tapped open to browse the list (or a quest's detail), these
-            hide so the sheet itself is the focus, matching Google Maps'
-            own mobile behavior. */}
+            The search bar + Filters button float over it, but only while
+            "exploring the map" (the sheet below is still collapsed) —
+            once it's dragged/tapped open to browse the list (or a
+            quest's detail), these hide so the sheet itself is the focus,
+            matching Google Maps' own mobile behavior. */}
         {!isDesktop && !sheetExpanded && (locationBanner || hasListControls) && (
           <div className="events-map-mobile-overlays">
             {locationBanner}
-            {hasListControls && searchField}
-            {tagFilterRow}
+            {hasListControls && searchRow}
           </div>
         )}
 
@@ -727,6 +783,8 @@ export function EventsMap() {
           </MobileSheet>
         )}
       </div>
+
+      {filterSheet}
     </div>
   );
 }

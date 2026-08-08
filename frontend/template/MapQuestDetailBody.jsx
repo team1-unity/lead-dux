@@ -211,7 +211,7 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
         <StampButton as={Link} to={fullDetailsHref} variant="primary">
           View full quest details
         </StampButton>
-        <ShareButton seriesId={series.seriesId} iconOnly />
+        <ShareButton seriesId={series.seriesId} questTitle={primary.title} iconOnly />
       </div>
     </div>
   );
