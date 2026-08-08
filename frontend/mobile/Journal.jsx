@@ -19,6 +19,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
+import { ImageUploadCard } from '@shared/ImageUploadCard.jsx';
 import { IconDots } from '@shared/icons.jsx';
 
 // Fixed defaults, same for every entry — not configurable per quest. See
@@ -33,10 +34,10 @@ const REFLECTION_PROMPTS = [
 ];
 
 // A small curated set of background pictures a member can pick for an
-// entry (see set_journal_thumbnail in functions/main.py) — no upload flow,
-// just a handful of stock photos plus "remove". A card with none picked
-// yet stays blank (see JournalCard) rather than falling back to one of
-// these by default.
+// entry (see set_journal_thumbnail in functions/main.py), alongside a real
+// upload-your-own option (see ThumbnailPicker's own ImageUploadCard below)
+// and "remove". A card with none picked yet stays blank (see JournalCard)
+// rather than falling back to one of these by default.
 const THUMBNAIL_OPTIONS = [
   'https://images.unsplash.com/photo-1554080353-a576cf803bda?auto=format&fit=crop&w=400&q=60',
   'https://images.unsplash.com/photo-1505144808419-1957a94ca61e?auto=format&fit=crop&w=400&q=60',
@@ -537,9 +538,14 @@ function ExpandedJournalEntry({ entry, onClose }) {
 // portals to document.body).
 function ThumbnailPicker({ entry, onClose }) {
   const { user } = useAuth();
-  const [saving, setSaving] = useState(null); // the url (or "remove"/"upload") currently being saved, or null
+  const [saving, setSaving] = useState(null); // the stock url (or "remove"/"upload") currently being saved, or null
   const [error, setError] = useState('');
-  const fileInputRef = useRef(null);
+  // ImageUploadCard's own onUpload only means "picked and locally
+  // previewed" here, not "actually uploaded" — the real Storage write
+  // waits for the explicit Save button below (see uploadPickedFile),
+  // same pick-then-confirm shape CreateQuestForm.jsx's cover-photo
+  // upload already uses.
+  const [pickedFile, setPickedFile] = useState(null);
 
   async function pick(url) {
     setSaving(url ?? 'remove');
@@ -553,24 +559,22 @@ function ThumbnailPicker({ entry, onClose }) {
     }
   }
 
-  async function handleFileChosen(e) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // lets choosing the same file again re-fire onChange
-    if (!file) return;
+  async function uploadPickedFile() {
+    if (!pickedFile) return;
     setError('');
-    if (!THUMBNAIL_UPLOAD_CONTENT_TYPES.includes(file.type)) {
+    if (!THUMBNAIL_UPLOAD_CONTENT_TYPES.includes(pickedFile.type)) {
       setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
       return;
     }
-    if (file.size > THUMBNAIL_UPLOAD_MAX_SIZE_BYTES) {
+    if (pickedFile.size > THUMBNAIL_UPLOAD_MAX_SIZE_BYTES) {
       setError('Photo must be smaller than 10MB.');
       return;
     }
     setSaving('upload');
     try {
-      const ext = THUMBNAIL_UPLOAD_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+      const ext = THUMBNAIL_UPLOAD_EXT_BY_CONTENT_TYPE[pickedFile.type] || 'jpg';
       const path = `journalThumbnails/${user.uid}/${Date.now()}.${ext}`;
-      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+      await uploadBytes(storageRef(storage, path), pickedFile, { contentType: pickedFile.type });
       const url = await getDownloadURL(storageRef(storage, path));
       await callSetJournalThumbnail({ questId: entry.id, thumbnailUrl: url });
       onClose();
@@ -589,22 +593,25 @@ function ThumbnailPicker({ entry, onClose }) {
       >
         <h3 style={{ marginTop: 0 }}>Choose a background picture</h3>
         {error && <p className='box-danger'>{error}</p>}
-        <input
-          ref={fileInputRef}
-          type='file'
+        <ImageUploadCard
+          key={uploadKey}
+          title='Upload your own photo'
           accept={THUMBNAIL_UPLOAD_CONTENT_TYPES.join(',')}
-          onChange={handleFileChosen}
-          style={{ display: 'none' }}
+          onUpload={(_url, file) => setPickedFile(file)}
+          onRemove={() => setPickedFile(null)}
         />
         <StampButton
           type='button'
           variant='primary'
-          onClick={() => fileInputRef.current?.click()}
-          disabled={Boolean(saving)}
-          style={{ marginBottom: 12 }}
+          onClick={uploadPickedFile}
+          disabled={!pickedFile || Boolean(saving)}
+          style={{ width: '100%', margin: '12px 0' }}
         >
-          {saving === 'upload' ? 'Uploading…' : 'Upload your own photo'}
+          {saving === 'upload' ? 'Uploading…' : 'Use this photo'}
         </StampButton>
+        <p className='field-optional' style={{ margin: '0 0 8px', textAlign: 'center' }}>
+          or choose one of these
+        </p>
         <div className='journal-thumbnail-picker-grid'>
           <button
             type='button'

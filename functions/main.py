@@ -347,6 +347,20 @@ def _parse_event_datetime(value, field_name: str, tz: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+# Fields _quest_doc_fields gives every occurrence of a series identically at
+# creation time (title/description/tags/location/.../timezone — see there),
+# as opposed to eventDate/eventEndTime/rsvpd/qrToken/..., which are
+# genuinely per-occurrence. update_quest (below) only ever writes to the one
+# doc it's called with — without re-applying this same subset to every
+# sibling occurrence too, editing e.g. a typo in the title on one date would
+# silently desync it from the rest of the series, a state creation itself
+# never allows to happen.
+_SHARED_SERIES_FIELDS = {
+    "title", "description", "tags", "location", "placeId", "lat", "lng",
+    "capacity", "accommodationTags", "accommodationDetails", "tier", "timezone",
+}
+
+
 # update_quest's own "did eventDate actually change" check needs this, not
 # raw equality — the org's edit form can only ever express/round-trip a
 # date down to whole-minute precision (see naturalDate.js's
@@ -1655,6 +1669,24 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
         update["timezone"] = tz
 
     ref.update(update)
+
+    # Propagate whichever shared fields this edit touched to every other
+    # occurrence in the same series — see _SHARED_SERIES_FIELDS above. A
+    # standalone quest's seriesId is just its own doc id (see the module
+    # note near _quest_doc_fields), so the sibling query below naturally
+    # finds nothing extra for it.
+    shared_update = {k: v for k, v in update.items() if k in _SHARED_SERIES_FIELDS}
+    if shared_update:
+        series_id = quest.get("seriesId") or quest_id
+        siblings = [
+            doc for doc in db.collection("quests").where("seriesId", "==", series_id).stream()
+            if doc.id != quest_id
+        ]
+        if siblings:
+            batch = db.batch()
+            for doc in siblings:
+                batch.update(doc.reference, shared_update)
+            batch.commit()
 
     if reschedule_notify_uids:
         notice_title = update.get("title", quest.get("title"))

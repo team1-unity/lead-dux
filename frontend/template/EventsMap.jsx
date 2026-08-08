@@ -324,10 +324,6 @@ export function EventsMap() {
   // parseSearch below), same as Explore Quests — no separate tag picker.
   const { tags: searchTags, text: searchText } = useMemo(() => parseSearch(search), [search]);
 
-  const { tags: searchTags, text: searchText } = useMemo(() => parseSearch(search), [search]);
-
-  const activeFilterCount = (sort !== 'nearest' ? 1 : 0) + (searchTags.length > 0 ? 1 : 0);
-
   const visibleSeries = useMemo(() => {
     let list = withDistance;
     if (searchTags.length > 0) {
@@ -339,9 +335,6 @@ export function EventsMap() {
         const { title, orgName, location } = g.primary;
         return [title, orgName, location].some((field) => (field || '').toLowerCase().includes(q));
       });
-    }
-    if (sort === 'soonest') {
-      list = [...list].sort((a, b) => toDate(a.primary.eventDate) - toDate(b.primary.eventDate));
     }
     return list;
   }, [withDistance, searchTags, searchText]);
@@ -589,13 +582,6 @@ export function EventsMap() {
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
 
-  // What VanishSearchInput's placeholder cycles through — same pattern as
-  // mobile/Quests.jsx's own search bar.
-  const searchPlaceholders = [
-    'Search',
-    ...availableTags.slice(0, 4).map((tag) => `Try #${tag}`),
-  ];
-
   // Built once and placed differently per breakpoint below, rather than
   // duplicated: mobile keeps it in normal document flow above the map
   // (unchanged); desktop moves it into the sidebar card and floats the
@@ -803,8 +789,6 @@ export function EventsMap() {
           </MobileFilterSheet>
         )}
       </div>
-
-      {filterSheet}
     </div>
   );
 }

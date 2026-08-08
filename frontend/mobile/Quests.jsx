@@ -831,8 +831,13 @@ export function QuestDetailBody({
       {/* Same as the quest's own map detail (MapQuestDetailBody.jsx) — this
           used to link to this app's own /map view instead, but from a
           quest someone's already RSVP'd to, what they want is directions
-          there, not a re-pan of the in-app map. */}
-      <LocationLink location={selected.location} lat={selected.lat} lng={selected.lng} />
+          there, not a re-pan of the in-app map. Side quests are excluded
+          entirely — their "location" is a generic prompt ("Any local
+          park," "Your neighborhood"), not a real address, so there's
+          nowhere real for a directions link to point. */}
+      {!primary.isDefault && (
+        <LocationLink location={selected.location} lat={selected.lat} lng={selected.lng} />
+      )}
       {/* Side quests are a personal challenge, not an event with capacity —
           there's no one else's attendance to count, so this stays an
           organization-quest-only row. Once checked in (org quests only —
@@ -1541,7 +1546,22 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
     } else if (activity === 'mine') {
       list = segmentedList.filter((s) => s.occurrences.some((o) => (o.rsvpd || []).includes(user?.uid)));
     } else {
-      list = segmentedList;
+      // Default browsing view — a one-off quest already RSVP'd to (or
+      // already attended, e.g. checked in before its own eventDate) has
+      // nothing left to "explore": nobody needs it competing for space
+      // with quests they haven't acted on yet, and it's still reachable
+      // via the Activity filter above. A *recurring* series stays,
+      // regardless of any one occurrence's own RSVP/attended status — it
+      // almost certainly still has other upcoming dates worth seeing,
+      // and recurrenceFrequency (not occurrence count) is what actually
+      // marks it recurring, not incidentally down to its last date.
+      list = segmentedList.filter((s) => {
+        if (s.primary.recurrenceFrequency) return true;
+        const occurrence = s.primary;
+        const alreadyRsvpd = (occurrence.rsvpd || []).includes(user?.uid);
+        const alreadyAttended = attendedAtByEventId?.has(occurrence.id);
+        return !alreadyRsvpd && !alreadyAttended;
+      });
     }
 
     if (searchTags.length > 0) {

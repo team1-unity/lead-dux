@@ -2879,12 +2879,11 @@ a.org-home-stat-tile:hover {
    row pair (was jumbled into one unlabeled Sort & Activity group before;
    this scans faster). A fixed label column keeps every row's pills
    starting at the same left edge regardless of label length ("Sort" vs.
-   "Activity"). Each group is visually separated by a divider line (like
-   .profile-settings-list's rows) rather than plain vertical gap alone —
-   before this, Type/Activity/Sort's pills all sat close enough together
-   that the panel read as one undifferentiated block of buttons instead
-   of three distinct groups; a rule plus a bit more breathing room makes
-   the grouping legible without re-reading every label. */
+   "Activity"). Visual separation between groups comes entirely from the
+   sibling .quest-filter-divider <hr> above, not anything on this rule
+   itself — before that divider existed, Type/Activity/Sort's pills sat
+   close enough together that the panel read as one undifferentiated
+   block of buttons instead of three distinct groups. */
 .quest-filter-group-inline {
   display: flex;
   /* flex-start, not center — when a row's pills wrap onto a second line
@@ -2895,14 +2894,9 @@ a.org-home-stat-tile:hover {
      with the first pill row regardless of how many lines wrap below it. */
   align-items: flex-start;
   gap: 14px;
-  padding-bottom: 18px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--border);
-}
-.quest-filter-group-inline:last-child {
-  padding-bottom: 0;
-  margin-bottom: 0;
-  border-bottom: none;
+  /* Spacing/separation between groups is .quest-filter-divider's own
+     <hr> (see above) — no border-bottom here too, or every gap doubles
+     up into two visible lines. */
 }
 .quest-filter-group-inline .quest-filter-group-label {
   margin: 0;

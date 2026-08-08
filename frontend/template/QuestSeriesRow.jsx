@@ -161,7 +161,11 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
       ) : (
         formatEventDate(selected.eventDate) && <p className="data-row-sub">{formatEventDate(selected.eventDate)}</p>
       )}
-      {selected.location && <p className="data-row-sub">{selected.location}</p>}
+      {/* Side quests' "location" is a generic prompt ("Any local park"),
+          not a real place — left out of this row for the same reason
+          LocationLink is skipped for them elsewhere (mobile/Quests.jsx,
+          MapQuestDetailBody.jsx). */}
+      {!primary.isDefault && selected.location && <p className="data-row-sub">{selected.location}</p>}
       {formatRecurrence(primary) && <p className="data-row-sub">{formatRecurrence(primary)}</p>}
       {showOwner && (
         <p className="data-row-sub">{primary.isDefault ? 'Default neighborhood quest' : primary.orgName || ''}</p>

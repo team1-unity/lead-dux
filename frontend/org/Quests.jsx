@@ -21,14 +21,7 @@ import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { LocationLink } from '@shared/LocationLink.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
-import { VanishSearchInput } from '@shared/VanishSearchInput.jsx';
-import {
-  IconPlus,
-  IconEdit,
-  IconTrash,
-  IconChevron,
-  IconUsers,
-} from '@shared/icons.jsx';
+import { IconPlus, IconEdit, IconTrash, IconChevron, IconUsers } from '@shared/icons.jsx';
 
 // The compact collapsed row — title, star rating, and date (same flat,
 // avatar-free card style as the redesigned member-facing mobile/Quests.jsx,
@@ -59,7 +52,6 @@ function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, childr
         data-active={isActive ? 'true' : undefined}
         data-past={isPast ? 'true' : undefined}
       >
-
         <button
           type='button'
           className='quest-card-head'
@@ -154,7 +146,12 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           text is actually gated on showTitle. */}
       <div style={{ position: 'relative', minHeight: 36 }}>
         <div className='quest-detail-icon-actions'>
-          <ShareButton seriesId={primary.seriesId} questTitle={primary.title} iconOnly disabled={a.busy} />
+          <ShareButton
+            seriesId={primary.seriesId}
+            questTitle={primary.title}
+            iconOnly
+            disabled={a.busy}
+          />
           <button
             type='button'
             className='quest-icon-btn'
@@ -355,7 +352,10 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
       {/* Its own stacked popup rather than growing the QR modal above —
           confirming/cancelling here never changes that modal's size. */}
       {confirmingRefresh && (
-        <LightboxBackdrop onClose={() => setConfirmingRefresh(false)} label='Confirm regenerate QR code'>
+        <LightboxBackdrop
+          onClose={() => setConfirmingRefresh(false)}
+          label='Confirm regenerate QR code'
+        >
           <div className='qr-modal-content' onClick={(e) => e.stopPropagation()}>
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
@@ -416,7 +416,9 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           three sharing QuestReviewsList. */}
       {series.reviewCount > 0 && (
         <div className='quest-expand-section' style={{ paddingTop: 12 }}>
-          <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
+          <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>
+            Reviews
+          </p>
           <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
         </div>
       )}
@@ -479,9 +481,10 @@ function OrgQuests({ creating, setCreating }) {
   }, [user]);
 
   const seriesList = useMemo(
-    () => (quests
-      ? attachSeriesRatings(groupBySeries(quests), seriesAggregates).sort(compareSeriesForOrgList)
-      : []),
+    () =>
+      quests
+        ? attachSeriesRatings(groupBySeries(quests), seriesAggregates).sort(compareSeriesForOrgList)
+        : [],
     [quests, seriesAggregates],
   );
 

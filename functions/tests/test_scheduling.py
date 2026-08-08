@@ -330,6 +330,68 @@ class TestUpdateQuest:
         assert len(notifications) == 1
         assert notifications[0].to_dict()["kind"] == "quest_rescheduled"
 
+    # Regression test for a real bug: every occurrence of a recurring series
+    # is given the exact same title/description/tags/location/capacity/
+    # accommodation/tier/timezone at creation time (see _quest_doc_fields) —
+    # but update_quest only ever wrote to the single doc it was called with,
+    # so editing e.g. a typo in the title on one occurrence's edit form
+    # silently desynced it from every other date in the same series, a state
+    # creation itself never allows to happen. eventDate/eventEndTime/rsvpd
+    # stay occurrence-specific and must NOT propagate.
+    def test_editing_a_shared_field_propagates_to_every_occurrence_in_the_series(
+        self, fake_firestore, make_request, call,
+    ):
+        seed_quest(
+            fake_firestore, "quest-1", orgId="org-1", seriesId="series-1",
+            title="Trail Cleanup", capacity=20,
+            eventDate=dt.datetime(2026, 7, 20, 14, 0, tzinfo=dt.timezone.utc),
+        )
+        seed_quest(
+            fake_firestore, "quest-2", orgId="org-1", seriesId="series-1",
+            title="Trail Cleanup", capacity=20, rsvpd=["user-1"],
+            eventDate=dt.datetime(2026, 7, 27, 14, 0, tzinfo=dt.timezone.utc),
+        )
+
+        call(main.update_quest, make_request(
+            data={
+                "questId": "quest-1",
+                "title": "Trail Cleanup (updated)",
+                "capacity": 30,
+                "eventDate": "2026-07-20T15:00",
+                "timezone": "UTC",
+            },
+            uid="org-1", role="organization",
+        ))
+
+        quests = fake_firestore.client().collection("quests")
+        edited = quests.document("quest-1").get().to_dict()
+        sibling = quests.document("quest-2").get().to_dict()
+
+        assert edited["title"] == "Trail Cleanup (updated)"
+        assert edited["capacity"] == 30
+        # The sibling's own title/capacity picked up the same edit...
+        assert sibling["title"] == "Trail Cleanup (updated)"
+        assert sibling["capacity"] == 30
+        # ...but its own date and RSVPs, both occurrence-specific, are
+        # completely untouched by an edit made through quest-1's own form.
+        assert sibling["eventDate"] == dt.datetime(2026, 7, 27, 14, 0, tzinfo=dt.timezone.utc)
+        assert sibling["rsvpd"] == ["user-1"]
+
+    def test_editing_a_standalone_quest_touches_no_other_docs(self, fake_firestore, make_request, call):
+        # A standalone quest's seriesId is just its own doc id (see
+        # _quest_doc_fields' own module note) — the sibling query in
+        # update_quest must find nothing else to touch here.
+        seed_quest(fake_firestore, "quest-1", orgId="org-1", seriesId="quest-1", title="Trail Cleanup")
+        seed_quest(fake_firestore, "quest-2", orgId="org-1", seriesId="quest-2", title="Trail Cleanup")
+
+        call(main.update_quest, make_request(
+            data={"questId": "quest-1", "title": "Trail Cleanup (updated)"},
+            uid="org-1", role="organization",
+        ))
+
+        untouched = fake_firestore.client().collection("quests").document("quest-2").get().to_dict()
+        assert untouched["title"] == "Trail Cleanup"
+
 
 class TestMakeQuestRecurring:
     def test_converts_standalone_quest_and_generates_remaining_dates(self, fake_firestore, make_request, call):
