@@ -161,7 +161,16 @@ export function Home() {
     if (!user) return;
     return onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.exists() ? snap.data() : {};
-      setProfile({ name: data.name || '', duckSkin: data.duckSkin || null });
+      // Same document ProgressCard would otherwise independently re-read
+      // below — pulling points/certificateIssued off this snapshot too and
+      // passing them down (see its own `profile` prop) means one live
+      // listener covers both instead of two separate reads of the same doc.
+      setProfile({
+        name: data.name || '',
+        duckSkin: data.duckSkin || null,
+        points: data.points || 0,
+        certificateIssued: Boolean(data.certificateIssued),
+      });
     });
   }, [user]);
 
@@ -202,7 +211,7 @@ export function Home() {
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <ProgressCard />
+          <ProgressCard profile={{ points: profile.points, certificateIssued: profile.certificateIssued }} />
         </div>
       </PageMotion>
     </>

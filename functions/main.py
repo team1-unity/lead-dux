@@ -347,6 +347,27 @@ def _parse_event_datetime(value, field_name: str, tz: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+# update_quest's own "did eventDate actually change" check needs this, not
+# raw equality — the org's edit form can only ever express/round-trip a
+# date down to whole-minute precision (see naturalDate.js's
+# fullWallClockPartsInZone, which formats year/month/day/hour/minute only,
+# no seconds), but a quest's *stored* eventDate can carry real sub-minute
+# precision (e.g. seed_demo_data.py's NOW = datetime.now(timezone.utc) —
+# whatever real seconds/microseconds happened to be on the clock when the
+# script ran). Comparing raw datetimes meant simply opening a seeded
+# quest's edit form and saving *any* unrelated field (description,
+# capacity, tags — nothing date-related) silently re-sent that same
+# minute with its seconds zeroed out, which read as a genuine reschedule
+# and wiped every existing RSVP with no warning — the frontend's own
+# "this will clear RSVPs" confirmation never fired either, since *it*
+# compares the same seconds-less display string before/after and saw no
+# change. Truncating both sides to the minute here is what the frontend
+# can actually promise to detect, so that's the only precision this
+# comparison should ever care about.
+def _truncate_to_minute(value):
+    return value.replace(second=0, microsecond=0) if value else value
+
+
 def _validate_timezone(value) -> str:
     if not isinstance(value, str) or not value:
         raise https_fn.HttpsError(
@@ -1606,7 +1627,7 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
             else None
         )
         old_event_date = quest.get("eventDate")
-        if new_event_date != old_event_date:
+        if _truncate_to_minute(new_event_date) != _truncate_to_minute(old_event_date):
             update["eventDate"] = new_event_date
             # Side quests can go from having a date to having none (or vice
             # versa) freely — create_default_quest already treats a missing
@@ -1867,6 +1888,14 @@ def _record_rsvp(transaction, quest_ref, uid):
 # Callable from the quest list — adds the caller's uid to that quest's
 # rsvpd list. Only "user" accounts RSVP; organizations/admins just manage
 # or view quests.
+#
+# A cold start here (a fresh container loading this whole module —
+# including the qrcode and genai SDKs this function never touches) can add
+# several seconds on top of the couple of Firestore round-trips this
+# actually needs. min_instances=1 would keep one instance warm to avoid
+# that, at the cost of paying for it to sit idle 24/7 instead of scaling to
+# zero like every other function here — deliberately left at the file's
+# default (0) for now pending a decision on that tradeoff.
 @https_fn.on_call()
 def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -2039,6 +2068,10 @@ def refresh_event_qr_code(req: https_fn.CallableRequest) -> dict:
 # navigates there instead of calling this itself. Idempotent: scanning an
 # already-checked-in code again succeeds with alreadyCheckedIn=True rather
 # than erroring, since a double scan is an expected accident, not an attack.
+#
+# Same cold-start tradeoff as rsvp_to_quest above (check-in is at least as
+# frequent a tap) — left at the default (min_instances=0) for the same
+# reason, pending a decision on the recurring cost of keeping it warm.
 @https_fn.on_call()
 def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -2278,7 +2311,18 @@ def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
     blob.patch()
 
     ref = _photo_submission_ref(db, quest_id, uid)
-    existing_snap = ref.get()
+    user_ref = db.collection("users").document(uid)
+    # These two don't depend on each other's result — one round-trip via
+    # get_all instead of two serial .get()s. Matched by reference rather
+    # than by list position, since get_all doesn't guarantee returning
+    # snapshots in the same order as the refs passed in.
+    existing_snap = user_snap = None
+    for snap in db.get_all([ref, user_ref]):
+        if snap.reference == ref:
+            existing_snap = snap
+        else:
+            user_snap = snap
+
     existing = existing_snap.to_dict() if existing_snap.exists else None
     # A pending or approved submission already occupies this quest's one
     # slot; only a rejected (or no) prior submission can be (re)submitted
@@ -2289,7 +2333,6 @@ def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
             "You've already submitted a photo for this quest.",
         )
 
-    user_snap = db.collection("users").document(uid).get()
     user_name = user_snap.to_dict().get("name") if user_snap.exists else None
 
     ref.set({
@@ -3330,10 +3373,18 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
         for doc in db.collection("attendance").where("eventId", "==", quest_id).stream()
     }
 
+    # One batched read for every attendee's name/email, not one
+    # users/{uid}.get() per RSVP inside the loop below — a well-attended
+    # quest was doing one serial round-trip per attendee just to list them.
+    rsvpd_uids = quest.get("rsvpd", [])
+    users_by_uid = {}
+    if rsvpd_uids:
+        refs = [db.collection("users").document(uid) for uid in rsvpd_uids]
+        users_by_uid = {s.id: s.to_dict() for s in db.get_all(refs) if s.exists}
+
     attendees = []
-    for uid in quest.get("rsvpd", []):
-        user_snap = db.collection("users").document(uid).get()
-        user_data = user_snap.to_dict() if user_snap.exists else {}
+    for uid in rsvpd_uids:
+        user_data = users_by_uid.get(uid, {})
         attendance = attendance_by_uid.get(uid)
         checked_in_at = attendance.get("checkedInAt") if attendance else None
         attendees.append({
@@ -3586,12 +3637,24 @@ def list_quest_reviews(req: https_fn.CallableRequest) -> dict:
 
     quest = snap.to_dict()
     series_id = quest.get("seriesId") or quest_id
+    review_dicts = [
+        doc.to_dict()
+        for doc in db.collection("questSeries").document(series_id).collection("reviews").stream()
+    ]
+
+    # One batched read for every reviewer's name, not one users/{uid}.get()
+    # per review inside the loop below — a popular quest series with dozens
+    # of reviews was doing dozens of serial round-trips just to label them.
+    uids = {r["uid"] for r in review_dicts if r.get("uid")}
+    users_by_uid = {}
+    if uids:
+        refs = [db.collection("users").document(uid) for uid in uids]
+        users_by_uid = {s.id: s.to_dict() for s in db.get_all(refs) if s.exists}
+
     reviews = []
-    for doc in db.collection("questSeries").document(series_id).collection("reviews").stream():
-        review = doc.to_dict()
+    for review in review_dicts:
         uid = review.get("uid")
-        user_snap = db.collection("users").document(uid).get() if uid else None
-        user_data = user_snap.to_dict() if user_snap is not None and user_snap.exists else {}
+        user_data = users_by_uid.get(uid, {})
         created_at = review.get("createdAt")
         event_date = review.get("eventDate")
         reviews.append({

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
 import { computeBadges } from './badges.js';
+import { getCachedCollection } from './collectionCache.js';
 
 // Shared by Profile.jsx (the full badges preview) and BottomNav.jsx (the
 // last-3-earned icons next to the name in the avatar dropdown) — one fetch
@@ -14,7 +15,7 @@ export function useEarnedBadges(user) {
     if (!user) return;
     let cancelled = false;
     Promise.all([
-      getDocs(collection(db, 'quests')),
+      getCachedCollection(db, 'quests'),
       getDocs(query(collection(db, 'attendance'), where('userId', '==', user.uid))),
       getDoc(doc(db, 'users', user.uid)),
     ]).then(([questsSnap, attendanceSnap, userSnap]) => {

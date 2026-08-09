@@ -5,6 +5,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
+import { getCachedCollection } from '@shared/collectionCache.js';
 import {
   callRsvpToQuest,
   callCancelRsvp,
@@ -1379,9 +1380,9 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
   function load() {
     setLoadError(null);
     Promise.all([
-      getDocs(collection(db, 'quests')),
-      getDocs(collection(db, 'questSeries')),
-      getDocs(collection(db, 'organizations')),
+      getCachedCollection(db, 'quests'),
+      getCachedCollection(db, 'questSeries'),
+      getCachedCollection(db, 'organizations'),
     ])
       .then(([questsSnap, seriesSnap, orgsSnap]) => {
         const all = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
