@@ -3919,11 +3919,12 @@ a.org-home-stat-tile:hover {
 
 /* QuestScanner.jsx's own camera view — .quest-scanner-video is the div
    html5-qrcode itself renders its <video>/<canvas> into, so nothing else
-   should be nested inside it (the library owns that subtree). The error
-   message is instead an absolutely-positioned sibling, overlaid on top of
-   (not below) the live camera feed and pinned near the top of the frame —
-   the first thing visible without looking away from the camera, unlike
-   the plain-below-the-video placement this replaced. */
+   should be nested inside it (the library owns that subtree). The
+   "requesting access" status message is an absolutely-positioned
+   sibling, overlaid on top of (not below) the live camera feed and
+   pinned near the top of the frame — the first thing visible without
+   looking away from the camera. The error message (see its own rule
+   below) is NOT overlaid the same way — see its own comment for why. */
 .quest-scanner {
   position: relative;
   margin-top: 12px;
@@ -3935,15 +3936,19 @@ a.org-home-stat-tile:hover {
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
+/* Not position:absolute like .quest-scanner-status below — that overlay
+   treatment only makes sense while a live camera feed is showing behind
+   it, and by the time `error` is ever set, .start() has already failed,
+   so .quest-scanner-video is empty and collapsed to 0 height. Overlaid
+   there anyway, this message had no in-flow box of its own to grow the
+   card's height to fit it, so a long one (the raw getUserMedia error
+   text can run several lines) visually floated past the collapsed
+   card's own bottom edge instead of the card growing to actually show
+   all of it. In normal flow instead, the card grows with it. */
 .quest-scanner-error {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
   width: calc(100% - 20px);
   max-width: 300px;
-  z-index: 2;
-  margin: 0;
+  margin: 10px auto 0;
 }
 /* The ordinary "browser's native permission dialog is up" wait, not a
    problem — same position as .quest-scanner-error (they're never both
@@ -4752,6 +4757,31 @@ button.data-row:active:not(:disabled) {
    9-tone tag rack uses (see tagTones.js/TagStamp) — a milestone or tier
    badge sets --rank-color/--rank-ink inline from its own tier name. */
 
+/* Title + "N to Rank" stat, stacked (not side-by-side) by default — at
+   mobile widths, "Leadership Rank — IRON" and "40 to Bronze" sharing one
+   row under justify-content:space-between left too little room for the
+   title, wrapping it to two lines while the stat sat isolated on the
+   first. Stacked, the title gets the card's full width to itself.
+   Restored to one row only at the same 860px breakpoint the rest of this
+   file uses for desktop-only treatments, where the wider hero card (and
+   Certificate/admin panel) has room for both side by side. */
+.rank-progress-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+@media (min-width: 860px) {
+  .rank-progress-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    text-align: left;
+    gap: 12px;
+  }
+}
+
 .rank-progress-track {
   position: relative;
   width: 100%;
@@ -4760,6 +4790,14 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-well);
   overflow: hidden;
   margin: 1rem 0 2rem;
+}
+/* Same fix as .home-hero-panel's own override below, now needed here too:
+   mobile Home's ProgressCard sits inside .home-content, whose own
+   background is this exact same --paper-well — without this, the track's
+   empty portion was camouflaged against its own card instead of reading
+   as an unfilled track behind the --accent fill. */
+.home-content .rank-progress-track {
+  background: var(--paper);
 }
 .rank-progress-fill {
   position: absolute;
@@ -4883,6 +4921,14 @@ button.data-row:active:not(:disabled) {
    solid fill instead, matching the reference layout this is modeled on. */
 .home-content {
   background: var(--paper-well);
+  /* Same full-bleed breakout as .home-scene above (width:100vw + a
+     negative-margin pair centered on 50vw) — without it, #root's own
+     16px horizontal padding left a gutter down both sides instead of
+     this card actually reaching the true screen edges the way the
+     illustration above it already does. */
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
   /* Rounded top corners, pulled up to overlap .home-scene's own bottom
      edge (negative margin) rather than just butting flush against it —
      reads as a rounded card tucked in behind/under the illustration, not
@@ -4891,6 +4937,14 @@ button.data-row:active:not(:disabled) {
      paints on top of the overlapped strip without needing one. */
   margin-top: -24px;
   border-radius: 24px 24px 0 0;
+  /* Grows to fill whatever's left of .home-page's own min-height:100vh
+     after .home-scene's fixed 42vh, so this card's own fill reaches the
+     true bottom edge instead of stopping short and revealing a strip of
+     .home-page's plain --paper underneath (its old margin-bottom did
+     exactly that, so it's gone now). Shorter-than-viewport content just
+     means more of this flex-grown box is empty fill below it; taller
+     content still grows the whole page and scrolls, same as before. */
+  flex: 1;
   /* Bottom-nav clearance lives here now, not on #root (see
      #root:has(.home-scene) above) — the background still paints all the
      way to the true bottom edge, but the actual content stops short of
@@ -4906,7 +4960,18 @@ button.data-row:active:not(:disabled) {
      without scrolling; desktop keeps the roomier original padding since
      it isn't the width mobile users are stuck scrolling on. */
   padding: 24px 20px 20px;
-  margin-bottom: 16px;
+}
+/* .home-content's own align-items:center (needed so .home-greeting-text's
+   short block of text reads centered) has a side effect on ProgressCard's
+   .ink-card: centered flex children size to their own content by default,
+   not the container's width, so the whole card (title row, progress bar,
+   milestones — everything inside it uses width:100%/full-row layouts that
+   only mean something once the card itself is actually full width) was
+   shrinking to whatever its widest line happened to need, then floating
+   centered with equal gaps on both sides instead of filling the card.
+   align-self:stretch overrides just this one child back to full width. */
+.home-content .ink-card {
+  align-self: stretch;
 }
 @media (min-width: 860px) {
   .home-greeting {
@@ -5085,9 +5150,11 @@ button.data-row:active:not(:disabled) {
    game-UI quick-slots (bordered, hard offset shadow, gold accent glow +
    press-down feedback) stacked top-right, floating independent of scroll
    — top bar is a bottom tab bar here, so that corner is free. Desktop
-   renders this same component inside .home-hero-panel instead (see its
-   own rules below), in-flow rather than floating, so there's no
-   min-width:860px variant of *this* block anymore. */
+   renders this same component inside .home-hero-card instead, in-flow
+   rather than floating (see the .home-hero-card-scoped rules below) — this
+   base rule's position:fixed only ever applies to the mobile HUD in
+   practice, since the desktop render is always reached through that
+   descendant selector's own position:static override instead. */
 .home-quick-actions {
   position: fixed;
   top: 16px;
@@ -5144,59 +5211,78 @@ button.data-row:active:not(:disabled) {
     transform: none;
   }
 }
-@media (min-width: 860px) {
-  /* Desktop swaps the mobile icon-only quick-slots for a floaty list
-     panel — no outer border or shadow, just a soft fill and hairline
-     dividers between rows, rather than three separate chunky buttons;
-     there's room here for labels to just sit readable next to their icon
-     instead of needing a game-HUD slot to read at a glance. */
-  .home-quick-actions {
-    top: 50%;
-    right: -10%;
-    transform: translateY(-50%);
-    gap: 0;
-    min-width: auto;
-    border-radius: var(--radius-lg);
-    background-color: var(--paper-card);
-    padding: 6px;
-  }
-  .home-quick-action {
-    width: auto;
-    height: auto;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 14px 16px;
-    border: none;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    transform: none;
-  }
-  .home-quick-action:not(:last-child) {
-    border-bottom: 1px solid var(--border);
-  }
-  /* The base (mobile) :hover/:active rules above set their own box-shadow
-     and transform for the game-HUD slot look — same selector, same
-     specificity, so without explicitly zeroing those two properties here
-     they'd still win (a later rule only overrides the properties it
-     actually declares, not the whole previous rule), leaving the flat
-     desktop list panel with a leftover chunky-button lift/shadow on
-     hover/press. */
-  .home-quick-action:hover,
-  .home-quick-action:active {
-    box-shadow: none;
-    transform: none;
-  }
-  .home-quick-action:hover {
-    background: var(--paper-well);
-  }
-  .home-quick-action-label {
-    display: inline;
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 0.9rem;
-    white-space: nowrap;
-  }
+/* Desktop swaps the mobile icon-only quick-slots for a flat, in-flow list
+   panel — no outer border/shadow/fixed positioning, just a soft fill and
+   hairline dividers between rows, rather than three separate floating
+   chunky buttons; there's room here for labels to just sit readable next
+   to their icon instead of needing a game-HUD slot to read at a glance.
+   Scoped to .home-hero-card (the only place this ever renders on
+   desktop — see Home.jsx's isDesktop branch), not a min-width media
+   query: this used to be width-gated, but the base rule's own
+   position:fixed/top/right still applied underneath it regardless of
+   viewport width, so the panel rendered fixed at this rule's old
+   top:50%/right:-10% instead of in-flow inside the hero card the way
+   Home.jsx actually nests it. Overriding position/top/right here instead
+   (keyed off the ancestor this only ever appears inside) removes it from
+   that fixed layer entirely, at any width.
+   align-items:stretch overrides the generic `nav { align-items: center }`
+   rule elsewhere in this file (for the settings/admin-data dashboard nav
+   bar) — harmless on the mobile HUD, where each icon slot is a fixed
+   46x46 square regardless of alignment, but it left each row here
+   shrink-wrapped and centered instead of stretched to the panel's full
+   width, so the hairline dividers only spanned a row's own content
+   instead of the whole card. */
+.home-hero-card .home-quick-actions {
+  position: static;
+  top: auto;
+  right: auto;
+  align-items: stretch;
+  gap: 0;
+  border-radius: var(--radius-lg);
+  background-color: var(--paper-card);
+  padding: 6px;
+}
+.home-hero-card .home-quick-action {
+  width: auto;
+  height: auto;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+.home-hero-card .home-quick-action:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+/* The base (mobile) :hover/:active rules above set their own box-shadow
+   and transform for the game-HUD slot look — same selector, same
+   specificity, so without explicitly zeroing those two properties here
+   they'd still win (a later rule only overrides the properties it
+   actually declares, not the whole previous rule), leaving the flat
+   desktop list panel with a leftover chunky-button lift/shadow on
+   hover/press. */
+.home-hero-card .home-quick-action:hover,
+.home-hero-card .home-quick-action:active {
+  box-shadow: none;
+  transform: none;
+}
+/* --paper, not --paper-well: this panel's own background is --paper-card
+   (see .home-hero-card .home-quick-actions above), and --paper-well is
+   literally the same color as --paper-card in light mode — hovering
+   "worked" (the rule applied) but was invisible there. --paper is
+   distinct from --paper-card in both themes, so this actually shows. */
+.home-hero-card .home-quick-action:hover {
+  background: var(--paper);
+}
+.home-hero-card .home-quick-action-label {
+  display: inline;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 /* Check in/My quests/Last quest — a compact horizontal row of equally-

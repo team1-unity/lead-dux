@@ -39,8 +39,8 @@ function toMillis(value) {
 // deliberate game-UI treatment (bordered slot, hard offset shadow,
 // lift-on-hover) rather than this app's usual flat StampButton, icon-only
 // and stacked in the top-right corner. Desktop: rendered in-flow inside
-// .home-hero-panel instead, as a plain list — icon + label rows divided
-// by hairlines (see .home-hero-panel .home-quick-action in style.css).
+// .home-hero-card instead, as a plain list — icon + label rows divided
+// by hairlines (see the .home-hero-card-scoped rules in style.css).
 // "My quests" only appears once there's an actual RSVP'd quest to jump to
 // (see useHasRsvpdQuest above); "Last quest" only once there's a past
 // quest to revisit (see useLastAttendedQuest above) — an empty
@@ -291,7 +291,8 @@ export function Home() {
           </div>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
+        <div className="home-content">
+          {greetingText}
           <ProgressCard profile={{ points: profile.points, certificateIssued: profile.certificateIssued }} />
         </div>
       </PageMotion>
