@@ -18,11 +18,12 @@ function formatEventDate(isoOrTimestamp) {
 // functions/main.py for exactly when each of these gets written
 // (update_quest on a date change, delete_quest/delete_quest_series/
 // keep-only-this-date on a cancellation, submit_feedback_request_response
-// once an organization answers a request). The reschedule/cancellation
-// copy explicitly says the app doesn't touch any calendar entry someone
-// may have already added — see AddToCalendar.jsx's own note that it only
-// ever generates a Google Calendar/.ics link, never anything this app
-// could reach back into later.
+// once an organization answers a request, approve_organization once an
+// admin approves a pending org). The reschedule/cancellation copy
+// explicitly says the app doesn't touch any calendar entry someone may
+// have already added — see AddToCalendar.jsx's own note that it only ever
+// generates a Google Calendar/.ics link, never anything this app could
+// reach back into later.
 function messageFor(notice) {
   const calendarNote = "This app can't remove or update anything you already added to your own calendar — please check it yourself.";
   if (notice.kind === 'quest_rescheduled') {
@@ -33,16 +34,30 @@ function messageFor(notice) {
       ? `An organization left feedback on your journal entry for this quest, and you earned ${notice.pointsAwarded} points. View it in your Journal.`
       : `An organization left feedback on your journal entry for this quest. View it in your Journal.`;
   }
+  if (notice.kind === 'org_approved') {
+    return "You're now a verified organization — you can start creating quests for volunteers to join.";
+  }
   return `This quest was cancelled by the organizer. ${calendarNote}`;
 }
 
-// A must-dismiss popup notice on the member Home screen (mobile/Home.jsx
-// only, not the browsing feed — see the module note there) for the two
-// ways a quest can change out from under someone who already RSVP'd.
-// Shows one notice at a time (oldest first) rather than a stacked list;
-// dismissing one reveals the next via the same live listener. Nothing to
-// render until there's actually something to say — same "reweighted,
-// unboxed, and deferred" instinct as everywhere else in this redesign.
+// Every other kind is about a specific quest (questTitle always set — see
+// _notify_user's callers); org_approved is the one exception, with neither
+// questId nor questTitle set at all.
+function titleFor(notice) {
+  return notice.kind === 'org_approved' ? "You're approved!" : notice.questTitle;
+}
+
+// A must-dismiss popup notice on a Home screen — mobile/Home.jsx (a
+// member's own) for the two ways a quest can change out from under someone
+// who already RSVP'd, and org/Home.jsx (an organization's own) for its
+// one-time "you're approved" notice. Keyed purely by the signed-in user's
+// own uid (see firestore.rules' identical check on this subcollection), so
+// this same component works unchanged for either role — nothing here is
+// user- or organization-specific. Shows one notice at a time (oldest
+// first) rather than a stacked list; dismissing one reveals the next via
+// the same live listener. Nothing to render until there's actually
+// something to say — same "reweighted, unboxed, and deferred" instinct as
+// everywhere else in this redesign.
 export function NotificationBanner() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
@@ -83,7 +98,7 @@ export function NotificationBanner() {
         <IconX width={16} height={16} />
       </button>
       <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700, paddingRight: 28 }}>
-        {notice.questTitle}
+        {titleFor(notice)}
       </p>
       <p style={{ margin: '6px 0 0' }}>{messageFor(notice)}</p>
     </div>

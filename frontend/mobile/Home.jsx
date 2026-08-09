@@ -141,6 +141,9 @@ function useHasRsvpdQuest(user) {
 // links into two of Explore Quests' own filters (your RSVP'd quests
 // always; revisit past quests only once there's actually a past quest to
 // revisit) rather than dropping someone straight into the quest feed.
+// These three sit in one horizontal row (.home-actions-row), not stacked
+// vertically — a compact, glanceable row of equally-sized buttons reads
+// more like a game's menu than a tall stack of full-width rows.
 // Rank progress is ProgressCard (@shared/ProgressCard.jsx — moved here
 // from Profile.jsx, its original home) — the full rank card (name,
 // points, progress bar, milestone ladder, certificate banner), not the
@@ -167,7 +170,16 @@ export function Home() {
     if (!user) return;
     return onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.exists() ? snap.data() : {};
-      setProfile({ name: data.name || '', duckSkin: data.duckSkin || null });
+      // Same document ProgressCard would otherwise independently re-read
+      // below — pulling points/certificateIssued off this snapshot too and
+      // passing them down (see its own `profile` prop) means one live
+      // listener covers both instead of two separate reads of the same doc.
+      setProfile({
+        name: data.name || '',
+        duckSkin: data.duckSkin || null,
+        points: data.points || 0,
+        certificateIssued: Boolean(data.certificateIssued),
+      });
     });
   }, [user]);
 
@@ -279,9 +291,8 @@ export function Home() {
           </div>
         </div>
 
-        <div className="home-content">
-          {greetingText}
-          <ProgressCard />
+        <div style={{ marginBottom: 16 }}>
+          <ProgressCard profile={{ points: profile.points, certificateIssued: profile.certificateIssued }} />
         </div>
       </PageMotion>
     </>

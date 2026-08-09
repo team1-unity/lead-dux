@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebaseapp.jsx';
 import { useAuth } from './AuthContext.jsx';
+import { getCachedCollection } from './collectionCache.js';
 import {
   groupBySeries,
   attachSeriesRatings,
@@ -248,9 +249,9 @@ export function EventsMap() {
     if (!user) return;
     setDataError(null);
     Promise.all([
-      getDocs(collection(db, 'quests')),
-      getDocs(collection(db, 'questSeries')),
-      getDocs(collection(db, 'organizations')),
+      getCachedCollection(db, 'quests'),
+      getCachedCollection(db, 'questSeries'),
+      getCachedCollection(db, 'organizations'),
       // Same query mobile/Quests.jsx's own Past Attended filter uses — an
       // eventId this map filters out below needs to match whichever
       // occurrence a user actually checked into, not just RSVP'd to.

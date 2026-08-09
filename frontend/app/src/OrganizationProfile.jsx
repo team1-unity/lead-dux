@@ -5,6 +5,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@shared/firebaseapp.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
+import { getCachedCollection } from '@shared/collectionCache.js';
 import {
   callUpdateOrganizationTags,
   callUpdateOrganizationProfile,
@@ -19,10 +20,10 @@ import { ImageUploadCard } from '@shared/ImageUploadCard.jsx';
 import { AvatarCropModal } from '@shared/AvatarCropModal.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { AddPropertyMenu } from '@shared/AddPropertyMenu.jsx';
+import { PlaceCombobox } from '@shared/PlaceCombobox.jsx';
 import { TagStamp } from '@shared/TagStamp.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { PhotoGallery } from '@shared/PhotoGallery.jsx';
-import { formatEventDate } from '@shared/QuestSeriesRow.jsx';
 import { groupBySeries, attachSeriesRatings, isUpcoming, getTrustStatus } from '@shared/questSeries.js';
 import { TrustTag } from '@shared/TrustTag.jsx';
 import { hashTone } from '@shared/tagTones.js';
@@ -76,20 +77,35 @@ const LOGO_EXT_BY_CONTENT_TYPE = {
   'image/heif': 'heif',
 };
 
-// Logo URL + every social link are optional and, for most orgs, blank —
-// rather than a wall of empty rows, they only show once added via "+ Add a
-// property" (same pattern as CreateQuestForm's Capacity/Tags), with a
-// remove control on any row that's already there. A field that already has
-// a value (from before this change, or a previous save) starts out shown,
-// not hidden behind the menu.
-const OPTIONAL_FIELD_ITEMS = [{ key: 'logoUrl', label: 'Logo URL' }, ...SOCIAL_LINK_FIELDS];
+// Website/Contact/Phone/Areas and every social link are optional and, for
+// most orgs, blank — rather than a wall of empty rows, they only show once
+// added via "+ Add a property" (same pattern as CreateQuestForm's
+// Capacity/Tags), with a remove control on any row that's already there. A
+// field that already has a value (from before this change, or a previous
+// save) starts out shown, not hidden behind the menu.
+const CORE_OPTIONAL_FIELD_ITEMS = [
+  { key: 'website', label: 'Website', placeholder: 'https://...' },
+  { key: 'contactEmail', label: 'Contact', placeholder: 'Empty' },
+  { key: 'phone', label: 'Phone', placeholder: 'Empty' },
+];
+const OPTIONAL_FIELD_ITEMS = [
+  ...CORE_OPTIONAL_FIELD_ITEMS,
+  { key: 'ltag', label: 'Areas' },
+  ...SOCIAL_LINK_FIELDS,
+];
 
 // One combined edit form for everything in the About section that has a
-// writer — phone, mission statement, category, logo, city/state, website,
-// contact email, social links (callUpdateOrganizationProfile), and
-// location/activity tags (callUpdateOrganizationTags, a separate call
-// since it's a separate backend function, but presented as one save here
-// to match the wireframe's single pencil icon on one About box).
+// writer — phone, mission statement, category, location, website, contact
+// email, social links (callUpdateOrganizationProfile), and activity tags
+// (callUpdateOrganizationTags, a separate call since it's a separate
+// backend function, but presented as one save here to match the
+// wireframe's single pencil icon on one About box).
+//
+// The logo is NOT one of these fields — it's edited directly from the
+// header's own avatar (see OrganizationProfile's handleLogoAvatarSave),
+// the same "click your own picture to change it" affordance
+// EditProfileModal already uses for a member's photo, rather than a
+// separate "Logo URL" row buried in this form.
 //
 // org.reason is deliberately NOT one of these fields — it's the org's
 // answer to "what do you hope to get out of this?" from their original
@@ -99,24 +115,35 @@ const OPTIONAL_FIELD_ITEMS = [{ key: 'logoUrl', label: 'Logo URL' }, ...SOCIAL_L
 // an internal approval detail with the org's own public bio — reverted to
 // admin-only; see functions/main.py's _SIMPLE_PROFILE_FIELDS.
 function AboutEditForm({ org, onSaved, onCancel }) {
-  const { user } = useAuth();
   const reduce = useReducedMotion();
-  const [logoCropOpen, setLogoCropOpen] = useState(false);
   const [fields, setFields] = useState({
-    logoUrl: org.logoUrl || '',
     category: org.category || '',
     missionStatement: org.missionStatement || '',
     phone: org.phone || '',
-    city: org.city || '',
-    state: org.state || '',
     website: org.website || '',
     contactEmail: org.contactEmail || '',
   });
+  const [location, setLocation] = useState({
+    location: org.location || '',
+    placeId: org.placeId || null,
+    lat: org.lat ?? null,
+    lng: org.lng ?? null,
+  });
+  // Starts already showing the current address (there's almost always one,
+  // set at signup — see Register.jsx) rather than a blank search box;
+  // focusing that readonly display (see the render below) swaps in the
+  // live search to replace it. Same "readonly display <-> live search"
+  // pattern as CreateQuestForm's own location field.
+  const [editingLocation, setEditingLocation] = useState(!org.placeId);
+  const [placeKey, setPlaceKey] = useState(0);
   const [social, setSocial] = useState({ ...org.socialLinks });
   const [ltagInput, setLtagInput] = useState((org.ltag || []).join(', '));
   const [etagInput, setEtagInput] = useState((org.etag || []).join(', '));
   const [addedFields, setAddedFields] = useState(() => ({
-    logoUrl: Boolean(org.logoUrl),
+    website: Boolean(org.website),
+    contactEmail: Boolean(org.contactEmail),
+    phone: Boolean(org.phone),
+    ltag: (org.ltag || []).length > 0,
     instagram: Boolean(org.socialLinks?.instagram),
     facebook: Boolean(org.socialLinks?.facebook),
     twitter: Boolean(org.socialLinks?.twitter),
@@ -136,24 +163,9 @@ function AboutEditForm({ org, onSaved, onCancel }) {
   // reappearing with whatever was typed before removal.
   function removeOptionalField(key) {
     setAddedFields((f) => ({ ...f, [key]: false }));
-    if (key === 'logoUrl') setFields((f) => ({ ...f, logoUrl: '' }));
+    if (key === 'ltag') setLtagInput('');
+    else if (key in fields) setFields((f) => ({ ...f, [key]: '' }));
     else setSocial((s) => ({ ...s, [key]: '' }));
-  }
-
-  // Saves immediately (a targeted update_organization_profile call with
-  // just logoUrl), not deferred to this form's own Save — cropping and
-  // clicking Save inside AvatarCropModal already is the confirmation for
-  // this specific change, same as EditProfileModal's identical pattern for
-  // a member's own profile picture. `fields.logoUrl` still updates too, so
-  // the rest of this form (and its own eventual Save) stays in sync with
-  // whatever the logo actually is right now.
-  async function handleLogoAvatarSave(file) {
-    const ext = LOGO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
-    const path = `avatars/${user.uid}/${Date.now()}.${ext}`;
-    await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
-    const url = await getDownloadURL(storageRef(storage, path));
-    await callUpdateOrganizationProfile({ logoUrl: url });
-    setFields((f) => ({ ...f, logoUrl: url }));
   }
 
   async function save(e) {
@@ -164,13 +176,16 @@ function AboutEditForm({ org, onSaved, onCancel }) {
       const profilePayload = Object.fromEntries(
         Object.entries(fields).map(([k, v]) => [k, v.trim() || null]),
       );
+      const locationPayload = location.placeId
+        ? { location: location.location, placeId: location.placeId, lat: location.lat, lng: location.lng }
+        : {};
       const ltag = ltagInput.split(',').map((t) => t.trim()).filter(Boolean);
       const etag = etagInput.split(',').map((t) => t.trim()).filter(Boolean);
       await Promise.all([
-        callUpdateOrganizationProfile({ ...profilePayload, socialLinks: social }),
+        callUpdateOrganizationProfile({ ...profilePayload, ...locationPayload, socialLinks: social }),
         callUpdateOrganizationTags({ ltag, etag }),
       ]);
-      onSaved({ ...profilePayload, socialLinks: social, ltag, etag });
+      onSaved({ ...profilePayload, ...locationPayload, socialLinks: social, ltag, etag });
     } catch (err) {
       setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
@@ -179,8 +194,13 @@ function AboutEditForm({ org, onSaved, onCancel }) {
   }
 
   return (
-    <>
     <form onSubmit={save} className="about-edit-doc">
+      {/* Same fixed-height/internal-scroll shape as CreateQuestForm's own
+          .quest-form-scroll — everything that can grow (the mission
+          statement, an ever-longer list of added properties) scrolls
+          inside this wrapper instead of pushing Save/Cancel down and
+          growing the whole About card past a reasonable height. */}
+      <div className="about-edit-scroll">
       {/* Same borderless auto-grow trick as the create-quest description
           field (see CreateQuestForm.jsx/style.css) — a textarea and an
           invisible ::after sharing one grid cell, kept in sync via
@@ -211,78 +231,30 @@ function AboutEditForm({ org, onSaved, onCancel }) {
         </div>
 
         <div className="quest-form-row">
-          <span className="quest-form-row-label" id="org-location-label">Location</span>
+          <label className="quest-form-row-label" htmlFor="org-location">Location</label>
           <div className="quest-form-row-value">
-            <div className="flex gap-sm">
-              <input
-                type="text"
-                aria-labelledby="org-location-label"
-                aria-label="City"
-                placeholder="City"
-                value={fields.city}
-                onChange={(e) => setFields((f) => ({ ...f, city: e.target.value }))}
+            {editingLocation ? (
+              <PlaceCombobox
+                key={placeKey}
+                id="org-location"
+                ariaLabel="Organization location"
+                placeholder="Search for an address or venue…"
+                onSelect={(selection) => {
+                  setLocation(selection);
+                  setEditingLocation(false);
+                  setPlaceKey((k) => k + 1);
+                }}
               />
+            ) : (
               <input
+                id="org-location"
                 type="text"
-                aria-labelledby="org-location-label"
-                aria-label="State"
-                placeholder="State"
-                value={fields.state}
-                onChange={(e) => setFields((f) => ({ ...f, state: e.target.value }))}
+                readOnly
+                value={location.location}
+                onFocus={() => setEditingLocation(true)}
+                placeholder="Empty"
               />
-            </div>
-          </div>
-        </div>
-
-        <div className="quest-form-row">
-          <label className="quest-form-row-label" htmlFor="org-website">Website</label>
-          <div className="quest-form-row-value">
-            <input
-              id="org-website"
-              type="text"
-              placeholder="https://..."
-              value={fields.website}
-              onChange={(e) => setFields((f) => ({ ...f, website: e.target.value }))}
-            />
-          </div>
-        </div>
-
-        <div className="quest-form-row">
-          <label className="quest-form-row-label" htmlFor="org-email">Contact</label>
-          <div className="quest-form-row-value">
-            <input
-              id="org-email"
-              type="text"
-              placeholder="Empty"
-              value={fields.contactEmail}
-              onChange={(e) => setFields((f) => ({ ...f, contactEmail: e.target.value }))}
-            />
-          </div>
-        </div>
-
-        <div className="quest-form-row">
-          <label className="quest-form-row-label" htmlFor="org-phone">Phone</label>
-          <div className="quest-form-row-value">
-            <input
-              id="org-phone"
-              type="text"
-              placeholder="Empty"
-              value={fields.phone}
-              onChange={(e) => setFields((f) => ({ ...f, phone: e.target.value }))}
-            />
-          </div>
-        </div>
-
-        <div className="quest-form-row">
-          <label className="quest-form-row-label" htmlFor="org-ltag">Areas</label>
-          <div className="quest-form-row-value">
-            <input
-              id="org-ltag"
-              type="text"
-              placeholder="Downtown, Riverside"
-              value={ltagInput}
-              onChange={(e) => setLtagInput(e.target.value)}
-            />
+            )}
           </div>
         </div>
 
@@ -299,7 +271,38 @@ function AboutEditForm({ org, onSaved, onCancel }) {
           </div>
         </div>
 
-        {addedFields.logoUrl && (
+        {CORE_OPTIONAL_FIELD_ITEMS.map(({ key, label, placeholder }) => addedFields[key] && (
+          <motion.div
+            className="quest-form-row"
+            key={key}
+            initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduce ? 0 : 0.18 }}
+          >
+            <div className="quest-form-row-label">
+              <button
+                type="button"
+                className="quest-form-label-remove"
+                aria-label={`Remove ${label} property`}
+                onClick={() => removeOptionalField(key)}
+              >
+                {label}
+              </button>
+            </div>
+            <div className="quest-form-row-value">
+              <label className="visually-hidden" htmlFor={`org-${key}`}>{label}</label>
+              <input
+                id={`org-${key}`}
+                type="text"
+                placeholder={placeholder}
+                value={fields[key]}
+                onChange={(e) => setFields((f) => ({ ...f, [key]: e.target.value }))}
+              />
+            </div>
+          </motion.div>
+        ))}
+
+        {addedFields.ltag && (
           <motion.div
             className="quest-form-row"
             initial={{ opacity: 0, y: reduce ? 0 : 8 }}
@@ -310,36 +313,20 @@ function AboutEditForm({ org, onSaved, onCancel }) {
               <button
                 type="button"
                 className="quest-form-label-remove"
-                aria-label="Remove Logo URL property"
-                onClick={() => removeOptionalField('logoUrl')}
+                aria-label="Remove Areas property"
+                onClick={() => removeOptionalField('ltag')}
               >
-                Logo URL
+                Areas
               </button>
             </div>
             <div className="quest-form-row-value">
-              <div className="flex items-center gap-sm" style={{ marginBottom: 10 }}>
-                <button
-                  type="button"
-                  className="avatar-edit-trigger"
-                  onClick={() => setLogoCropOpen(true)}
-                  aria-label="Change logo"
-                >
-                  <OrgAvatar name={org.name} seed={user.uid} logoUrl={fields.logoUrl} />
-                  <span className="avatar-edit-trigger-badge" aria-hidden="true">
-                    <IconEdit width={14} height={14} />
-                  </span>
-                </button>
-                <p className="field-optional" style={{ margin: 0 }}>
-                  Tap to crop and upload a photo, or paste a URL below.
-                </p>
-              </div>
-              <label className="visually-hidden" htmlFor="org-logo">Logo URL</label>
+              <label className="visually-hidden" htmlFor="org-ltag">Areas</label>
               <input
-                id="org-logo"
+                id="org-ltag"
                 type="text"
-                placeholder="https://..."
-                value={fields.logoUrl}
-                onChange={(e) => setFields((f) => ({ ...f, logoUrl: e.target.value }))}
+                placeholder="Downtown, Riverside"
+                value={ltagInput}
+                onChange={(e) => setLtagInput(e.target.value)}
               />
             </div>
           </motion.div>
@@ -381,6 +368,7 @@ function AboutEditForm({ org, onSaved, onCancel }) {
           onSelect={addOptionalField}
         />
       </div>
+      </div>
 
       {error && <p className="quest-form-error">{error}</p>}
 
@@ -393,16 +381,6 @@ function AboutEditForm({ org, onSaved, onCancel }) {
         </button>
       </div>
     </form>
-    {logoCropOpen && (
-      <AvatarCropModal
-        label="Logo"
-        accept={LOGO_CONTENT_TYPES.join(',')}
-        maxSizeBytes={LOGO_MAX_SIZE_BYTES}
-        onClose={() => setLogoCropOpen(false)}
-        onSave={handleLogoAvatarSave}
-      />
-    )}
-    </>
   );
 }
 
@@ -522,7 +500,11 @@ function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
         </StampButton>
       )}
       {!modalOpen && error && <p className="box-danger">{error}</p>}
-      <PhotoGallery photos={urls} onDelete={canEdit ? handleDelete : undefined} />
+      <PhotoGallery
+        photos={urls}
+        onDelete={canEdit ? handleDelete : undefined}
+        className="photo-gallery-grid-fixed-4"
+      />
       {modalOpen && (
         <LightboxBackdrop onClose={closeModal} label="Upload image">
           <div className="detail-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -549,26 +531,13 @@ function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
   );
 }
 
-function OrgQuestCard({ series, orgId, orgName, orgLogoUrl }) {
-  const { primary, occurrences } = series;
+function OrgQuestCard({ series }) {
+  const { primary } = series;
   const rsvpCount = (primary.rsvpd || []).length;
   return (
     <Link to={`/quests/${series.seriesId}`} className="ink-card org-quest-card">
-      <span className="quest-thumb" aria-hidden="true" style={{ marginBottom: 8 }}>
-        <OrgAvatar name={orgName} seed={orgId} logoUrl={series.coverPhotos?.[0] || orgLogoUrl} />
-      </span>
       <p className="quest-title">{primary.title}</p>
-      {primary.location && (
-        <p className="quest-meta-row">
-          <IconPin /> {primary.location}
-        </p>
-      )}
-      {formatEventDate(primary.eventDate) && (
-        <p className="quest-org-line">
-          {formatEventDate(primary.eventDate)}
-          {occurrences.length > 1 ? ` (+${occurrences.length - 1} more date${occurrences.length > 2 ? 's' : ''})` : ''}
-        </p>
-      )}
+      {primary.description && <p className="quest-card-description">{primary.description}</p>}
       <p className="data-stat">{rsvpCount} RSVP'd</p>
     </Link>
   );
@@ -613,6 +582,20 @@ export function OrganizationProfile() {
   const [notFound, setNotFound] = useState(false);
   const [seriesList, setSeriesList] = useState(null);
   const [editingAbout, setEditingAbout] = useState(false);
+  const [logoCropOpen, setLogoCropOpen] = useState(false);
+
+  // Saves immediately, same as EditProfileModal's identical pattern for a
+  // member's own profile picture — cropping and clicking Save inside
+  // AvatarCropModal already is the confirmation for this specific change,
+  // not something that waits for the About form's own Save.
+  async function handleLogoAvatarSave(file) {
+    const ext = LOGO_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
+    const path = `avatars/${user.uid}/${Date.now()}.${ext}`;
+    await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+    const url = await getDownloadURL(storageRef(storage, path));
+    await callUpdateOrganizationProfile({ logoUrl: url });
+    setOrg((prev) => ({ ...prev, logoUrl: url }));
+  }
 
   useEffect(() => {
     getDoc(doc(db, 'organizations', orgId)).then((snap) => {
@@ -627,7 +610,7 @@ export function OrganizationProfile() {
   useEffect(() => {
     Promise.all([
       getDocs(query(collection(db, 'quests'), where('orgId', '==', orgId))),
-      getDocs(collection(db, 'questSeries')),
+      getCachedCollection(db, 'questSeries'),
     ]).then(([questsSnap, seriesSnap]) => {
       const quests = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
       const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
@@ -644,7 +627,23 @@ export function OrganizationProfile() {
     <PageMotion>
       {isOwner ? <BackLink to="/org" label="Home" /> : <BackLink to="/quests" label="Quests" />}
       <div className="ink-card org-profile-header">
-        {org.logoUrl ? (
+        {editMode ? (
+          <button
+            type="button"
+            className="avatar-edit-trigger"
+            onClick={() => setLogoCropOpen(true)}
+            aria-label="Change logo"
+          >
+            {org.logoUrl ? (
+              <img src={org.logoUrl} alt="" className="org-profile-logo" />
+            ) : (
+              <OrgAvatar name={org.name} seed={orgId} />
+            )}
+            <span className="avatar-edit-trigger-badge" aria-hidden="true">
+              <IconEdit width={14} height={14} />
+            </span>
+          </button>
+        ) : org.logoUrl ? (
           <img src={org.logoUrl} alt="" className="org-profile-logo" />
         ) : (
           <OrgAvatar name={org.name} seed={orgId} />
@@ -670,8 +669,8 @@ export function OrganizationProfile() {
         </p>
       )}
 
-      <div className="profile-grid">
-        <section className="ink-card">
+      <div className="profile-grid org-profile-grid">
+        <section className="ink-card org-profile-about">
           <div className="flex justify-between items-center">
             <h2 style={{ margin: 0 }}>About</h2>
             {editMode && !editingAbout && (
@@ -698,9 +697,9 @@ export function OrganizationProfile() {
           ) : (
             <>
               {org.missionStatement && <p style={{ margin: '10px 0 0' }}>{org.missionStatement}</p>}
-              {(org.city || org.state) && (
+              {org.location && (
                 <p className="data-stat" style={{ marginTop: 10 }}>
-                  <IconPin /> {[org.city, org.state].filter(Boolean).join(', ')}
+                  <IconPin /> {org.location}
                 </p>
               )}
               {org.website && (
@@ -742,7 +741,7 @@ export function OrganizationProfile() {
           )}
         </section>
 
-        <section className="ink-card">
+        <section className="ink-card org-profile-quests">
           <div className="flex justify-between items-center">
             <h2 style={{ margin: 0 }}>Active Quests</h2>
             {/* Same content either way now (see module note) — this link
@@ -762,13 +761,7 @@ export function OrganizationProfile() {
           ) : (
             <div className="org-quest-grid">
               {seriesList.map((series) => (
-                <OrgQuestCard
-                  key={series.seriesId}
-                  series={series}
-                  orgId={orgId}
-                  orgName={org.name}
-                  orgLogoUrl={org.logoUrl}
-                />
+                <OrgQuestCard key={series.seriesId} series={series} />
               ))}
             </div>
           )}
@@ -784,6 +777,16 @@ export function OrganizationProfile() {
           onPathsChange={(photos) => setOrg((prev) => ({ ...prev, photos }))}
         />
       </section>
+
+      {logoCropOpen && (
+        <AvatarCropModal
+          label="Logo"
+          accept={LOGO_CONTENT_TYPES.join(',')}
+          maxSizeBytes={LOGO_MAX_SIZE_BYTES}
+          onClose={() => setLogoCropOpen(false)}
+          onSave={handleLogoAvatarSave}
+        />
+      )}
     </PageMotion>
   );
 }

@@ -347,6 +347,41 @@ def _parse_event_datetime(value, field_name: str, tz: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+# Fields _quest_doc_fields gives every occurrence of a series identically at
+# creation time (title/description/tags/location/.../timezone — see there),
+# as opposed to eventDate/eventEndTime/rsvpd/qrToken/..., which are
+# genuinely per-occurrence. update_quest (below) only ever writes to the one
+# doc it's called with — without re-applying this same subset to every
+# sibling occurrence too, editing e.g. a typo in the title on one date would
+# silently desync it from the rest of the series, a state creation itself
+# never allows to happen.
+_SHARED_SERIES_FIELDS = {
+    "title", "description", "tags", "location", "placeId", "lat", "lng",
+    "capacity", "accommodationTags", "accommodationDetails", "tier", "timezone",
+}
+
+
+# update_quest's own "did eventDate actually change" check needs this, not
+# raw equality — the org's edit form can only ever express/round-trip a
+# date down to whole-minute precision (see naturalDate.js's
+# fullWallClockPartsInZone, which formats year/month/day/hour/minute only,
+# no seconds), but a quest's *stored* eventDate can carry real sub-minute
+# precision (e.g. seed_demo_data.py's NOW = datetime.now(timezone.utc) —
+# whatever real seconds/microseconds happened to be on the clock when the
+# script ran). Comparing raw datetimes meant simply opening a seeded
+# quest's edit form and saving *any* unrelated field (description,
+# capacity, tags — nothing date-related) silently re-sent that same
+# minute with its seconds zeroed out, which read as a genuine reschedule
+# and wiped every existing RSVP with no warning — the frontend's own
+# "this will clear RSVPs" confirmation never fired either, since *it*
+# compares the same seconds-less display string before/after and saw no
+# change. Truncating both sides to the minute here is what the frontend
+# can actually promise to detect, so that's the only precision this
+# comparison should ever care about.
+def _truncate_to_minute(value):
+    return value.replace(second=0, microsecond=0) if value else value
+
+
 def _validate_timezone(value) -> str:
     if not isinstance(value, str) or not value:
         raise https_fn.HttpsError(
@@ -893,8 +928,6 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "logoUrl": None,
         "category": None,
         "missionStatement": None,
-        "city": None,
-        "state": None,
         "website": None,
         "contactEmail": None,
         "socialLinks": {},
@@ -904,6 +937,7 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
     })
     req_ref.update({"status": "approved"})
     auth.set_custom_user_claims(target_uid, {"role": "organization"})
+    _notify_user(db, target_uid, kind="org_approved")
 
     return {"success": True, "targetUid": target_uid, "role": "organization"}
 
@@ -1606,7 +1640,7 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
             else None
         )
         old_event_date = quest.get("eventDate")
-        if new_event_date != old_event_date:
+        if _truncate_to_minute(new_event_date) != _truncate_to_minute(old_event_date):
             update["eventDate"] = new_event_date
             # Side quests can go from having a date to having none (or vice
             # versa) freely — create_default_quest already treats a missing
@@ -1634,6 +1668,24 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
         update["timezone"] = tz
 
     ref.update(update)
+
+    # Propagate whichever shared fields this edit touched to every other
+    # occurrence in the same series — see _SHARED_SERIES_FIELDS above. A
+    # standalone quest's seriesId is just its own doc id (see the module
+    # note near _quest_doc_fields), so the sibling query below naturally
+    # finds nothing extra for it.
+    shared_update = {k: v for k, v in update.items() if k in _SHARED_SERIES_FIELDS}
+    if shared_update:
+        series_id = quest.get("seriesId") or quest_id
+        siblings = [
+            doc for doc in db.collection("quests").where("seriesId", "==", series_id).stream()
+            if doc.id != quest_id
+        ]
+        if siblings:
+            batch = db.batch()
+            for doc in siblings:
+                batch.update(doc.reference, shared_update)
+            batch.commit()
 
     if reschedule_notify_uids:
         notice_title = update.get("title", quest.get("title"))
@@ -1867,6 +1919,14 @@ def _record_rsvp(transaction, quest_ref, uid):
 # Callable from the quest list — adds the caller's uid to that quest's
 # rsvpd list. Only "user" accounts RSVP; organizations/admins just manage
 # or view quests.
+#
+# A cold start here (a fresh container loading this whole module —
+# including the qrcode and genai SDKs this function never touches) can add
+# several seconds on top of the couple of Firestore round-trips this
+# actually needs. min_instances=1 would keep one instance warm to avoid
+# that, at the cost of paying for it to sit idle 24/7 instead of scaling to
+# zero like every other function here — deliberately left at the file's
+# default (0) for now pending a decision on that tradeoff.
 @https_fn.on_call()
 def rsvp_to_quest(req: https_fn.CallableRequest) -> dict:
     _require_role(req, "user")
@@ -2039,6 +2099,10 @@ def refresh_event_qr_code(req: https_fn.CallableRequest) -> dict:
 # navigates there instead of calling this itself. Idempotent: scanning an
 # already-checked-in code again succeeds with alreadyCheckedIn=True rather
 # than erroring, since a double scan is an expected accident, not an attack.
+#
+# Same cold-start tradeoff as rsvp_to_quest above (check-in is at least as
+# frequent a tap) — left at the default (min_instances=0) for the same
+# reason, pending a decision on the recurring cost of keeping it warm.
 @https_fn.on_call()
 def check_in_to_event(req: https_fn.CallableRequest) -> dict:
     _require_auth(req)
@@ -2278,7 +2342,18 @@ def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
     blob.patch()
 
     ref = _photo_submission_ref(db, quest_id, uid)
-    existing_snap = ref.get()
+    user_ref = db.collection("users").document(uid)
+    # These two don't depend on each other's result — one round-trip via
+    # get_all instead of two serial .get()s. Matched by reference rather
+    # than by list position, since get_all doesn't guarantee returning
+    # snapshots in the same order as the refs passed in.
+    existing_snap = user_snap = None
+    for snap in db.get_all([ref, user_ref]):
+        if snap.reference == ref:
+            existing_snap = snap
+        else:
+            user_snap = snap
+
     existing = existing_snap.to_dict() if existing_snap.exists else None
     # A pending or approved submission already occupies this quest's one
     # slot; only a rejected (or no) prior submission can be (re)submitted
@@ -2289,7 +2364,6 @@ def submit_quest_photo(req: https_fn.CallableRequest) -> dict:
             "You've already submitted a photo for this quest.",
         )
 
-    user_snap = db.collection("users").document(uid).get()
     user_name = user_snap.to_dict().get("name") if user_snap.exists else None
 
     ref.set({
@@ -3120,11 +3194,15 @@ def mark_feedback_read(req: https_fn.CallableRequest) -> dict:
 # to a specific completed quest): a notification is transient and has no
 # reason to persist once seen, so dismissing it (see dismiss_notification
 # below) deletes the doc outright rather than flipping a `read` flag. Used
-# today for the two ways a quest can change out from under someone who's
-# already RSVP'd — see update_quest (reschedule) and the delete_quest*
-# family (cancellation) — but generic enough for any future "something
-# about a quest you're in changed" notice.
-def _notify_user(db, uid: str, *, kind: str, quest_id: str, quest_title: str, extra: dict = None) -> None:
+# for the two ways a quest can change out from under someone who's already
+# RSVP'd (update_quest's reschedule, the delete_quest* family's
+# cancellation) and, with quest_id/quest_title both omitted, for
+# approve_organization's own "you're approved" notice — generic enough for
+# any future notice that isn't about a specific quest at all. `uid` works
+# for an organization's own uid exactly the same way it does a member's —
+# this collection is keyed by uid alone, not scoped to the "user" role (see
+# firestore.rules' identical `request.auth.uid == uid` check on it).
+def _notify_user(db, uid: str, *, kind: str, quest_id: str = None, quest_title: str = None, extra: dict = None) -> None:
     doc = {
         "kind": kind,
         "questId": quest_id,
@@ -3330,10 +3408,18 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
         for doc in db.collection("attendance").where("eventId", "==", quest_id).stream()
     }
 
+    # One batched read for every attendee's name/email, not one
+    # users/{uid}.get() per RSVP inside the loop below — a well-attended
+    # quest was doing one serial round-trip per attendee just to list them.
+    rsvpd_uids = quest.get("rsvpd", [])
+    users_by_uid = {}
+    if rsvpd_uids:
+        refs = [db.collection("users").document(uid) for uid in rsvpd_uids]
+        users_by_uid = {s.id: s.to_dict() for s in db.get_all(refs) if s.exists}
+
     attendees = []
-    for uid in quest.get("rsvpd", []):
-        user_snap = db.collection("users").document(uid).get()
-        user_data = user_snap.to_dict() if user_snap.exists else {}
+    for uid in rsvpd_uids:
+        user_data = users_by_uid.get(uid, {})
         attendance = attendance_by_uid.get(uid)
         checked_in_at = attendance.get("checkedInAt") if attendance else None
         attendees.append({
@@ -3586,12 +3672,24 @@ def list_quest_reviews(req: https_fn.CallableRequest) -> dict:
 
     quest = snap.to_dict()
     series_id = quest.get("seriesId") or quest_id
+    review_dicts = [
+        doc.to_dict()
+        for doc in db.collection("questSeries").document(series_id).collection("reviews").stream()
+    ]
+
+    # One batched read for every reviewer's name, not one users/{uid}.get()
+    # per review inside the loop below — a popular quest series with dozens
+    # of reviews was doing dozens of serial round-trips just to label them.
+    uids = {r["uid"] for r in review_dicts if r.get("uid")}
+    users_by_uid = {}
+    if uids:
+        refs = [db.collection("users").document(uid) for uid in uids]
+        users_by_uid = {s.id: s.to_dict() for s in db.get_all(refs) if s.exists}
+
     reviews = []
-    for doc in db.collection("questSeries").document(series_id).collection("reviews").stream():
-        review = doc.to_dict()
+    for review in review_dicts:
         uid = review.get("uid")
-        user_snap = db.collection("users").document(uid).get() if uid else None
-        user_data = user_snap.to_dict() if user_snap is not None and user_snap.exists else {}
+        user_data = users_by_uid.get(uid, {})
         created_at = review.get("createdAt")
         event_date = review.get("eventDate")
         reviews.append({
@@ -3689,7 +3787,7 @@ def _validate_social_links(value):
 # writing any of it is still Cloud-Function-only, same as every other
 # collection.
 _SIMPLE_PROFILE_FIELDS = (
-    "logoUrl", "category", "missionStatement", "city", "state", "website", "contactEmail",
+    "logoUrl", "category", "missionStatement", "website", "contactEmail",
     # `phone` starts out copied from the org's original ORGREQ at approval
     # time (see approve_organization_request), but the org's profile edit
     # form shows it as an editable contact number, so it stays editable
@@ -3720,6 +3818,25 @@ def update_organization_profile(req: https_fn.CallableRequest) -> dict:
 
     if "socialLinks" in req.data:
         update["socialLinks"] = _validate_social_links(req.data.get("socialLinks"))
+
+    # location/placeId/lat/lng replace the org's original signup address
+    # (see submit_organization_request) with a fresh Places Autocomplete
+    # selection — same "all four travel together" shape as
+    # update_accommodation_needs's own location fields.
+    location_keys = ("location", "placeId", "lat", "lng")
+    if any(key in req.data for key in location_keys):
+        location = req.data.get("location")
+        place_id = req.data.get("placeId")
+        if not isinstance(location, str) or not location.strip() or not isinstance(place_id, str) or not place_id.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "location and placeId are required together with lat/lng.",
+            )
+        lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
+        update["location"] = location
+        update["placeId"] = place_id
+        update["lat"] = lat
+        update["lng"] = lng
 
     firestore.client().collection("organizations").document(req.auth.uid).update(update)
     return {"success": True}

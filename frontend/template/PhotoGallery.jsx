@@ -11,7 +11,7 @@ import { LightboxBackdrop } from './LightboxBackdrop.jsx';
 // enough for the one caller (the gallery's own owner) that needs removal
 // without this otherwise-read-only component knowing anything about who's
 // allowed to call it.
-export function PhotoGallery({ photos = [], onDelete }) {
+export function PhotoGallery({ photos = [], onDelete, className }) {
   const [openIndex, setOpenIndex] = useState(null);
 
   if (photos.length === 0) {
@@ -20,7 +20,7 @@ export function PhotoGallery({ photos = [], onDelete }) {
 
   return (
     <>
-      <div className="photo-gallery-grid">
+      <div className={className ? `photo-gallery-grid ${className}` : 'photo-gallery-grid'}>
         {photos.map((url, i) => (
           <div key={`${url}-${i}`} className="photo-gallery-thumb-wrap">
             <button

@@ -19,18 +19,25 @@ import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from './ra
 // than trusted blindly). Always fully shown — no expand/collapse toggle;
 // points/progress bar/milestones are as much "who I am" as the rank name
 // itself, so there's no reason to hide them behind a tap.
-export function ProgressCard() {
+//
+// `profile` is optional — Profile.jsx and Quests.jsx don't pass one, so
+// this fetches for itself exactly as before. Home.jsx does pass one: it
+// already holds a live users/{uid} listener for the greeting (name/
+// duckSkin), and without this, ProgressCard was independently re-reading
+// that exact same document on the single most-visited screen in the app.
+export function ProgressCard({ profile: profileProp }) {
   const { user } = useAuth();
-  const [profile, setProfile] = useState(null);
+  const [fetchedProfile, setFetchedProfile] = useState(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (profileProp || !user) return;
     getDoc(doc(db, 'users', user.uid)).then((snap) => {
       const data = snap.exists() ? snap.data() : {};
-      setProfile({ points: data.points || 0, certificateIssued: Boolean(data.certificateIssued) });
+      setFetchedProfile({ points: data.points || 0, certificateIssued: Boolean(data.certificateIssued) });
     });
-  }, [user]);
+  }, [user, profileProp]);
 
+  const profile = profileProp || fetchedProfile;
   if (profile === null) return null;
 
   const { points, certificateIssued } = profile;
