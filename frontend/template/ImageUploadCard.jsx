@@ -19,7 +19,11 @@ import { IconUpload, IconX } from './icons.jsx';
 const IMAGE_UPLOAD_SIMULATED_DELAY_MS = 200;
 
 function truncateFilename(filename, maxLength = 30) {
-  if (filename.length <= maxLength) return filename;
+  // null whenever a caller seeds initialPreviewUrl without an
+  // initialFileName (a documented, valid combination — see this
+  // component's own module note: "there's no real File behind" a seeded
+  // image, so there's often no real filename to show either).
+  if (!filename || filename.length <= maxLength) return filename;
   const dotIndex = filename.lastIndexOf('.');
   const extension = dotIndex >= 0 ? filename.slice(dotIndex + 1) : '';
   const nameWithoutExt = dotIndex >= 0 ? filename.slice(0, dotIndex) : filename;
@@ -107,9 +111,11 @@ function DroppedImage({ isAnimating, onAnimationComplete, filename, previewUrl, 
               <IconX width={12} height={12} />
             </button>
             <img src={previewUrl} alt="" className="image-upload-card-img" />
-            <div className="image-upload-card-filename">
-              <span>{truncateFilename(filename)}</span>
-            </div>
+            {filename && (
+              <div className="image-upload-card-filename">
+                <span>{truncateFilename(filename)}</span>
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}
@@ -257,10 +263,12 @@ export function ImageUploadCard({
           the frame (even reordered first) would just move the zone-wrap
           down without moving the mask's coverage down with it, leaving the
           falling image visible through that gap on its way in. */}
-      <div className="image-upload-card-copy">
-        <h2>{title}</h2>
-        {description && <p>{description}</p>}
-      </div>
+      {(title || description) && (
+        <div className="image-upload-card-copy">
+          {title && <h2>{title}</h2>}
+          {description && <p>{description}</p>}
+        </div>
+      )}
 
       <div className="image-upload-card-frame">
         {/* Covers the drop layer until it reaches the zone below — without

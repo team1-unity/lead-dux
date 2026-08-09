@@ -57,9 +57,9 @@ function AboutTab({ org }) {
   return (
     <div>
       {org.missionStatement && <p style={{ margin: '0 0 10px' }}>{org.missionStatement}</p>}
-      {(org.city || org.state) && (
+      {org.location && (
         <p className="data-stat">
-          <IconPin /> {[org.city, org.state].filter(Boolean).join(', ')}
+          <IconPin /> {org.location}
         </p>
       )}
       {org.website && (
@@ -172,7 +172,14 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
       )}
 
       <div className="map-quest-info-block" style={{ marginTop: 10 }}>
-        <LocationLink location={primary.location} lat={primary.lat} lng={primary.lng} />
+        {/* Side quests never actually reach this view (no real coordinates
+            to plot on the map — see EventsMap.jsx's own coordinate filter),
+            but guarded the same way mobile/Quests.jsx's inline detail is,
+            for the same reason: their "location" is a generic prompt, not
+            a real address. */}
+        {!primary.isDefault && (
+          <LocationLink location={primary.location} lat={primary.lat} lng={primary.lng} />
+        )}
         {formatEventDate(primary.eventDate) && (
           // Always the soonest *upcoming* date, not a recurrence-pattern
           // summary — useMapQuestSeries.js/EventsMap.jsx both filter a

@@ -307,30 +307,44 @@
 }
 
 /* Dark mode isn't covered by the "theme 9a" handoff doc at all — it only
-   ever shows one cream palette. Extended in the same spirit rather than
-   reusing the old neutral-gray dark mode: warm dark brown/charcoal
-   surfaces (an inverted echo of the light theme's cream), cream-ish ink
-   text, same low-chroma pastel accent families just re-lit for a dark
-   background (dark muted fill + a brighter version of the same ink).
-   --accent/--brand-green (the original pale butter-yellow) is restored
-   here on purpose — a bright accent staying vivid against a dark surface
-   was already working, so only light mode's --accent got promoted to the
-   deeper --brand-green-deep (see :root above); dark mode keeps the old
-   value rather than inheriting that change. */
+   ever shows one cream palette. Originally extended as a warm dark
+   brown/charcoal echo of the light theme's cream — revised to a neutral,
+   Discord-inspired grey-black instead (--paper/--paper-card/--paper-well
+   step from near-black up to a lighter charcoal, same relative order as
+   before, just without the brown cast; --line/--line-soft/--border follow
+   the same neutral shift). --accent/--brand-green (the original pale
+   butter-yellow) is restored here on purpose — a bright accent staying
+   vivid against a dark surface was already working, so only light mode's
+   --accent got promoted to the deeper --brand-green-deep (see :root
+   above); dark mode keeps the old value rather than inheriting that
+   change. */
 @media (prefers-color-scheme: dark) {
   :root {
     --duck-mark-url: url('/brand/duck-yellow.png');
-    --paper: #211c12;
-    --paper-card: #2b2418;
-    --paper-well: #332b1c;
-    --line: #f2ecd9;
-    --line-soft: #c9bd9e;
-    --border: rgba(240, 228, 168, 0.14);
+    --paper: #2b2d31;
+    --paper-card: #35373c;
+    --paper-well: #3f4147;
+    --line: #dbdee1;
+    --line-soft: #949ba4;
+    --border: rgba(255, 255, 255, 0.08);
     --shadow: rgba(0, 0, 0, 0.4);
     --image-outline: rgba(255, 255, 255, 0.1);
     --accent: var(--brand-green);
     --accent-contrast: var(--brand-green-ink);
 
+    /* Tag/rank chip backgrounds are neutral gray here, not tinted to their
+       own hue the way the light theme's pastel fills are — community/
+       outdoors/food-security/fitness/rejected/bronze/gold used to each get
+       their own dark BROWN fill (e.g. #4a3319), which read as a muddy,
+       heavier-than-intended "brown dark mode" even though --paper itself
+       was always neutral. Desaturating those fills to plain gray while
+       keeping each one's vivid ink color unchanged turns them into
+       neutral chips with a colored-accent label, rather than colored
+       chips — still distinguishable at a glance by ink color, without the
+       brown cast. Environment/youth/education/technology/arts were
+       already cool-toned and untouched.
+       Bronze/gold intentionally reuse outdoors/community's own gray (same
+       shared-value pairing the original brown fills had). */
     --tag-environment: #23422f;
     --tag-environment-ink: #a9e0bc;
     --tag-community: #3c3c3c;
@@ -377,17 +391,19 @@
 }
 :root[data-theme='dark'] {
   --duck-mark-url: url('/brand/duck-yellow.png');
-  --paper: #211c12;
-  --paper-card: #2b2418;
-  --paper-well: #332b1c;
-  --line: #f2ecd9;
-  --line-soft: #c9bd9e;
-  --border: rgba(240, 228, 168, 0.14);
+  --paper: #2b2d31;
+  --paper-card: #35373c;
+  --paper-well: #3f4147;
+  --line: #dbdee1;
+  --line-soft: #949ba4;
+  --border: rgba(255, 255, 255, 0.08);
   --shadow: rgba(0, 0, 0, 0.4);
   --image-outline: rgba(255, 255, 255, 0.1);
   --accent: var(--brand-green);
   --accent-contrast: var(--brand-green-ink);
 
+  /* See the @media block above for why these are neutral grays rather
+     than each tag's own tinted-brown fill. */
   --tag-environment: #23422f;
   --tag-environment-ink: #a9e0bc;
   --tag-community: #3c3c3c;
@@ -508,6 +524,41 @@ html {
      everywhere else since other platforms ignore these properties. */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbars, everywhere — every scrolling element in the app (the page
+   itself, any overflow-y:auto panel like .about-edit-scroll/
+   .quest-form-scroll, lightbox content, admin tables) inherits this
+   rather than each needing its own rule, since scrollbar-color/
+   ::-webkit-scrollbar aren't scoped by default the way most other
+   properties are. A fixed brown, not one of the theme-swapped --border/
+   --line tokens — --border in particular goes translucent-yellow in dark
+   mode (see its own comment), which wouldn't read as "brown" against a
+   dark track at all, and a scrollbar's own chrome doesn't need to shift
+   with the page's theme the way real content does. */
+:root {
+  --scrollbar-thumb: #8b6f4e;
+  --scrollbar-thumb-hover: #6b5238;
+}
+* {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 /* This ships as a Capacitor WebView on top of being a regular site, so the
@@ -2119,14 +2170,33 @@ button.quest-card-head:hover:not(:disabled) {
 
 /* The org About section's inline edit form (OrganizationProfile.jsx) —
    same borderless, document-style rows/description-textarea as the
-   create-quest form above, just without that form's fixed max-height/
-   internal scroll/max-width — this one already lives inside a normal-width
-   ink-card section, not a standalone page. */
+   create-quest form above, and now the same fixed max-height/internal-
+   scroll shape too (see .about-edit-scroll below) — just without that
+   form's own max-width, since this one already lives inside a normal-
+   width ink-card section, not a standalone page. */
 .about-edit-doc {
   display: flex;
   flex-direction: column;
   gap: 16px;
   margin-top: 10px;
+  max-height: min(560px, 70vh);
+}
+.about-edit-doc *:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+/* Everything that can grow without bound (the mission statement, an
+   ever-longer list of added properties) scrolls in here instead of
+   pushing the Save/Cancel footer down and growing the About card itself
+   past .about-edit-doc's own max-height — same split as
+   .create-quest-doc/.quest-form-scroll above. */
+.about-edit-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .quest-form-scroll {
@@ -2649,6 +2719,30 @@ a.org-home-stat-tile:hover {
   text-overflow: ellipsis;
 }
 
+/* Mobile only: one full-width card, then the next directly under it —
+   instead of the grid above's fixed 60vh per tile (see that rule's own
+   comment), each card here is exactly as tall as its own content (a
+   number, a label, up to 3 short preview lines — already capped in JS),
+   so there's no dead space and no need for the preview's own bottom fade
+   (nothing overflows to hide). Same 860px breakpoint the rest of this
+   file uses for desktop-only treatments. */
+@media (max-width: 859px) {
+  .org-home-stats {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .org-home-stat-tile {
+    height: auto;
+  }
+  .org-home-stat-preview {
+    overflow: visible;
+  }
+  .org-home-stat-preview::after {
+    display: none;
+  }
+}
+
 /* Search + the Filters button share one row (see Quests.jsx) — the search
    field grows to fill the remaining space next to the fixed-size button.
    .vanish-search-field itself already carries flex:1/min-width:0 (see
@@ -2864,7 +2958,11 @@ a.org-home-stat-tile:hover {
    row pair (was jumbled into one unlabeled Sort & Activity group before;
    this scans faster). A fixed label column keeps every row's pills
    starting at the same left edge regardless of label length ("Sort" vs.
-   "Activity"). */
+   "Activity"). Visual separation between groups comes entirely from the
+   sibling .quest-filter-divider <hr> above, not anything on this rule
+   itself — before that divider existed, Type/Activity/Sort's pills sat
+   close enough together that the panel read as one undifferentiated
+   block of buttons instead of three distinct groups. */
 .quest-filter-group-inline {
   display: flex;
   /* flex-start, not center — when a row's pills wrap onto a second line
@@ -2875,19 +2973,14 @@ a.org-home-stat-tile:hover {
      with the first pill row regardless of how many lines wrap below it. */
   align-items: flex-start;
   gap: 14px;
-  /* A bit more breathing room between Type/Activity/Sort than the base
-     .quest-filter-group's 16px — each row already reads as a single dense
-     line (label + pills together), so it needs more separation from its
-     neighbors than a stacked label-above-pills group would. */
-  margin-bottom: 22px;
-}
-.quest-filter-group-inline:last-child {
-  margin-bottom: 0;
+  /* Spacing/separation between groups is .quest-filter-divider's own
+     <hr> (see above) — no border-bottom here too, or every gap doubles
+     up into two visible lines. */
 }
 .quest-filter-group-inline .quest-filter-group-label {
   margin: 0;
   flex: none;
-  width: 68px;
+  width: 84px;
   /* Nudges the label's text down to sit level with the first pill row's
      own text, rather than its top edge lining up with the pills' top
      edge (the pills have their own vertical padding the label doesn't).
@@ -4224,6 +4317,32 @@ button.data-row:active:not(:disabled) {
 
 /* ---------- Organization Profile page (see OrganizationProfile.jsx) ---------- */
 
+/* .profile-grid's own align-items:start (see that rule's own comment)
+   deliberately lets Profile.jsx's cards size to their own content instead
+   of stretching to match a row's tallest — but here, About and Active
+   Quests are the only two cards in the row and read better matched: a
+   short About section and a long quest list (or vice versa) otherwise
+   makes the shorter one look unfinished rather than just "less content
+   today." Grid's own default (stretch) already does this on its own; this
+   only needs to override .profile-grid's start back to it, same
+   specificity so source order (this comes after) decides the winner. */
+.org-profile-grid {
+  align-items: stretch;
+}
+
+/* About/Active Quests keep a consistent minimum presence on the page even
+   when they're nearly empty (a brand-new org with no mission statement
+   and no quests yet) — a min-height, not a fixed one, so either card is
+   still free to grow taller than this once real content (or, for About,
+   the edit form) needs it. Now that .org-profile-grid stretches both to
+   match the row's tallest anyway, this mostly matters when BOTH are
+   sparse at once (a brand-new org with no quests yet) and the row itself
+   would otherwise be short. */
+.org-profile-about,
+.org-profile-quests {
+  min-height: 20vh;
+}
+
 .org-profile-header {
   display: flex;
   align-items: center;
@@ -4290,6 +4409,14 @@ button.data-row:active:not(:disabled) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 10px;
+}
+/* Community Photos (OrganizationProfile.jsx) — a fixed 4-across grid
+   instead of auto-fill's variable column count, so a row always reads as
+   a deliberate set of 4 rather than however many 100px+ thumbnails
+   happen to fit. .photo-gallery-thumb's own aspect-ratio:1 still does the
+   square-cropping, unchanged. */
+.photo-gallery-grid-fixed-4 {
+  grid-template-columns: repeat(4, 1fr);
 }
 .photo-gallery-thumb-wrap {
   position: relative;
@@ -4654,14 +4781,17 @@ button.data-row:active:not(:disabled) {
 }
 /* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
    1180px cap (see #root above), the greeting/rank-card/CTA buttons were
-   stretching to fill nearly the whole content column. Capped to 40vw and
-   centered instead, matching the same 860px breakpoint used everywhere
-   else in this file for desktop-only treatments. */
+   stretching to fill nearly the whole content column. Capped to 40vw,
+   centered horizontally, and (only here, where there's room to spare)
+   vertically centered too, matching the same 860px breakpoint used
+   everywhere else in this file for desktop-only treatments. */
 @media (min-width: 860px) {
   .home-page {
     max-width: 40vw;
     width: 100%;
     margin: 0 auto;
+    justify-content: center;
+    min-height: calc(100vh - var(--nav-height-desktop) - 56px);
   }
 }
 
@@ -4700,8 +4830,17 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   gap: 8px;
   text-align: center;
-  padding: 48px 20px 32px;
+  /* Trimmed down from 48px/32px at mobile widths — every extra pixel here
+     is space the rank card below has to wait behind before it's visible
+     without scrolling; desktop keeps the roomier original padding since
+     it isn't the width mobile users are stuck scrolling on. */
+  padding: 24px 20px 20px;
   margin-bottom: 16px;
+}
+@media (min-width: 860px) {
+  .home-greeting {
+    padding: 48px 20px 32px;
+  }
 }
 .home-greeting h1 {
   margin: 12px 0 0;
@@ -4793,7 +4932,7 @@ button.data-row:active:not(:disabled) {
     gap: 0;
     min-width: auto;
     border-radius: var(--radius-lg);
-    background-color: var(--accent-soft);
+    background-color: var(--paper-card);
     padding: 6px;
   }
   .home-quick-action {
@@ -4824,7 +4963,7 @@ button.data-row:active:not(:disabled) {
     transform: none;
   }
   .home-quick-action:hover {
-    background: var(--accent-soft);
+    background: var(--paper-well);
   }
   .home-quick-action-label {
     display: inline;
@@ -4833,6 +4972,27 @@ button.data-row:active:not(:disabled) {
     font-size: 0.9rem;
     white-space: nowrap;
   }
+}
+
+/* Check in/My quests/Last quest — a compact horizontal row of equally-
+   sized buttons instead of a tall vertical stack (see mobile/Home.jsx's
+   own comment on why: reads more like a game menu, less like a
+   productivity dashboard's list of full-width rows). Equal width via
+   flex:1 on each wrapping <a>, not a fixed column count, so this still
+   looks right whether Last quest is present (3 buttons) or not (2). */
+.home-actions-row {
+  display: flex;
+  gap: 10px;
+}
+.home-actions-row > a {
+  flex: 1;
+  min-width: 0;
+}
+.home-actions-row .stamp-btn {
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: normal;
+  text-align: center;
 }
 
 .rank-milestones {
@@ -5108,12 +5268,13 @@ button.data-row:active:not(:disabled) {
 /* Mobile: a true Google-Maps-style full-screen map — a fixed, viewport-
    anchored layer (unlike every other page in the app, all normal document
    flow within #root) so the map genuinely fills the whole screen behind
-   everything else. Search + the tag row float directly over it
-   (.events-map-mobile-overlays), visible only while MobileSheet.jsx's own
-   sheet is still collapsed/peeking (see EventsMap.jsx's sheetExpanded) —
-   "exploring the map." The sheet itself (.events-map-sheet) holds the
-   quest list/detail, dragged or tapped open to "browse the quests," which
-   is when the floating search/tags hide. */
+   everything else. The search bar + Filters button float directly over
+   it (.events-map-mobile-overlays), visible only while MobileSheet.jsx's
+   own sheet is still collapsed/peeking (see EventsMap.jsx's
+   sheetExpanded) — "exploring the map." The sheet itself
+   (.events-map-sheet) holds the quest list/detail, dragged or tapped
+   open to "browse the quests," which is when the floating search/
+   Filters button hide. */
 @media (max-width: 859px) {
   .events-map-page {
     position: fixed;
@@ -5241,10 +5402,10 @@ button.data-row:active:not(:disabled) {
    is dropped entirely at this breakpoint (see EventsMap.jsx) — there's no
    room reserved for it here. Quest list + search share one continuous
    sidebar card on the LEFT (.events-map-sidebar); the map fills the
-   flexible RIGHT column with no border/margin of its own. The tag filter
-   row and location banner both float directly over the map instead
-   (.events-map-overlays) — matches Google Maps' own category-shortcut row
-   floating over its map, rather than living in the sidebar. */
+   flexible RIGHT column with no border/margin of its own. The location
+   banner floats directly over the map instead (.events-map-overlays) —
+   matches Google Maps' own category-shortcut row floating over its map,
+   rather than living in the sidebar. */
 @media (min-width: 860px) {
   .events-map-page {
     display: flex;
@@ -5286,7 +5447,7 @@ button.data-row:active:not(:disabled) {
     border-right: 1px solid var(--border);
     padding: 20px;
   }
-  .events-map-search-row {
+  .events-map-sidebar .quest-search-row {
     flex: none;
     margin-bottom: 12px;
   }
@@ -5830,31 +5991,6 @@ button.data-row:active:not(:disabled) {
   font-style: italic;
 }
 
-.journal-thumbnail-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-.journal-thumbnail-picker-option {
-  aspect-ratio: 1;
-  overflow: hidden;
-  border-radius: 10px;
-  border: 2px solid transparent;
-  padding: 0;
-  background: var(--paper-well);
-  width: 100%;
-}
-.journal-thumbnail-picker-option[data-selected='true'] {
-  border-color: var(--accent);
-}
-.journal-thumbnail-picker-option img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 /* ---------- ImageUploadCard.jsx — single-image drag-and-drop upload with
    a "vending machine" drop-in animation (the animation's own timing/easing
    values live in the component; this is just the drop zone's visual
@@ -5966,7 +6102,9 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
   z-index: 3;
 }
 .image-upload-card-preview:hover .image-upload-card-remove {
@@ -6036,11 +6174,12 @@ button.data-row:active:not(:disabled) {
   cursor: pointer;
   background: none;
 }
-/* .user-avatar/.org-avatar both default to their own fixed size (64px) —
-   this trigger wants whichever one it wraps to fill its own 72px button
-   instead. */
+/* .user-avatar/.org-avatar/.org-profile-logo all default to their own
+   fixed size (64px) — this trigger wants whichever one it wraps to fill
+   its own 72px button instead. */
 .avatar-edit-trigger .user-avatar,
-.avatar-edit-trigger .org-avatar {
+.avatar-edit-trigger .org-avatar,
+.avatar-edit-trigger .org-profile-logo {
   width: 100%;
   height: 100%;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { db } from '@shared/firebaseapp.jsx';
@@ -14,7 +15,6 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
 import { VanishSearchInput } from '@shared/VanishSearchInput.jsx';
-import { Collapse } from '@shared/Collapse.jsx';
 import { QuestReviewsList } from '@shared/QuestReviewsList.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { StatusStamp } from '@shared/StatusStamp.jsx';
@@ -22,22 +22,21 @@ import { DuckMark } from '@shared/Logo.jsx';
 import { AddToCalendar } from '@shared/AddToCalendar.jsx';
 import { LocationLink } from '@shared/LocationLink.jsx';
 import { CreateQuestForm } from './CreateQuestForm.jsx';
-import {
-  IconPlus,
-  IconEdit,
-  IconTrash,
-  IconChevron,
-  IconUsers,
-} from '@shared/icons.jsx';
+import { IconPlus, IconEdit, IconTrash, IconChevron, IconUsers } from '@shared/icons.jsx';
 
 // The compact collapsed row — title, star rating, and date (same flat,
 // avatar-free card style as the redesigned member-facing mobile/Quests.jsx,
 // minus the org avatar since every quest here already belongs to this same
-// org — no profile to link out to from its own list). Unlike that member
-// view, this one still expands in place rather than navigating away —
-// management actions live in the detail body, not a separate page — so the
-// chevron (rather than a tap hint) is still the right affordance here.
-function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, children }) {
+// org — no profile to link out to from its own list). Same desktop/mobile
+// split as that member view too, now: desktop selects the row into the
+// adjacent sticky quest-detail-pane (see OrgQuests below), a chevron
+// showing which one's open; mobile instead navigates to the standalone
+// /quests/:seriesId page (QuestDetails.jsx), a tap hint replacing the
+// chevron since nothing expands in place there anymore. That standalone
+// page renders this same management body (QuestSeriesDetailPane, exported
+// below) rather than the read-only QuestDetailBody a plain member sees,
+// once it detects the viewer owns this quest — see QuestDetails.jsx.
+function QuestSeriesListItem({ series, index, isDesktop, isActive, onSelect }) {
   const { primary } = series;
   const eventDate = formatEventDate(primary.eventDate);
   const reduce = useReducedMotion();
@@ -59,12 +58,11 @@ function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, childr
         data-active={isActive ? 'true' : undefined}
         data-past={isPast ? 'true' : undefined}
       >
-
         <button
           type='button'
           className='quest-card-head'
           onClick={onSelect}
-          aria-expanded={isOpen || isActive}
+          aria-expanded={isDesktop ? isActive : undefined}
         >
           <div className='quest-card-titles'>
             <p className='quest-title'>{primary.title}</p>
@@ -75,9 +73,12 @@ function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, childr
             )}
             {eventDate && <p className='quest-card-description'>{eventDate}</p>}
           </div>
-          <IconChevron className='quest-chevron' data-open={isOpen ? 'true' : 'false'} />
+          {isDesktop ? (
+            <IconChevron className='quest-chevron' data-open={isActive ? 'true' : 'false'} />
+          ) : (
+            <span className='quest-tap-hint'>→</span>
+          )}
         </button>
-        <Collapse open={isOpen}>{children}</Collapse>
       </div>
     </motion.li>
   );
@@ -85,14 +86,18 @@ function QuestSeriesListItem({ series, index, isOpen, isActive, onSelect, childr
 
 // The full detail view — date picker, location/capacity, description, and
 // every management action (share/delete/QR/calendar, expandable attendees/
-// reviews). Rendered exactly once at a time (inline under its row on
-// mobile, or in the sticky side panel on desktop) via useQuestSeriesActions,
-// the same hook QuestSeriesRow (the admin dashboard's dense single-row
-// view) uses — one implementation, two presentations. No tags shown here
-// (browsing-time tags/search/filter were dropped from this page entirely —
-// see OrgQuests below) and no "Make recurring" action (this pass's action
-// set is intentionally just what's listed above).
-function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
+// reviews), via useQuestSeriesActions — the same hook QuestSeriesRow (the
+// admin dashboard's dense single-row view) uses, one implementation, two
+// presentations. Rendered in the sticky side panel on desktop (see
+// OrgQuests below); on mobile, exported for QuestDetails.jsx to render on
+// its own standalone /quests/:seriesId page instead of the read-only
+// QuestDetailBody a non-owning viewer gets there — an org managing its own
+// quest needs this same management body wherever it lands, not a second,
+// mobile-only copy of it. No tags shown here (browsing-time tags/search/
+// filter were dropped from this page entirely — see OrgQuests below) and
+// no "Make recurring" action (this pass's action set is intentionally just
+// what's listed above).
+export function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
   const { primary, occurrences } = series;
   const a = useQuestSeriesActions(series, onChanged);
   const { selected, selectedId, isSeries } = a;
@@ -154,7 +159,12 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           text is actually gated on showTitle. */}
       <div style={{ position: 'relative', minHeight: 36 }}>
         <div className='quest-detail-icon-actions'>
-          <ShareButton seriesId={primary.seriesId} questTitle={primary.title} iconOnly disabled={a.busy} />
+          <ShareButton
+            seriesId={primary.seriesId}
+            questTitle={primary.title}
+            iconOnly
+            disabled={a.busy}
+          />
           <button
             type='button'
             className='quest-icon-btn'
@@ -338,11 +348,12 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
             <img src={a.qr} alt='Event check-in QR code' className='qr-modal-image' />
             <p className='data-stat'>Attendees scan this from the app's Check In screen.</p>
             <div className='flex gap-sm' style={{ marginTop: 10, justifyContent: 'center' }}>
-              <StampButton as='a' href={a.qr} download={`quest-${selected.id}-qr.png`}>
+              <StampButton as='a' variant='primary' href={a.qr} download={`quest-${selected.id}-qr.png`}>
                 Download
               </StampButton>
               <StampButton
                 type='button'
+                variant='primary'
                 onClick={() => setConfirmingRefresh(true)}
                 disabled={a.qrBusy}
               >
@@ -355,7 +366,10 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
       {/* Its own stacked popup rather than growing the QR modal above —
           confirming/cancelling here never changes that modal's size. */}
       {confirmingRefresh && (
-        <LightboxBackdrop onClose={() => setConfirmingRefresh(false)} label='Confirm regenerate QR code'>
+        <LightboxBackdrop
+          onClose={() => setConfirmingRefresh(false)}
+          label='Confirm regenerate QR code'
+        >
           <div className='qr-modal-content' onClick={(e) => e.stopPropagation()}>
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
@@ -416,7 +430,9 @@ function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) {
           three sharing QuestReviewsList. */}
       {series.reviewCount > 0 && (
         <div className='quest-expand-section' style={{ paddingTop: 12 }}>
-          <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>Reviews</p>
+          <p className='quest-title' style={{ fontSize: '0.95rem', margin: '0 0 10px' }}>
+            Reviews
+          </p>
           <QuestReviewsList questId={selected.id} reviewCount={series.reviewCount} />
         </div>
       )}
@@ -459,6 +475,7 @@ const ORG_SEARCH_PLACEHOLDERS = ['Search your quests', 'Try a title', 'Try a loc
 
 function OrgQuests({ creating, setCreating }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const [quests, setQuests] = useState(null);
   const [seriesAggregates, setSeriesAggregates] = useState(new Map());
@@ -479,9 +496,10 @@ function OrgQuests({ creating, setCreating }) {
   }, [user]);
 
   const seriesList = useMemo(
-    () => (quests
-      ? attachSeriesRatings(groupBySeries(quests), seriesAggregates).sort(compareSeriesForOrgList)
-      : []),
+    () =>
+      quests
+        ? attachSeriesRatings(groupBySeries(quests), seriesAggregates).sort(compareSeriesForOrgList)
+        : [],
     [quests, seriesAggregates],
   );
 
@@ -500,9 +518,11 @@ function OrgQuests({ creating, setCreating }) {
 
   if (!quests) return <LoadingSpinner label='Loading your quests…' />;
 
-  const activeSeriesId = isDesktop
-    ? (openSeriesId ?? visibleSeriesList[0]?.seriesId ?? null)
-    : openSeriesId;
+  // openSeriesId only ever gets set on desktop now — mobile navigates to
+  // /quests/:seriesId instead of selecting a row into this same state (see
+  // QuestSeriesListItem's onSelect below), so there's no "which one's
+  // open" to track at that width in the first place.
+  const activeSeriesId = openSeriesId ?? visibleSeriesList[0]?.seriesId ?? null;
   const activeSeries = visibleSeriesList.find((s) => s.seriesId === activeSeriesId) || null;
 
   async function afterCreated() {
@@ -557,24 +577,22 @@ function OrgQuests({ creating, setCreating }) {
                 key={series.seriesId}
                 series={series}
                 index={index}
-                isOpen={!isDesktop && openSeriesId === series.seriesId}
+                isDesktop={isDesktop}
                 isActive={isDesktop && activeSeriesId === series.seriesId}
                 onSelect={() => {
+                  if (!isDesktop) {
+                    navigate(`/quests/${series.seriesId}`);
+                    return;
+                  }
                   // Picking a quest from the list always means "show me this
                   // one" — if the create-quest form was open, it's cancelled
                   // (its draft is autosaved, so nothing is lost) rather than
                   // leaving the organizer stuck looking at the form while a
                   // different row highlights as selected underneath it.
                   setCreating(false);
-                  setOpenSeriesId(
-                    !isDesktop && openSeriesId === series.seriesId ? null : series.seriesId,
-                  );
+                  setOpenSeriesId(openSeriesId === series.seriesId ? null : series.seriesId);
                 }}
-              >
-                {!isDesktop && openSeriesId === series.seriesId && (
-                  <QuestSeriesDetailPane series={series} onChanged={load} />
-                )}
-              </QuestSeriesListItem>
+              />
             ))}
           </ul>
         )}

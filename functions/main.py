@@ -347,6 +347,20 @@ def _parse_event_datetime(value, field_name: str, tz: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+# Fields _quest_doc_fields gives every occurrence of a series identically at
+# creation time (title/description/tags/location/.../timezone — see there),
+# as opposed to eventDate/eventEndTime/rsvpd/qrToken/..., which are
+# genuinely per-occurrence. update_quest (below) only ever writes to the one
+# doc it's called with — without re-applying this same subset to every
+# sibling occurrence too, editing e.g. a typo in the title on one date would
+# silently desync it from the rest of the series, a state creation itself
+# never allows to happen.
+_SHARED_SERIES_FIELDS = {
+    "title", "description", "tags", "location", "placeId", "lat", "lng",
+    "capacity", "accommodationTags", "accommodationDetails", "tier", "timezone",
+}
+
+
 # update_quest's own "did eventDate actually change" check needs this, not
 # raw equality — the org's edit form can only ever express/round-trip a
 # date down to whole-minute precision (see naturalDate.js's
@@ -914,8 +928,6 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "logoUrl": None,
         "category": None,
         "missionStatement": None,
-        "city": None,
-        "state": None,
         "website": None,
         "contactEmail": None,
         "socialLinks": {},
@@ -925,6 +937,7 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
     })
     req_ref.update({"status": "approved"})
     auth.set_custom_user_claims(target_uid, {"role": "organization"})
+    _notify_user(db, target_uid, kind="org_approved")
 
     return {"success": True, "targetUid": target_uid, "role": "organization"}
 
@@ -1655,6 +1668,24 @@ def update_quest(req: https_fn.CallableRequest) -> dict:
         update["timezone"] = tz
 
     ref.update(update)
+
+    # Propagate whichever shared fields this edit touched to every other
+    # occurrence in the same series — see _SHARED_SERIES_FIELDS above. A
+    # standalone quest's seriesId is just its own doc id (see the module
+    # note near _quest_doc_fields), so the sibling query below naturally
+    # finds nothing extra for it.
+    shared_update = {k: v for k, v in update.items() if k in _SHARED_SERIES_FIELDS}
+    if shared_update:
+        series_id = quest.get("seriesId") or quest_id
+        siblings = [
+            doc for doc in db.collection("quests").where("seriesId", "==", series_id).stream()
+            if doc.id != quest_id
+        ]
+        if siblings:
+            batch = db.batch()
+            for doc in siblings:
+                batch.update(doc.reference, shared_update)
+            batch.commit()
 
     if reschedule_notify_uids:
         notice_title = update.get("title", quest.get("title"))
@@ -3163,11 +3194,15 @@ def mark_feedback_read(req: https_fn.CallableRequest) -> dict:
 # to a specific completed quest): a notification is transient and has no
 # reason to persist once seen, so dismissing it (see dismiss_notification
 # below) deletes the doc outright rather than flipping a `read` flag. Used
-# today for the two ways a quest can change out from under someone who's
-# already RSVP'd — see update_quest (reschedule) and the delete_quest*
-# family (cancellation) — but generic enough for any future "something
-# about a quest you're in changed" notice.
-def _notify_user(db, uid: str, *, kind: str, quest_id: str, quest_title: str, extra: dict = None) -> None:
+# for the two ways a quest can change out from under someone who's already
+# RSVP'd (update_quest's reschedule, the delete_quest* family's
+# cancellation) and, with quest_id/quest_title both omitted, for
+# approve_organization's own "you're approved" notice — generic enough for
+# any future notice that isn't about a specific quest at all. `uid` works
+# for an organization's own uid exactly the same way it does a member's —
+# this collection is keyed by uid alone, not scoped to the "user" role (see
+# firestore.rules' identical `request.auth.uid == uid` check on it).
+def _notify_user(db, uid: str, *, kind: str, quest_id: str = None, quest_title: str = None, extra: dict = None) -> None:
     doc = {
         "kind": kind,
         "questId": quest_id,
@@ -3752,7 +3787,7 @@ def _validate_social_links(value):
 # writing any of it is still Cloud-Function-only, same as every other
 # collection.
 _SIMPLE_PROFILE_FIELDS = (
-    "logoUrl", "category", "missionStatement", "city", "state", "website", "contactEmail",
+    "logoUrl", "category", "missionStatement", "website", "contactEmail",
     # `phone` starts out copied from the org's original ORGREQ at approval
     # time (see approve_organization_request), but the org's profile edit
     # form shows it as an editable contact number, so it stays editable
@@ -3783,6 +3818,25 @@ def update_organization_profile(req: https_fn.CallableRequest) -> dict:
 
     if "socialLinks" in req.data:
         update["socialLinks"] = _validate_social_links(req.data.get("socialLinks"))
+
+    # location/placeId/lat/lng replace the org's original signup address
+    # (see submit_organization_request) with a fresh Places Autocomplete
+    # selection — same "all four travel together" shape as
+    # update_accommodation_needs's own location fields.
+    location_keys = ("location", "placeId", "lat", "lng")
+    if any(key in req.data for key in location_keys):
+        location = req.data.get("location")
+        place_id = req.data.get("placeId")
+        if not isinstance(location, str) or not location.strip() or not isinstance(place_id, str) or not place_id.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "location and placeId are required together with lat/lng.",
+            )
+        lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
+        update["location"] = location
+        update["placeId"] = place_id
+        update["lat"] = lat
+        update["lng"] = lng
 
     firestore.client().collection("organizations").document(req.auth.uid).update(update)
     return {"success": True}

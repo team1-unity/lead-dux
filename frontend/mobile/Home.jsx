@@ -136,6 +136,9 @@ function useHasRsvpdQuest(user) {
 // links into two of Explore Quests' own filters (your RSVP'd quests
 // always; revisit past quests only once there's actually a past quest to
 // revisit) rather than dropping someone straight into the quest feed.
+// These three sit in one horizontal row (.home-actions-row), not stacked
+// vertically — a compact, glanceable row of equally-sized buttons reads
+// more like a game's menu than a tall stack of full-width rows.
 // Rank progress is ProgressCard (@shared/ProgressCard.jsx — moved here
 // from Profile.jsx, its original home) — the full rank card (name,
 // points, progress bar, milestone ladder, certificate banner), not the
