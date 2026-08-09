@@ -321,9 +321,9 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --duck-mark-url: url('/brand/duck-yellow.png');
-    --paper: #16171a;
-    --paper-card: #2b2d31;
-    --paper-well: #35373c;
+    --paper: #2b2d31;
+    --paper-card: #35373c;
+    --paper-well: #3f4147;
     --line: #dbdee1;
     --line-soft: #949ba4;
     --border: rgba(255, 255, 255, 0.08);
@@ -391,9 +391,9 @@
 }
 :root[data-theme='dark'] {
   --duck-mark-url: url('/brand/duck-yellow.png');
-  --paper: #16171a;
-  --paper-card: #2b2d31;
-  --paper-well: #35373c;
+  --paper: #2b2d31;
+  --paper-card: #35373c;
+  --paper-well: #3f4147;
   --line: #dbdee1;
   --line-soft: #949ba4;
   --border: rgba(255, 255, 255, 0.08);
