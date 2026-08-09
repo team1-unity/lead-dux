@@ -291,10 +291,10 @@ export function QuestSeriesRow({ series, onChanged, showOwner = false }) {
           <img src={a.qr} alt="Event check-in QR code" />
           <p className="data-stat">Attendees scan this from the app's Check In screen.</p>
           <div className="flex gap-sm" style={{ marginTop: 10, justifyContent: 'center' }}>
-            <StampButton as="a" href={a.qr} download={`quest-${selected.id}-qr.png`}>
+            <StampButton as="a" variant="primary" href={a.qr} download={`quest-${selected.id}-qr.png`}>
               Download
             </StampButton>
-            <StampButton type="button" onClick={() => setConfirmingRefresh((v) => !v)} disabled={a.qrBusy}>
+            <StampButton type="button" variant="primary" onClick={() => setConfirmingRefresh((v) => !v)} disabled={a.qrBusy}>
               Regenerate
             </StampButton>
           </div>

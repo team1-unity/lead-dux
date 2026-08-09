@@ -11,12 +11,18 @@ import { usePreviousPath } from '@shared/PreviousPathContext.jsx';
 import { labelForPath } from '@shared/routeLabels.js';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { QuestDetailBody, sideQuestGate } from '@mobile/Quests.jsx';
+import { QuestSeriesDetailPane } from '@org/Quests.jsx';
 
 // A standalone page for one quest series, reusing the exact same
 // QuestDetailBody the main Quests page shows inline — this is what
 // Organization Profile's "Active Quests" cards (and anything else that
 // wants to link straight to a specific quest) point at, rather than a
-// deep link back into the browsing list.
+// deep link back into the browsing list. An organization landing here on
+// its OWN quest (from org/Quests.jsx's own mobile list — see that file's
+// own note on why it navigates here instead of expanding in place) gets
+// QuestSeriesDetailPane instead — the same edit/delete/QR/attendees
+// management body org/Quests.jsx's desktop sticky pane already shows —
+// rather than the read-only QuestDetailBody every other viewer sees.
 export function QuestDetails() {
   const { seriesId } = useParams();
   const navigate = useNavigate();
@@ -90,21 +96,26 @@ export function QuestDetails() {
   const previousLabel = labelForPath(previousPath);
   const backTo = previousLabel ? previousPath : '/quests';
   const backLabel = previousLabel || 'Quests';
+  const isOwner = role === 'organization' && series.primary.orgId === user.uid;
 
   return (
     <PageMotion>
       <BackLink to={backTo} label={backLabel} />
       <div className="ink-card">
-        <QuestDetailBody
-          series={series}
-          userId={user.uid}
-          canRsvp={role === 'user'}
-          busyId={busyId}
-          onToggleRsvp={toggleRsvp}
-          gate={sideQuestGate(series.primary, sideQuestStatus)}
-          onGoToOrgQuests={() => navigate('/quests')}
-          showTitle
-        />
+        {isOwner ? (
+          <QuestSeriesDetailPane series={series} onChanged={load} showTitle />
+        ) : (
+          <QuestDetailBody
+            series={series}
+            userId={user.uid}
+            canRsvp={role === 'user'}
+            busyId={busyId}
+            onToggleRsvp={toggleRsvp}
+            gate={sideQuestGate(series.primary, sideQuestStatus)}
+            onGoToOrgQuests={() => navigate('/quests')}
+            showTitle
+          />
+        )}
       </div>
     </PageMotion>
   );

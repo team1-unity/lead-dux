@@ -268,8 +268,11 @@ function AccountSection() {
 // out used to live only here — a "user" role's own Profile.jsx identity
 // card now has its own quick "Log out" button directly on it, so this
 // section is skipped for that role (see Settings() below) to avoid
-// offering the exact same action twice; other roles (organization/admin/
-// pending_org/onboarding_org) still reach it here, same as before.
+// offering the exact same action twice. "organization" skips it for the
+// same reason: that role's own Profile.jsx identity card (Edit profile/
+// View profile/Settings/Log out) and its desktop nav avatar dropdown
+// (BottomNav.jsx) both already have their own Log out. admin/pending_org/
+// onboarding_org still reach it here, same as before.
 export function LogoutSection() {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -408,7 +411,7 @@ export function Settings() {
         <ThemePicker />
         {role === 'user' && <AccommodationNeedsEditor />}
         <AccountSection />
-        {role !== 'user' && <LogoutSection />}
+        {role !== 'user' && role !== 'organization' && <LogoutSection />}
         <DangerZone />
       </div>
     </PageMotion>

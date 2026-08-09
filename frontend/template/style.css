@@ -525,6 +525,41 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Scrollbars, everywhere — every scrolling element in the app (the page
+   itself, any overflow-y:auto panel like .about-edit-scroll/
+   .quest-form-scroll, lightbox content, admin tables) inherits this
+   rather than each needing its own rule, since scrollbar-color/
+   ::-webkit-scrollbar aren't scoped by default the way most other
+   properties are. A fixed brown, not one of the theme-swapped --border/
+   --line tokens — --border in particular goes translucent-yellow in dark
+   mode (see its own comment), which wouldn't read as "brown" against a
+   dark track at all, and a scrollbar's own chrome doesn't need to shift
+   with the page's theme the way real content does. */
+:root {
+  --scrollbar-thumb: #8b6f4e;
+  --scrollbar-thumb-hover: #6b5238;
+}
+* {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
 /* This ships as a Capacitor WebView on top of being a regular site, so the
    touch specifics matter for real: manipulation skips the ~300ms tap delay
    still present on some Android WebViews, and a transparent tap-highlight
@@ -2134,14 +2169,33 @@ button.quest-card-head:hover:not(:disabled) {
 
 /* The org About section's inline edit form (OrganizationProfile.jsx) —
    same borderless, document-style rows/description-textarea as the
-   create-quest form above, just without that form's fixed max-height/
-   internal scroll/max-width — this one already lives inside a normal-width
-   ink-card section, not a standalone page. */
+   create-quest form above, and now the same fixed max-height/internal-
+   scroll shape too (see .about-edit-scroll below) — just without that
+   form's own max-width, since this one already lives inside a normal-
+   width ink-card section, not a standalone page. */
 .about-edit-doc {
   display: flex;
   flex-direction: column;
   gap: 16px;
   margin-top: 10px;
+  max-height: min(560px, 70vh);
+}
+.about-edit-doc *:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+/* Everything that can grow without bound (the mission statement, an
+   ever-longer list of added properties) scrolls in here instead of
+   pushing the Save/Cancel footer down and growing the About card itself
+   past .about-edit-doc's own max-height — same split as
+   .create-quest-doc/.quest-form-scroll above. */
+.about-edit-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .quest-form-scroll {
@@ -2662,6 +2716,30 @@ a.org-home-stat-tile:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Mobile only: one full-width card, then the next directly under it —
+   instead of the grid above's fixed 60vh per tile (see that rule's own
+   comment), each card here is exactly as tall as its own content (a
+   number, a label, up to 3 short preview lines — already capped in JS),
+   so there's no dead space and no need for the preview's own bottom fade
+   (nothing overflows to hide). Same 860px breakpoint the rest of this
+   file uses for desktop-only treatments. */
+@media (max-width: 859px) {
+  .org-home-stats {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .org-home-stat-tile {
+    height: auto;
+  }
+  .org-home-stat-preview {
+    overflow: visible;
+  }
+  .org-home-stat-preview::after {
+    display: none;
+  }
 }
 
 /* Search + the Filters button share one row (see Quests.jsx) — the search
@@ -4238,6 +4316,32 @@ button.data-row:active:not(:disabled) {
 
 /* ---------- Organization Profile page (see OrganizationProfile.jsx) ---------- */
 
+/* .profile-grid's own align-items:start (see that rule's own comment)
+   deliberately lets Profile.jsx's cards size to their own content instead
+   of stretching to match a row's tallest — but here, About and Active
+   Quests are the only two cards in the row and read better matched: a
+   short About section and a long quest list (or vice versa) otherwise
+   makes the shorter one look unfinished rather than just "less content
+   today." Grid's own default (stretch) already does this on its own; this
+   only needs to override .profile-grid's start back to it, same
+   specificity so source order (this comes after) decides the winner. */
+.org-profile-grid {
+  align-items: stretch;
+}
+
+/* About/Active Quests keep a consistent minimum presence on the page even
+   when they're nearly empty (a brand-new org with no mission statement
+   and no quests yet) — a min-height, not a fixed one, so either card is
+   still free to grow taller than this once real content (or, for About,
+   the edit form) needs it. Now that .org-profile-grid stretches both to
+   match the row's tallest anyway, this mostly matters when BOTH are
+   sparse at once (a brand-new org with no quests yet) and the row itself
+   would otherwise be short. */
+.org-profile-about,
+.org-profile-quests {
+  min-height: 20vh;
+}
+
 .org-profile-header {
   display: flex;
   align-items: center;
@@ -4304,6 +4408,14 @@ button.data-row:active:not(:disabled) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 10px;
+}
+/* Community Photos (OrganizationProfile.jsx) — a fixed 4-across grid
+   instead of auto-fill's variable column count, so a row always reads as
+   a deliberate set of 4 rather than however many 100px+ thumbnails
+   happen to fit. .photo-gallery-thumb's own aspect-ratio:1 still does the
+   square-cropping, unchanged. */
+.photo-gallery-grid-fixed-4 {
+  grid-template-columns: repeat(4, 1fr);
 }
 .photo-gallery-thumb-wrap {
   position: relative;
@@ -5989,7 +6101,9 @@ button.data-row:active:not(:disabled) {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
   z-index: 3;
 }
 .image-upload-card-preview:hover .image-upload-card-remove {
@@ -6059,11 +6173,12 @@ button.data-row:active:not(:disabled) {
   cursor: pointer;
   background: none;
 }
-/* .user-avatar/.org-avatar both default to their own fixed size (64px) —
-   this trigger wants whichever one it wraps to fill its own 72px button
-   instead. */
+/* .user-avatar/.org-avatar/.org-profile-logo all default to their own
+   fixed size (64px) — this trigger wants whichever one it wraps to fill
+   its own 72px button instead. */
 .avatar-edit-trigger .user-avatar,
-.avatar-edit-trigger .org-avatar {
+.avatar-edit-trigger .org-avatar,
+.avatar-edit-trigger .org-profile-logo {
   width: 100%;
   height: 100%;
 }

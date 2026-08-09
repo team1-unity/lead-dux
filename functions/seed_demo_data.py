@@ -701,8 +701,6 @@ def seed_organizations():
             "logoUrl": logo_url(org["name"]),
             "category": org["category"],
             "missionStatement": org["missionStatement"],
-            "city": org["city"],
-            "state": org["state"],
             "website": org["website"],
             "contactEmail": org["email"],
             "socialLinks": org["social"],

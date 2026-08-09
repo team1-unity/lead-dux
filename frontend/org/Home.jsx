@@ -6,6 +6,7 @@ import { useAuth } from '@shared/AuthContext.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { AmbientParticles } from '@shared/AmbientParticles.jsx';
+import { NotificationBanner } from '@shared/NotificationBanner.jsx';
 import { OrgAvatar } from '@shared/OrgAvatar.jsx';
 import { TrustTag } from '@shared/TrustTag.jsx';
 import { getTrustStatus, groupBySeries, isUpcoming } from '@shared/questSeries.js';
@@ -71,8 +72,14 @@ export function Home() {
   const trustStatus = getTrustStatus(org.reviewCount || 0, org.avgRating || 0);
 
   return (
-    <PageMotion>
-      <AmbientParticles />
+    <>
+      {/* Sibling of PageMotion, not its child — see mobile/Home.jsx's own
+          note on why (PageMotion's transform opens a new stacking context
+          that would otherwise cap this banner's z-index against only its
+          own siblings inside PageMotion, not the page's real content). */}
+      <NotificationBanner />
+      <PageMotion>
+        <AmbientParticles />
       <div className="org-home-greeting">
         <Link to={`/organizations/${user.uid}`} className="org-home-avatar-link" aria-label="View your public profile">
           <OrgAvatar name={org.name} seed={user.uid} logoUrl={org.logoUrl} />
@@ -116,6 +123,7 @@ export function Home() {
           />
         </Link>
       </div>
-    </PageMotion>
+      </PageMotion>
+    </>
   );
 }

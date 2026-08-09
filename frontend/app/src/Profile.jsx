@@ -19,6 +19,15 @@ import { BadgeRing } from '@mobile/Badges.jsx';
 // Home.jsx instead). Its own component (rather than inline JSX) so both
 // the mobile profile-grid and the desktop sidebar's bottom card can
 // render the same markup instead of forking it.
+//
+// role === 'organization' never reaches this component at all anymore —
+// once approved, "you're an approved organization" is no longer news worth
+// a permanent status card here (that moment now surfaces once, as a
+// dismissible NotificationBanner on org/Home.jsx instead — see
+// approve_organization's own _notify_user call), and the Edit profile/View
+// profile pair that role actually needs lives directly in the identity
+// card above (see Profile() below), in the same action-item stack as
+// Settings/Log out, not a second card of its own.
 function OrganizationCard({ role }) {
   return (
     <section className='ink-card' style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -42,18 +51,6 @@ function OrganizationCard({ role }) {
           <p style={{ margin: '8px 0 0' }}>
             Your organization application is awaiting admin review.
           </p>
-        </div>
-      )}
-
-      {role === 'organization' && (
-        <div className='flex justify-between items-center'>
-          <div>
-            <StatusStamp tone='education'>APPROVED</StatusStamp>
-            <p style={{ margin: '8px 0 0' }}>You already manage an organization.</p>
-          </div>
-          <Link to='/org' aria-label='Go to your organization home'>
-            <IconChevron style={{ transform: 'rotate(-90deg)' }} />
-          </Link>
         </div>
       )}
 
@@ -173,9 +170,25 @@ export function Profile() {
         <UserAvatar photoURL={photoURL} duckSkin={duckSkin} />
         {nameAndBadges}
         <p className='profile-meta'>{user.email}</p>
-        <StampButton type='button' variant='primary' onClick={() => setEditingProfile(true)}>
-          Edit Profile
-        </StampButton>
+        {role === 'organization' ? (
+          <>
+            {/* Zero-fill (default variant) — unlike a member's own "Edit
+                Profile" below, neither of these submits anything on this
+                page itself; they're just links to OrganizationProfile.jsx's
+                own edit/view modes, so neither reads as *the* primary
+                action here the way a filled button would. */}
+            <StampButton as={Link} to={`/organizations/${user.uid}`} state={{ editMode: true }}>
+              Edit profile
+            </StampButton>
+            <StampButton as={Link} to={`/organizations/${user.uid}`}>
+              View profile
+            </StampButton>
+          </>
+        ) : (
+          <StampButton type='button' variant='primary' onClick={() => setEditingProfile(true)}>
+            Edit Profile
+          </StampButton>
+        )}
         <StampButton as={Link} to='/settings'>
           Settings
         </StampButton>
@@ -188,7 +201,7 @@ export function Profile() {
       {editProfileModal}
 
       <div className='profile-grid'>
-        {role !== 'user' && <OrganizationCard role={role} />}
+        {role !== 'user' && role !== 'organization' && <OrganizationCard role={role} />}
       </div>
     </PageMotion>
   );

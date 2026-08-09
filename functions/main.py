@@ -928,8 +928,6 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "logoUrl": None,
         "category": None,
         "missionStatement": None,
-        "city": None,
-        "state": None,
         "website": None,
         "contactEmail": None,
         "socialLinks": {},
@@ -939,6 +937,7 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
     })
     req_ref.update({"status": "approved"})
     auth.set_custom_user_claims(target_uid, {"role": "organization"})
+    _notify_user(db, target_uid, kind="org_approved")
 
     return {"success": True, "targetUid": target_uid, "role": "organization"}
 
@@ -3173,11 +3172,15 @@ def mark_feedback_read(req: https_fn.CallableRequest) -> dict:
 # to a specific completed quest): a notification is transient and has no
 # reason to persist once seen, so dismissing it (see dismiss_notification
 # below) deletes the doc outright rather than flipping a `read` flag. Used
-# today for the two ways a quest can change out from under someone who's
-# already RSVP'd — see update_quest (reschedule) and the delete_quest*
-# family (cancellation) — but generic enough for any future "something
-# about a quest you're in changed" notice.
-def _notify_user(db, uid: str, *, kind: str, quest_id: str, quest_title: str, extra: dict = None) -> None:
+# for the two ways a quest can change out from under someone who's already
+# RSVP'd (update_quest's reschedule, the delete_quest* family's
+# cancellation) and, with quest_id/quest_title both omitted, for
+# approve_organization's own "you're approved" notice — generic enough for
+# any future notice that isn't about a specific quest at all. `uid` works
+# for an organization's own uid exactly the same way it does a member's —
+# this collection is keyed by uid alone, not scoped to the "user" role (see
+# firestore.rules' identical `request.auth.uid == uid` check on it).
+def _notify_user(db, uid: str, *, kind: str, quest_id: str = None, quest_title: str = None, extra: dict = None) -> None:
     doc = {
         "kind": kind,
         "questId": quest_id,
@@ -3742,7 +3745,7 @@ def _validate_social_links(value):
 # writing any of it is still Cloud-Function-only, same as every other
 # collection.
 _SIMPLE_PROFILE_FIELDS = (
-    "logoUrl", "category", "missionStatement", "city", "state", "website", "contactEmail",
+    "logoUrl", "category", "missionStatement", "website", "contactEmail",
     # `phone` starts out copied from the org's original ORGREQ at approval
     # time (see approve_organization_request), but the org's profile edit
     # form shows it as an editable contact number, so it stays editable
@@ -3773,6 +3776,25 @@ def update_organization_profile(req: https_fn.CallableRequest) -> dict:
 
     if "socialLinks" in req.data:
         update["socialLinks"] = _validate_social_links(req.data.get("socialLinks"))
+
+    # location/placeId/lat/lng replace the org's original signup address
+    # (see submit_organization_request) with a fresh Places Autocomplete
+    # selection — same "all four travel together" shape as
+    # update_accommodation_needs's own location fields.
+    location_keys = ("location", "placeId", "lat", "lng")
+    if any(key in req.data for key in location_keys):
+        location = req.data.get("location")
+        place_id = req.data.get("placeId")
+        if not isinstance(location, str) or not location.strip() or not isinstance(place_id, str) or not place_id.strip():
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                "location and placeId are required together with lat/lng.",
+            )
+        lat, lng = _validate_coordinates(req.data.get("lat"), req.data.get("lng"))
+        update["location"] = location
+        update["placeId"] = place_id
+        update["lat"] = lat
+        update["lng"] = lng
 
     firestore.client().collection("organizations").document(req.auth.uid).update(update)
     return {"success": True}
