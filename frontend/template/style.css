@@ -307,25 +307,26 @@
 }
 
 /* Dark mode isn't covered by the "theme 9a" handoff doc at all — it only
-   ever shows one cream palette. Extended in the same spirit rather than
-   reusing the old neutral-gray dark mode: warm dark brown/charcoal
-   surfaces (an inverted echo of the light theme's cream), cream-ish ink
-   text, same low-chroma pastel accent families just re-lit for a dark
-   background (dark muted fill + a brighter version of the same ink).
-   --accent/--brand-green (the original pale butter-yellow) is restored
-   here on purpose — a bright accent staying vivid against a dark surface
-   was already working, so only light mode's --accent got promoted to the
-   deeper --brand-green-deep (see :root above); dark mode keeps the old
-   value rather than inheriting that change. */
+   ever shows one cream palette. Originally extended as a warm dark
+   brown/charcoal echo of the light theme's cream — revised to a neutral,
+   Discord-inspired grey-black instead (--paper/--paper-card/--paper-well
+   step from near-black up to a lighter charcoal, same relative order as
+   before, just without the brown cast; --line/--line-soft/--border follow
+   the same neutral shift). --accent/--brand-green (the original pale
+   butter-yellow) is restored here on purpose — a bright accent staying
+   vivid against a dark surface was already working, so only light mode's
+   --accent got promoted to the deeper --brand-green-deep (see :root
+   above); dark mode keeps the old value rather than inheriting that
+   change. */
 @media (prefers-color-scheme: dark) {
   :root {
     --duck-mark-url: url('/brand/duck-yellow.png');
-    --paper: #211c12;
-    --paper-card: #2b2418;
-    --paper-well: #332b1c;
-    --line: #f2ecd9;
-    --line-soft: #c9bd9e;
-    --border: rgba(240, 228, 168, 0.14);
+    --paper: #16171a;
+    --paper-card: #2b2d31;
+    --paper-well: #35373c;
+    --line: #dbdee1;
+    --line-soft: #949ba4;
+    --border: rgba(255, 255, 255, 0.08);
     --shadow: rgba(0, 0, 0, 0.4);
     --image-outline: rgba(255, 255, 255, 0.1);
     --accent: var(--brand-green);
@@ -390,12 +391,12 @@
 }
 :root[data-theme='dark'] {
   --duck-mark-url: url('/brand/duck-yellow.png');
-  --paper: #211c12;
-  --paper-card: #2b2418;
-  --paper-well: #332b1c;
-  --line: #f2ecd9;
-  --line-soft: #c9bd9e;
-  --border: rgba(240, 228, 168, 0.14);
+  --paper: #16171a;
+  --paper-card: #2b2d31;
+  --paper-well: #35373c;
+  --line: #dbdee1;
+  --line-soft: #949ba4;
+  --border: rgba(255, 255, 255, 0.08);
   --shadow: rgba(0, 0, 0, 0.4);
   --image-outline: rgba(255, 255, 255, 0.1);
   --accent: var(--brand-green);
@@ -4931,7 +4932,7 @@ button.data-row:active:not(:disabled) {
     gap: 0;
     min-width: auto;
     border-radius: var(--radius-lg);
-    background-color: var(--accent-soft);
+    background-color: var(--paper-card);
     padding: 6px;
   }
   .home-quick-action {
@@ -4962,7 +4963,7 @@ button.data-row:active:not(:disabled) {
     transform: none;
   }
   .home-quick-action:hover {
-    background: var(--accent-soft);
+    background: var(--paper-well);
   }
   .home-quick-action-label {
     display: inline;
