@@ -325,13 +325,10 @@ function JournalCard({ entry, isOpen, onOpen }) {
     }
   }
 
-  const hasPicture = Boolean(resolvedUrl);
-
   return (
     <motion.div
       layoutId={`journal-card-${entry.id}`}
       className='journal-card'
-      data-has-picture={hasPicture ? 'true' : 'false'}
       role='button'
       tabIndex={0}
       onClick={onOpen}
@@ -344,16 +341,13 @@ function JournalCard({ entry, isOpen, onOpen }) {
       animate={{ opacity: isOpen ? 0 : 1 }}
       transition={{ duration: 0.15 }}
     >
-      {/* Blank until a picture is actually chosen (see "Change background
-          picture" in the expanded card's menu) or auto-filled from an
-          approved proof photo (see approve_photo_submission) — no default
-          stock photo standing in for one that was never picked. */}
-      {hasPicture && (
-        <>
-          <img src={resolvedUrl} alt='' className='journal-card-bg' loading='lazy' />
-          <div className='journal-card-scrim' aria-hidden='true' />
-        </>
-      )}
+      {/* The brand placeholder until a picture is actually chosen (see
+          "Change background picture" in the expanded card's menu) or
+          auto-filled from an approved proof photo (see
+          approve_photo_submission) — same photo-card treatment either way,
+          just a different src. */}
+      <img src={resolvedUrl || '/brand/journal-placeholder.png'} alt='' className='journal-card-bg' loading='lazy' />
+      <div className='journal-card-scrim' aria-hidden='true' />
       {isNew && <span className='journal-card-new-badge'>New</span>}
       <p className='journal-card-title'>{entry.questTitle}</p>
     </motion.div>

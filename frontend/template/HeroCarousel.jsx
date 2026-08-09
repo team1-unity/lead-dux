@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { storage } from './firebaseapp.jsx';
-import { DuckMark } from './Logo.jsx';
 
 // Organizations' Community Photos gallery (org.photos, an array of Storage
 // paths — see OrganizationProfile.jsx's OrgPhotoGallery, which this mirrors)
@@ -9,8 +8,8 @@ import { DuckMark } from './Logo.jsx';
 // — anyone who wants to browse a specific photo already has the org's own
 // profile page to do that at their own pace. Pressing and holding the
 // photo pauses the advance (see pause/resume below) without adding real
-// navigation; letting go just picks the timer back up. Falls back to
-// the org's logo, then the plain DuckMark placeholder, whenever there are
+// navigation; letting go just picks the timer back up. Falls back to the
+// org's logo, then the brand placeholder illustration, whenever there are
 // zero photos to show. Shared by the map quest detail (MapQuestDetailBody.jsx)
 // and the Explore Quests detail (mobile/Quests.jsx's QuestDetailBody).
 export function HeroCarousel({ photoPaths, orgLogoUrl }) {
@@ -72,9 +71,7 @@ export function HeroCarousel({ photoPaths, orgLogoUrl }) {
     return orgLogoUrl ? (
       <img src={orgLogoUrl} alt="" className="quest-hero-img" />
     ) : (
-      <div className="quest-hero-fallback" aria-hidden="true">
-        <DuckMark size={64} />
-      </div>
+      <img src="/brand/placeholder.png" alt="" className="quest-hero-img" />
     );
   }
 

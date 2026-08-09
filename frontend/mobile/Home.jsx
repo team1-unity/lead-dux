@@ -199,16 +199,18 @@ export function Home() {
   );
 
   // Portaled straight to <body>, not just rendered as a PageMotion
-  // sibling like the elements below it in either branch — this Home
-  // screen is itself rendered inside ANOTHER PageMotion one level up
-  // (App.jsx's PublicHome wraps <HomeScreen/> in its own route-transition
-  // PageMotion), so a plain fixed div here would still pick up *that*
-  // ancestor's always-on filter as its containing block and end up boxed
-  // into #root's own capped column instead of the true viewport —
-  // invisible on narrow widths where #root already spans the full
-  // screen, but visible on any wider one. The portal escapes every
-  // ancestor's containing block regardless of how many motion wrappers
-  // stack up above it.
+  // sibling like the elements below it — this Home screen is itself
+  // rendered inside ANOTHER PageMotion one level up (App.jsx's PublicHome
+  // wraps <HomeScreen/> in its own route-transition PageMotion), so a
+  // plain fixed div here would still pick up *that* ancestor's always-on
+  // filter as its containing block and end up boxed into #root's own
+  // capped column instead of the true viewport — invisible on narrow
+  // widths where #root already spans the full screen, but visible on any
+  // wider one. The portal escapes every ancestor's containing block
+  // regardless of how many motion wrappers stack up above it.
+  // Desktop-only now — the mobile layout below has its own non-fixed
+  // .home-scene banner instead (see its own comment), not this full-bleed
+  // fixed background.
   const backdrop = createPortal(<div className="home-page-bg" aria-hidden="true" />, document.body);
 
   // Desktop gets a genuinely different layout, not just a restyled one —
@@ -226,10 +228,12 @@ export function Home() {
             <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} width={320} />
           </div>
           <div className="home-hero-panel">
-            {greetingText}
-            <HomeQuickActions hasRsvpd={hasRsvpd} lastAttended={lastAttended} />
-            <ProgressCard />
-            <NotificationBanner />
+            <div className="home-hero-card">
+              {greetingText}
+              <HomeQuickActions hasRsvpd={hasRsvpd} lastAttended={lastAttended} />
+              <ProgressCard />
+              <NotificationBanner />
+            </div>
           </div>
         </PageMotion>
       </>
@@ -238,7 +242,6 @@ export function Home() {
 
   return (
     <>
-      {backdrop}
       {/* Outside PageMotion deliberately — PageMotion's motion.div always
           carries a `filter` value (even blur(0px) at rest, see
           PageMotion.jsx), and any filter (like transform) establishes a
@@ -263,14 +266,21 @@ export function Home() {
           HomeQuickActions above. */}
       <NotificationBanner />
       <PageMotion className="home-page">
-        <div className='home-greeting'>
+        {/* A fixed-proportion illustrated banner, not the full-bleed fixed
+            background the desktop hero uses — this is a normal top section
+            of one scrolling page (matches the reference layout this is
+            modeled on), so it scrolls away with everything else instead of
+            staying pinned behind it. Just the duck; the greeting moved
+            down into .home-content below, standing alone here the way the
+            reference's own character does. */}
+        <div className="home-scene">
           <div className="home-duck-stage">
             <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} />
           </div>
-          {greetingText}
         </div>
 
-        <div style={{ marginBottom: 16 }}>
+        <div className="home-content">
+          {greetingText}
           <ProgressCard />
         </div>
       </PageMotion>
