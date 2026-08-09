@@ -1292,7 +1292,7 @@ nav {
    actually live in the same presence Landing's hero already has, with no
    new token needed. */
 .top-bar-title-hero,
-.home-greeting h1,
+.home-greeting-text h1,
 .quest-feed-greeting h1,
 .page-greeting h1 {
   margin: 0;
@@ -4759,7 +4759,7 @@ button.data-row:active:not(:disabled) {
   border-radius: var(--radius-full);
   background: var(--paper-well);
   overflow: hidden;
-  margin: 10px 0 18px;
+  margin: 1rem 0 2rem;
 }
 .rank-progress-fill {
   position: absolute;
@@ -4772,12 +4772,28 @@ button.data-row:active:not(:disabled) {
 .home-page {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  /* Centers within the space between #root's own top/bottom padding —
-     24px top, nav-height + 32px bottom (see #root above) — rather than
-     the raw viewport height, so it lands in the actual visible content
-     area above the bottom nav instead of getting pulled down past it. */
-  min-height: calc(100vh - var(--nav-height) - 56px);
+  /* Content now starts at the top (.home-scene, then .home-content right
+     below it) rather than centering as a block within the available
+     height — matches the reference layout this is modeled on, and made
+     sense before only because there was nothing above the greeting to
+     anchor to. min-height is just 100vh now (not the old calc reserving
+     space for #root's own top/bottom padding) — #root:has(.home-scene)
+     below zeroes that padding out for this page specifically. */
+  min-height: 100vh;
+}
+/* .home-scene needs to reach the true top edge (not sit 24px down inside
+   #root's usual padding) for its background to actually cover the top of
+   the screen, and .home-content's own --paper-well fill needs to reach
+   the true bottom edge too, not stop short and reveal #root's own bottom
+   padding as a gap of the page's plain --paper underneath. Scoped to
+   :has(.home-scene) — mobile Home only — rather than editing #root's own
+   rule, so every other page keeps its normal padding. The bottom-nav
+   clearance that padding used to provide moves onto .home-content's own
+   padding-bottom instead (see its own rule), so content still clears the
+   fixed nav even though the background now paints behind where it sits. */
+#root:has(.home-scene) {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 /* Nothing constrained this on desktop before — at the #root:has(.bottom-nav)
    1180px cap (see #root above), the greeting/rank-card/CTA buttons were
@@ -4824,7 +4840,62 @@ button.data-row:active:not(:disabled) {
   justify-content: center;
 }
 
-.home-greeting {
+/* The illustrated brand landscape (bg.png), full-bleed behind the desktop
+   hero (see Home.jsx's isDesktop branch) — mobile has its own
+   fixed-proportion .home-scene banner instead (below), not this fixed
+   background. Portaled to <body> in Home.jsx (see its own comment) rather
+   than just rendered as a PageMotion sibling, since Home is itself nested
+   inside ANOTHER PageMotion at the App.jsx route level — escaping to
+   <body> sidesteps every ancestor's containing-block regardless of how
+   many motion wrappers stack up above it. z-index:-1 keeps it behind
+   #root (z-index: 1) in the shared root stacking context (neither html
+   nor body sets its own position, so there's no intermediate context
+   splitting the two). */
+.home-page-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: url('/brand/bg.png') center 55% / cover no-repeat;
+}
+
+/* The mobile equivalent of the desktop hero's full-bleed background — a
+   normal top section of one scrolling page instead of a fixed backdrop
+   (see Home.jsx's own comment on why), sized to a fixed share of the
+   viewport rather than however tall the duck happens to be. The
+   width:100vw + negative-margin pair is the same full-bleed breakout this
+   file already uses for .events-map-page's own mobile layout — #root has
+   symmetric left/right padding below the desktop breakpoint (no sidebar
+   reservation yet), so the simple 50vw-based centering math holds here,
+   unlike that other rule's desktop-only caveat about asymmetric padding. */
+.home-scene {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  height: 42vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: url('/brand/bg.png') center 55% / cover no-repeat;
+}
+/* Everything below the illustrated banner — the greeting (moved down here
+   from over the image, see Home.jsx) through the rank card — on a plain
+   solid fill instead, matching the reference layout this is modeled on. */
+.home-content {
+  background: var(--paper-well);
+  /* Rounded top corners, pulled up to overlap .home-scene's own bottom
+     edge (negative margin) rather than just butting flush against it —
+     reads as a rounded card tucked in behind/under the illustration, not
+     a literal drawer, just that same peeking-out silhouette. Later in the
+     DOM than .home-scene and neither sets a z-index, so this naturally
+     paints on top of the overlapped strip without needing one. */
+  margin-top: -24px;
+  border-radius: 24px 24px 0 0;
+  /* Bottom-nav clearance lives here now, not on #root (see
+     #root:has(.home-scene) above) — the background still paints all the
+     way to the true bottom edge, but the actual content stops short of
+     the fixed nav. */
+  padding: 40px 20px calc(var(--nav-height) + 32px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4845,24 +4916,178 @@ button.data-row:active:not(:disabled) {
 .home-greeting h1 {
   margin: 12px 0 0;
 }
-/* The member's chosen duck character (see duckSkins.js) — a real <img>,
-   not the line-drawn .duck-mark brand icon (DuckMark), so it needs its
-   own natural aspect ratio (the illustrated ducks aren't square like the
-   brand PNGs) rather than a fixed width+height square. */
-.home-greeting-duck {
-  width: 140px;
-  height: auto;
+.home-greeting-text h1 {
+  margin: 0;
+}
+/* Desktop-only side-by-side hero (see Home.jsx's isDesktop branch) — the
+   duck standing large on the left of the same full-bleed landscape
+   (.home-page-bg), a single panel stacking greeting/quick-actions/rank/
+   notification on the right, rather than the mobile stacked layout with
+   its own separately-floating HUD. Only ever rendered above --bp-wide
+   (860px, see useIsDesktop) — the mobile .home-page/.home-greeting
+   markup above is untouched and still handles everything below that. */
+.home-hero {
+  display: flex;
+  /* Was flex-end (the duck "grounded" at the bottom, matching the
+     reference image) back when the panel was only as tall as its own
+     content. Now that the panel is a fixed height, flex-end pins the much
+     shorter duck to the very bottom of that near-full-height row instead
+     — center keeps it in the vertical middle of the screen regardless of
+     how tall the panel next to it is. */
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  min-height: 90vh;
+}
+/* #root's own desktop padding (see its 48px-top/bottom rule further up)
+   is what every other page wants — breathing room around ordinary
+   content. A 95vh-tall .home-hero-panel needs that vertical padding OUT
+   OF its way instead, or the two stack past 100vh and the panel's bottom
+   ends up clipped by Home.jsx's own body-overflow:hidden with no way to
+   scroll to it. Targeting :has(.home-hero) rather than editing that rule
+   directly keeps every other page's padding untouched; the extra :has()
+   makes this more specific than that rule regardless of source order, so
+   it wins on the two properties it actually sets. Left/right padding
+   (sidebar reservation) is untouched. */
+@media (min-width: 860px) {
+  #root:has(.home-hero) {
+    padding-top: 0;
+    padding-bottom: 0;
+    /* Freeing up the padding above isn't enough on its own — #root's own
+       height still just shrink-wraps its content (the 95vh panel), so it
+       sits flush against the very top of the viewport with only leftover
+       space below it, reading as "stuck to the top" rather than centered.
+       Giving #root the full viewport height and centering its content
+       within that is what actually centers the hero (and the duck, much
+       shorter than the panel it's sharing a row with) on screen. Every
+       other #root child that matters here — BottomNav's sidebar,
+       WelcomeTour/OrgOnboarding's backdrop — is position:fixed already
+       (removed from this flow), so this only affects the routed page
+       content itself. */
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* #root:has(.bottom-nav)'s own max-width:1180px (plus margin:0 auto)
+       still centers a capped-width box within the viewport, leaving a
+       large empty margin on wider screens before the true right edge —
+       .home-hero-panel's justify-content:space-between could only ever
+       push it to #root's own right edge, not the screen's. Same
+       specificity as that rule (one :has() each), so this wins on
+       max-width purely by coming later in the file. */
+    max-width: none;
+  }
+}
+.home-hero-duck {
+  flex: none;
+}
+/* A plain rightward nudge, not a growing sibling wrapper that tries to
+   center the duck in the gap left of the panel dynamically — that
+   approach fought .home-hero-panel's own space-between positioning
+   (which was already right) and left both of them stuck at the row's
+   left edge instead. The combined selector overrides just this one
+   longhand — .home-duck-stage's own margin:-60px shorthand still governs
+   the other three sides (its overflow-buffer cancellation, see that
+   rule's own comment), this only changes how much of the left side's
+   -60px that cancellation keeps vs. how much becomes an actual shift. */
+.home-hero-duck.home-duck-stage {
+  margin-left: 80px;
+}
+/* Wraps the duck (both breakpoints — see Home.jsx's shared markup) in a
+   clipped buffer zone, cancelled out for layout purposes by an equal
+   negative margin, so the duck's own on-screen position and surrounding
+   spacing are unchanged. InteractiveMascot's hover/cursor-lean transform
+   (translate/rotate/scale) briefly extends the duck's painted bounds past
+   its own layout box each time it moves — with nothing clipping that
+   locally, those bounds were bubbling up as far as the page's own
+   scrollable overflow, popping a vertical scrollbar in and back out on
+   every interaction. overflow:hidden here contains it within this buffer
+   instead, well before it could ever reach that far.
+   Deliberately no width/height here — this box shrink-to-fits whichever
+   duck size its InteractiveMascot child renders at (its own `width` prop,
+   140 on mobile / 320 in .home-hero), so a size mismatch can't silently
+   crop the duck itself. (A `width` here would also fight this box's own
+   padding under this file's global box-sizing:border-box reset — content
+   width would come out of the width value, not in addition to it.) */
+.home-duck-stage {
+  overflow: hidden;
+  padding: 60px;
+  margin: -60px;
+  display: inline-flex;
+}
+.home-hero-panel {
+  /* Grow:0 so it never fights .home-hero's own space-between for the gap
+     between duck and panel, but shrink:1 (not none) so a narrow desktop
+     width shrinks the panel instead of overflowing — an overflow here
+     would just trade one unwanted scrollbar for another. */
+  flex: 0 1 640px;
+  /* Wider than the duck on purpose, and wide enough that ProgressCard's
+     5-item rank-milestone row (Iron through Diamond) has at least as much
+     room as it gets on a typical mobile width, not less. */
+  max-width: 54%;
+  /* A tall panel even when its content doesn't need the room — this whole
+     hero reads as one fixed, non-scrolling scene (see Home.jsx's
+     body-overflow effect), so .home-hero-card below scrolls internally if
+     its content ever needs more room than this height allows, rather than
+     the page growing a scrollbar around it. No padding/background of its
+     own — it's purely a sizing wrapper now; .home-hero-card is the only
+     visible surface. */
+  height: 78vh;
+}
+/* The one visible card surface — no separate outer frame around it
+   anymore (that dark-cream "border" effect read as an unwanted edge, not
+   a frame). Solid, not frosted — a translucent panel over a busy
+   illustration made its own contents (especially the rank card's text)
+   fight the landscape behind it for contrast.
+   overflow-y:auto is a safety net, not the default expectation: if this
+   card's own content ever needs more room than .home-hero-panel's fixed
+   height allows, it scrolls internally instead of the page growing a
+   scrollbar around it. overflow-x stays hidden so a horizontal scrollbar
+   can't appear and so this card's own rounded corners stay exact
+   regardless. Same soft floating-card shadow .quest-filter-popover
+   already uses elsewhere in this file (0 8px 24px var(--shadow)), not a
+   new shadow style invented for this one panel — without it, the
+   flat-color card just cuts off hard against the illustrated background. */
+.home-hero-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 32px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+  background: var(--paper-card);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+/* Left-aligned here, unlike the base rule's centered default — everything
+   else in .home-hero-card reads left-to-right (quick actions, rank card),
+   so a centered greeting above them was the one inconsistent block. */
+.home-hero-panel .home-greeting-text {
+  align-items: flex-start;
+  text-align: left;
+}
+.home-hero-panel .duck-caption {
+  text-align: left;
+}
+/* The track's empty portion (not the fill, which keeps the base rule's
+   --accent yellow) gets the darker of the app's two beiges — --paper —
+   instead of the base rule's --paper-well. Scoped here rather than
+   changed on .rank-progress-track itself, so mobile Home/Certificate/the
+   admin certifications panel (all sharing that same base rule) keep the
+   original color. */
+.home-hero-panel .rank-progress-track {
+  background: var(--paper);
 }
 
-/* A floating quick-actions HUD (Check in / My quests / Last quest).
-   Mobile: icon-only game-UI quick-slots (bordered, hard offset shadow,
-   gold accent glow + press-down feedback) stacked top-right — top bar is
-   a bottom tab bar here, so that corner is free. Desktop (see the
-   breakpoint below) trades that for a plain list panel instead: a
-   bordered/shadowed card holding all three rows divided by hairlines,
-   since there's room for icon+label to just read on its own rather than
-   needing a slot to pop at a glance. Both float independent of scroll
-   (position:fixed) rather than sitting inline in the page flow. */
+/* A floating quick-actions HUD (Check in / My quests / Last quest) — the
+   mobile layout only (see Home.jsx's isDesktop branch). Icon-only
+   game-UI quick-slots (bordered, hard offset shadow, gold accent glow +
+   press-down feedback) stacked top-right, floating independent of scroll
+   — top bar is a bottom tab bar here, so that corner is free. Desktop
+   renders this same component inside .home-hero-panel instead (see its
+   own rules below), in-flow rather than floating, so there's no
+   min-width:860px variant of *this* block anymore. */
 .home-quick-actions {
   position: fixed;
   top: 16px;
@@ -5027,6 +5252,28 @@ button.data-row:active:not(:disabled) {
   border: 2px solid var(--rank-ink);
   color: var(--rank-ink);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* A gentle "you are here" float — scoped to the desktop hero panel only,
+   not the base rule above, so mobile Home/Certificate/the admin
+   certifications panel (all sharing this same .rank-milestone markup)
+   keep the plain static badge. Colors/shape/shadow are exactly the base
+   rule's own — this only adds motion, no new palette. */
+@keyframes home-hero-rank-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.home-hero-card .rank-milestone[data-state='current'] .rank-milestone-dot {
+  animation: home-hero-rank-bob 3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-card .rank-milestone[data-state='current'] .rank-milestone-dot {
+    animation: none;
+  }
 }
 .rank-milestone[data-state='locked'] .rank-milestone-dot {
   background: var(--paper-well);
@@ -5540,14 +5787,6 @@ button.data-row:active:not(:disabled) {
   object-fit: cover;
   display: block;
 }
-.quest-hero-fallback {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--line-soft);
-}
 /* Desktop's "Back to Map" (see MapQuestDetailBody.jsx) — the same
    .back-link treatment used everywhere else in the app, just rendered as
    a real <button> (onClose is a callback, not a route) rather than
@@ -5823,11 +6062,13 @@ button.data-row:active:not(:disabled) {
 }
 
 /* Every collapsed card looks the same regardless of whether a reflection
-   has been saved yet — just the quest title, plain on a blank paper-well
-   fill until a background picture is actually picked (see "Change
-   background picture" in the expanded card's menu), then a photo + bottom
-   scrim + overlaid white title, same photo-card shape PhotoGallery's
-   thumbnails use. No hint text, no menu — both moved into the expanded
+   has been saved yet — just the quest title over a photo + bottom scrim,
+   same photo-card shape PhotoGallery's thumbnails use. The brand
+   placeholder (journal-placeholder.png) stands in for the background photo
+   until one is actually picked (see "Change background picture" in the
+   expanded card's menu) or auto-filled from an approved proof photo — see
+   JournalCard's own resolvedUrl fallback — so this is always a photo card,
+   never a blank one. No hint text, no menu — both moved into the expanded
    view (see ExpandedJournalEntry). */
 .journal-card-bg {
   position: absolute;
@@ -5848,12 +6089,9 @@ button.data-row:active:not(:disabled) {
   right: 14px;
   bottom: 14px;
   z-index: 1;
-  color: var(--line);
+  color: #ffffff;
   font-family: var(--font-heading);
   font-weight: 700;
-}
-.journal-card[data-has-picture='true'] .journal-card-title {
-  color: #ffffff;
 }
 .journal-card-new-badge {
   position: absolute;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { doc, getDoc, getDocs, onSnapshot, collection, limit, query, where } from 'firebase/firestore';
 import { useAuth } from '@shared/AuthContext.jsx';
@@ -9,6 +10,8 @@ import { NotificationBanner } from '@shared/NotificationBanner.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { IconQrCode, IconList, IconHistory } from '@shared/icons.jsx';
 import { duckSkinSrc } from '@shared/duckSkins.js';
+import { InteractiveMascot } from '@shared/InteractiveMascot.jsx';
+import { useIsDesktop } from '@shared/useIsDesktop.js';
 
 // A small rotating set rather than one fixed line — Home is the one screen
 // in the app someone opens several times a day, so a single static caption
@@ -30,16 +33,18 @@ function toMillis(value) {
   return (value.toDate ? value.toDate() : new Date(value)).getTime();
 }
 
-// A floating quick-actions HUD, not inline buttons. Mobile: a deliberate
-// game-UI treatment (bordered slot, hard offset shadow, lift-on-hover)
-// rather than this app's usual flat StampButton, icon-only and stacked in
-// the top-right corner. Desktop: a plain list panel instead — icon +
-// label rows divided by hairlines, floating along the right edge (see
-// .home-quick-action in style.css for the breakpoint). "My quests" only
-// appears once there's an actual RSVP'd quest to jump to (see
-// useHasRsvpdQuest above); "Last quest" only once there's a past quest to
-// revisit (see useLastAttendedQuest above) — an empty destination isn't
-// worth a slot on a HUD this small.
+// A quick-actions list, not inline buttons — reused as two genuinely
+// different things depending on Home()'s own isDesktop branch below, not
+// just two CSS skins of the same layout. Mobile: a floating HUD, a
+// deliberate game-UI treatment (bordered slot, hard offset shadow,
+// lift-on-hover) rather than this app's usual flat StampButton, icon-only
+// and stacked in the top-right corner. Desktop: rendered in-flow inside
+// .home-hero-panel instead, as a plain list — icon + label rows divided
+// by hairlines (see .home-hero-panel .home-quick-action in style.css).
+// "My quests" only appears once there's an actual RSVP'd quest to jump to
+// (see useHasRsvpdQuest above); "Last quest" only once there's a past
+// quest to revisit (see useLastAttendedQuest above) — an empty
+// destination isn't worth a slot either layout.
 function HomeQuickActions({ hasRsvpd, lastAttended }) {
   const actions = [
     { to: '/check-in', icon: IconQrCode, label: 'Check in' },
@@ -150,6 +155,7 @@ export function Home() {
   const [profile, setProfile] = useState(null);
   const lastAttended = useLastAttendedQuest(user);
   const hasRsvpd = useHasRsvpdQuest(user);
+  const isDesktop = useIsDesktop();
 
   // A live listener, not a one-time getDoc — Edit Profile is reachable two
   // ways: Profile.jsx's own button (navigates through /profile, so Home
@@ -177,9 +183,74 @@ export function Home() {
     });
   }, [user]);
 
+  // The desktop hero is meant to read as one fixed scene filling the
+  // screen (like the reference layout it's modeled on), not a page that
+  // scrolls — so page scroll is switched off for exactly as long as that
+  // branch is mounted, and restored the moment it isn't (unmount, or a
+  // resize back below --bp-wide). .home-hero-panel's own overflow-y:auto
+  // is the safety net if its content ever needs more room than the
+  // viewport has — it scrolls internally instead of the page growing a
+  // scrollbar around it.
+  useEffect(() => {
+    if (!isDesktop) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isDesktop]);
+
   if (profile === null) return <LoadingSpinner label="Loading…" />;
 
   const firstName = profile.name ? profile.name.split(' ')[0] : null;
+  const greetingText = (
+    <div className="home-greeting-text">
+      <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
+      <p className="duck-caption">{homeCaption()}</p>
+    </div>
+  );
+
+  // Portaled straight to <body>, not just rendered as a PageMotion
+  // sibling like the elements below it — this Home screen is itself
+  // rendered inside ANOTHER PageMotion one level up (App.jsx's PublicHome
+  // wraps <HomeScreen/> in its own route-transition PageMotion), so a
+  // plain fixed div here would still pick up *that* ancestor's always-on
+  // filter as its containing block and end up boxed into #root's own
+  // capped column instead of the true viewport — invisible on narrow
+  // widths where #root already spans the full screen, but visible on any
+  // wider one. The portal escapes every ancestor's containing block
+  // regardless of how many motion wrappers stack up above it.
+  // Desktop-only now — the mobile layout below has its own non-fixed
+  // .home-scene banner instead (see its own comment), not this full-bleed
+  // fixed background.
+  const backdrop = createPortal(<div className="home-page-bg" aria-hidden="true" />, document.body);
+
+  // Desktop gets a genuinely different layout, not just a restyled one —
+  // the duck standing large beside a single panel (greeting, quick
+  // actions, rank progress, any notification) rather than the mobile
+  // stack with its own separately-floating HUD, so it's a real branch
+  // (via useIsDesktop, only one mounts) rather than one DOM tree fighting
+  // to serve both through CSS alone.
+  if (isDesktop) {
+    return (
+      <>
+        {backdrop}
+        <PageMotion className="home-hero">
+          <div className="home-duck-stage home-hero-duck">
+            <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} width={320} />
+          </div>
+          <div className="home-hero-panel">
+            <div className="home-hero-card">
+              {greetingText}
+              <HomeQuickActions hasRsvpd={hasRsvpd} lastAttended={lastAttended} />
+              <ProgressCard />
+              <NotificationBanner />
+            </div>
+          </div>
+        </PageMotion>
+      </>
+    );
+  }
 
   return (
     <>
@@ -207,10 +278,17 @@ export function Home() {
           HomeQuickActions above. */}
       <NotificationBanner />
       <PageMotion className="home-page">
-        <div className='home-greeting'>
-          <img src={duckSkinSrc(profile.duckSkin)} alt="" className="home-greeting-duck" />
-          <h1>{firstName ? `Hello, ${firstName}` : 'Hello!'}</h1>
-          <p className="duck-caption">{homeCaption()}</p>
+        {/* A fixed-proportion illustrated banner, not the full-bleed fixed
+            background the desktop hero uses — this is a normal top section
+            of one scrolling page (matches the reference layout this is
+            modeled on), so it scrolls away with everything else instead of
+            staying pinned behind it. Just the duck; the greeting moved
+            down into .home-content below, standing alone here the way the
+            reference's own character does. */}
+        <div className="home-scene">
+          <div className="home-duck-stage">
+            <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} />
+          </div>
         </div>
 
         <div style={{ marginBottom: 16 }}>

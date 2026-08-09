@@ -48,46 +48,46 @@ export function ProgressCard({ profile: profileProp }) {
   const currentIndex = rankOrder.indexOf(rank);
 
   return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div className="quest-card-titles">
-        <h2 style={{ marginBottom: 0 }}>Leadership Rank</h2>
-        <p
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-display)',
-            fontSize: '1.4rem',
-            textTransform: 'uppercase',
-          }}
-        >
-          {rank}
+    <section className='ink-card' style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div
+        className='quest-card-titles'
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          gap: 12,
+        }}
+      >
+        <h2 style={{ marginBottom: 0 }}>
+          Leadership Rank
+          <span style={{ fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
+            {' '}
+            — {rank}
+          </span>
+        </h2>
+        <p className='data-stat' style={{ margin: 0, flex: 'none' }}>
+          {toNext !== null ? `${toNext} to ${rankForPoints(points + toNext)}` : 'Top rank reached'}
         </p>
       </div>
 
-      <p className="data-stat" style={{ marginTop: 4 }}>
-        {points} point{points === 1 ? '' : 's'}
-        {toNext !== null
-          ? ` — ${toNext} to ${rankForPoints(points + toNext)}`
-          : ' — top rank reached'}
-      </p>
-
       <div
-        className="rank-progress-track"
-        role="progressbar"
+        className='rank-progress-track'
+        role='progressbar'
         aria-valuenow={Math.round(percent)}
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
+        <div className='rank-progress-fill' style={{ width: `${percent}%` }} />
       </div>
 
-      <div className="rank-milestones">
+      <div className='rank-milestones'>
         {rankOrder.map((name, i) => {
           const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
           const tone = name.toLowerCase();
           return (
-            <div className="rank-milestone" key={name} data-state={state}>
+            <div className='rank-milestone' key={name} data-state={state}>
               <span
-                className="rank-milestone-dot"
+                className='rank-milestone-dot'
                 style={{
                   '--rank-color': `var(--rank-${tone})`,
                   '--rank-ink': `var(--rank-${tone}-ink)`,
@@ -96,17 +96,17 @@ export function ProgressCard({ profile: profileProp }) {
                 {state === 'done' && <IconCheck width={14} height={14} />}
                 {state === 'locked' && <IconLock width={14} height={12} />}
               </span>
-              <span className="rank-milestone-label">{name}</span>
+              <span className='rank-milestone-label'>{name}</span>
             </div>
           );
         })}
       </div>
 
       {certificateIssued && (
-        <div className="rank-certificate-banner">
+        <div className='rank-certificate-banner'>
           <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
-          <Link to="/certificate">
-            <StampButton type="button" variant="primary">
+          <Link to='/certificate'>
+            <StampButton type='button' variant='primary'>
               View certificate
             </StampButton>
           </Link>
