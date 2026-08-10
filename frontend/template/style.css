@@ -5058,17 +5058,26 @@ button.data-row:active:not(:disabled) {
 .notification-banner {
   /* Floats on top of the illustration now instead of pushing it down —
      absolute against #root (the nearest positioned ancestor; this is a
-     sibling of .home-page, not a descendant, so it anchors there
-     regardless of .home-page's own transform, see this rule's own
-     comment above on why it has to be a sibling in the first place).
-     Full-bleed (same width:100vw + negative-margin pair .home-scene/
-     .home-content already use below, not #root's own padded content
-     width), with a gap held off the true top edge instead of sitting
-     flush against it. Covering part of the illustration underneath is
-     an accepted tradeoff, not a bug. */
+     sibling of .home-page/.home-hero on both the mobile and desktop
+     branches, not a descendant of either, so it anchors to #root
+     regardless of their own transforms — see this rule's own comment
+     above on why it has to be a sibling in the first place, and
+     mobile/Home.jsx's own note on why the desktop branch needs the same
+     treatment: nested inside .home-hero-card, this would instead anchor
+     to .home-hero-panel (a [data-frame] host, so position:relative),
+     clipping/overflowing against that much narrower panel). top:1rem
+     holds it off the true top edge; left/right:5vw (not an explicit
+     width) center it with an even margin on both sides — width is
+     however wide that leaves it, rather than a fixed value that'd need
+     its own separate centering. Covering part of the illustration
+     underneath is an accepted tradeoff, not a bug. */
   position: absolute;
   top: 1rem;
-  width: 90vw;
+  left: 0.5rem;
+  right: 0.5rem;
+  box-shadow:
+    var(--game-frame-ring, inset 0 0 0 0 transparent),
+    0 8px 24px var(--shadow);
   z-index: 20;
 }
 .notification-banner-close {

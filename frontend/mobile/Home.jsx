@@ -235,6 +235,13 @@ export function Home() {
     return (
       <>
         {backdrop}
+        {/* A sibling of PageMotion, not nested inside .home-hero-card —
+            same reasoning as the mobile branch below: .home-hero-panel
+            is itself a [data-frame] host (position:relative), so
+            .notification-banner's own position:absolute would resolve
+            against that narrow panel instead of #root, clipping/
+            overflowing exactly like it used to inside .home-hero-card. */}
+        <NotificationBanner />
         <PageMotion className="home-hero">
           <div className="home-duck-stage home-hero-duck">
             <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} width={320} />
@@ -244,7 +251,6 @@ export function Home() {
               {greetingText}
               <HomeQuickActions hasRsvpd={hasRsvpd} lastAttended={lastAttended} />
               <ProgressCard />
-              <NotificationBanner />
             </div>
           </div>
         </PageMotion>

@@ -673,7 +673,7 @@ ACCOMMODATION_DETAILS_MAX_LENGTH = 500
 # update_user_profile below) — "duck1" (straw hat) is the default for
 # anyone who hasn't picked one yet. Whitelisted server-side so a client
 # can't write an arbitrary string here.
-DUCK_SKINS = {"duck1", "duck2", "duck3"}
+DUCK_SKINS = {"duck1", "duck2", "duck3", "duck4"}
 
 
 def _validate_accommodation_tags(value, field_name):

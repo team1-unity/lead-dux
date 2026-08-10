@@ -6,6 +6,7 @@ export const DUCK_SKINS = [
   { id: 'duck1', src: '/brand/duck1.png', label: 'Straw Hat' },
   { id: 'duck2', src: '/brand/duck2.png', label: 'Bow' },
   { id: 'duck3', src: '/brand/duck3.png', label: 'Chef' },
+  { id: 'duck4', src: '/brand/duck4.png', label: 'Frog' },
 ];
 
 export const DEFAULT_DUCK_SKIN = 'duck1';
