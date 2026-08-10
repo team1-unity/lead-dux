@@ -19,7 +19,8 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { LightboxBackdrop } from '@shared/LightboxBackdrop.jsx';
-import { IconDots, IconX } from '@shared/icons.jsx';
+import { ImageUploadCard } from '@shared/ImageUploadCard.jsx';
+import { IconDots } from '@shared/icons.jsx';
 
 // Fixed defaults, same for every entry — not configurable per quest. See
 // AI_README.md's "Quest Journal" section: answer one, all, or none of
@@ -32,20 +33,11 @@ const REFLECTION_PROMPTS = [
   'How did this quest reflect your leadership growth?',
 ];
 
-// A small curated set of background pictures a member can pick for an
-// entry (see set_journal_thumbnail in functions/main.py) — no upload flow,
-// just a handful of stock photos plus "remove". A card with none picked
-// yet stays blank (see JournalCard) rather than falling back to one of
-// these by default.
-const THUMBNAIL_OPTIONS = [
-  'https://images.unsplash.com/photo-1554080353-a576cf803bda?auto=format&fit=crop&w=400&q=60',
-  'https://images.unsplash.com/photo-1505144808419-1957a94ca61e?auto=format&fit=crop&w=400&q=60',
-  'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=400&q=60',
-];
-
-// A user-uploaded background picture instead — same validation/path shape
+// A user-uploaded background picture for an entry (see
+// set_journal_thumbnail in functions/main.py) — same validation/path shape
 // Profile.jsx's own avatar upload already uses (see journalThumbnails/{uid}
-// in storage.rules), just a different folder.
+// in storage.rules), just a different folder. A card with none picked yet
+// stays blank (see JournalCard) rather than falling back to a default.
 const THUMBNAIL_UPLOAD_CONTENT_TYPES = [
   'image/jpeg',
   'image/png',
@@ -121,7 +113,6 @@ function FeedbackStatus({ entry }) {
     </div>
   );
 }
-
 
 // True count of columns to lay entries out into — 1 narrow / 2 mid / 3
 // wide. Kept as a fixed number (not a CSS auto-fit grid) since the
@@ -326,13 +317,11 @@ function JournalCard({ entry, isOpen, onOpen }) {
     }
   }
 
-  const hasPicture = Boolean(resolvedUrl);
-
   return (
     <motion.div
       layoutId={`journal-card-${entry.id}`}
       className='journal-card'
-      data-has-picture={hasPicture ? 'true' : 'false'}
+      data-frame='cozy'
       role='button'
       tabIndex={0}
       onClick={onOpen}
@@ -345,16 +334,13 @@ function JournalCard({ entry, isOpen, onOpen }) {
       animate={{ opacity: isOpen ? 0 : 1 }}
       transition={{ duration: 0.15 }}
     >
-      {/* Blank until a picture is actually chosen (see "Change background
-          picture" in the expanded card's menu) or auto-filled from an
-          approved proof photo (see approve_photo_submission) — no default
-          stock photo standing in for one that was never picked. */}
-      {hasPicture && (
-        <>
-          <img src={resolvedUrl} alt='' className='journal-card-bg' loading='lazy' />
-          <div className='journal-card-scrim' aria-hidden='true' />
-        </>
-      )}
+      {/* The brand placeholder until a picture is actually chosen (see
+          "Change background picture" in the expanded card's menu) or
+          auto-filled from an approved proof photo (see
+          approve_photo_submission) — same photo-card treatment either way,
+          just a different src. */}
+      <img src={resolvedUrl || '/brand/journal-placeholder.png'} alt='' className='journal-card-bg' loading='lazy' />
+      <div className='journal-card-scrim' aria-hidden='true' />
       {isNew && <span className='journal-card-new-badge'>New</span>}
       <p className='journal-card-title'>{entry.questTitle}</p>
     </motion.div>
@@ -432,6 +418,7 @@ function ExpandedJournalEntry({ entry, onClose }) {
       <motion.div
         layoutId={`journal-card-${entry.id}`}
         className='journal-expanded-card journal-expanded-card--entry'
+        data-frame='cozy'
         onClick={(e) => e.stopPropagation()}
       >
         <JournalCardMenu
@@ -444,21 +431,14 @@ function ExpandedJournalEntry({ entry, onClose }) {
             setEditing(true);
           }}
         />
-        <button
-          type='button'
-          className='journal-expanded-close'
-          onClick={onClose}
-          aria-label='Close'
-        >
-          <IconX width={18} height={18} />
-        </button>
+        <div className='journal-expanded-card-scroll'>
         <motion.div
           layoutId={`journal-content-${entry.id}`}
           initial={reduce ? false : { opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: reduce ? 0 : 0.25, ease: 'easeInOut' }}
         >
-          <h2 style={{ marginTop: 0, paddingRight: 40 }}>{entry.questTitle}</h2>
+          <h2 style={{ marginTop: 0 }}>{entry.questTitle}</h2>
 
           <div className='journal-reflection'>
             {/* <h3>Your Reflection</h3> */}
@@ -497,7 +477,7 @@ function ExpandedJournalEntry({ entry, onClose }) {
                     onClick={saveReflection}
                     disabled={saving}
                   >
-                    {saving ? 'Saving...' : 'Save reflection'}
+                    {saving ? 'Saving…' : 'Save reflection'}
                   </StampButton>
                   {savedBody.trim() && (
                     <StampButton type='button' onClick={cancelEditing} disabled={saving}>
@@ -532,6 +512,7 @@ function ExpandedJournalEntry({ entry, onClose }) {
               instead). */}
           {!editing && <FeedbackStatus entry={entry} />}
         </motion.div>
+        </div>
       </motion.div>
 
       {pickingPicture && <ThumbnailPicker entry={entry} onClose={() => setPickingPicture(false)} />}
@@ -546,46 +527,50 @@ function ExpandedJournalEntry({ entry, onClose }) {
 // portals to document.body).
 function ThumbnailPicker({ entry, onClose }) {
   const { user } = useAuth();
-  const [saving, setSaving] = useState(null); // the url (or "remove"/"upload") currently being saved, or null
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const fileInputRef = useRef(null);
+  // ImageUploadCard's own onUpload only means "picked and locally
+  // previewed" here, not "actually uploaded" — the real Storage write
+  // waits for the explicit Upload button below (see handleSave), same
+  // pick-then-confirm shape CreateQuestForm.jsx's cover-photo upload
+  // already uses.
+  const [pickedFile, setPickedFile] = useState(null);
+  // The X on the card seeded with the entry's current picture (see
+  // initialPreviewUrl below) fires onRemove, not onUpload — there's no
+  // new File behind that, just an intent to clear it. Tracked separately
+  // from pickedFile so Save can tell "clear the existing picture" apart
+  // from "nothing's changed yet" (button disabled) once there was
+  // nothing seeded to begin with.
+  const [removed, setRemoved] = useState(false);
 
-  async function pick(url) {
-    setSaving(url ?? 'remove');
+  async function handleSave() {
     setError('');
+    if (pickedFile) {
+      if (!THUMBNAIL_UPLOAD_CONTENT_TYPES.includes(pickedFile.type)) {
+        setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
+        return;
+      }
+      if (pickedFile.size > THUMBNAIL_UPLOAD_MAX_SIZE_BYTES) {
+        setError('Photo must be smaller than 10MB.');
+        return;
+      }
+    }
+    setSaving(true);
     try {
-      await callSetJournalThumbnail({ questId: entry.id, thumbnailUrl: url });
+      let thumbnailUrl = entry.thumbnailUrl || null;
+      if (pickedFile) {
+        const ext = THUMBNAIL_UPLOAD_EXT_BY_CONTENT_TYPE[pickedFile.type] || 'jpg';
+        const path = `journalThumbnails/${user.uid}/${Date.now()}.${ext}`;
+        await uploadBytes(storageRef(storage, path), pickedFile, { contentType: pickedFile.type });
+        thumbnailUrl = await getDownloadURL(storageRef(storage, path));
+      } else if (removed) {
+        thumbnailUrl = null;
+      }
+      await callSetJournalThumbnail({ questId: entry.id, thumbnailUrl });
       onClose();
     } catch (err) {
       setError(getAuthErrorMessage(err));
-      setSaving(null);
-    }
-  }
-
-  async function handleFileChosen(e) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // lets choosing the same file again re-fire onChange
-    if (!file) return;
-    setError('');
-    if (!THUMBNAIL_UPLOAD_CONTENT_TYPES.includes(file.type)) {
-      setError('Only JPEG, PNG, WebP, or HEIC photos are allowed.');
-      return;
-    }
-    if (file.size > THUMBNAIL_UPLOAD_MAX_SIZE_BYTES) {
-      setError('Photo must be smaller than 10MB.');
-      return;
-    }
-    setSaving('upload');
-    try {
-      const ext = THUMBNAIL_UPLOAD_EXT_BY_CONTENT_TYPE[file.type] || 'jpg';
-      const path = `journalThumbnails/${user.uid}/${Date.now()}.${ext}`;
-      await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
-      const url = await getDownloadURL(storageRef(storage, path));
-      await callSetJournalThumbnail({ questId: entry.id, thumbnailUrl: url });
-      onClose();
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-      setSaving(null);
+      setSaving(false);
     }
   }
 
@@ -593,60 +578,39 @@ function ThumbnailPicker({ entry, onClose }) {
     <LightboxBackdrop onClose={onClose} label='Choose a background picture'>
       <div
         className='journal-expanded-card'
+        data-frame='cozy'
         style={{ width: 'min(420px, 100%)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type='button'
-          className='journal-expanded-close'
-          onClick={onClose}
-          aria-label='Close'
-        >
-          <IconX width={18} height={18} />
-        </button>
-        <h3 style={{ marginTop: 0, paddingRight: 28 }}>Choose a background picture</h3>
-        {error && <p className='box-danger'>{error}</p>}
-        <input
-          ref={fileInputRef}
-          type='file'
-          accept={THUMBNAIL_UPLOAD_CONTENT_TYPES.join(',')}
-          onChange={handleFileChosen}
-          style={{ display: 'none' }}
-        />
-        <StampButton
-          type='button'
-          onClick={() => fileInputRef.current?.click()}
-          disabled={Boolean(saving)}
-          style={{ marginBottom: 12 }}
-        >
-          {saving === 'upload' ? 'Uploading...' : 'Upload your own photo'}
-        </StampButton>
-        <div className='journal-thumbnail-picker-grid'>
-          <button
-            type='button'
-            className='journal-thumbnail-picker-option flex items-center justify-center'
-            data-selected={!entry.thumbnailUrl ? 'true' : 'false'}
-            onClick={() => pick(null)}
-            disabled={Boolean(saving)}
-            aria-label='Remove picture'
-          >
-            <span className='field-optional' style={{ fontSize: '0.75rem' }}>
-              {saving === 'remove' ? '...' : 'None'}
-            </span>
-          </button>
-          {THUMBNAIL_OPTIONS.map((url) => (
-            <button
-              key={url}
+        <div className='journal-expanded-card-scroll'>
+          <h3 style={{ marginTop: 0 }}>Choose a background picture</h3>
+          {error && <p className='box-danger'>{error}</p>}
+          <ImageUploadCard
+            title=''
+            accept={THUMBNAIL_UPLOAD_CONTENT_TYPES.join(',')}
+            initialPreviewUrl={entry.thumbnailUrl || null}
+            onUpload={(_url, file) => {
+              setPickedFile(file);
+              setRemoved(false);
+            }}
+            onRemove={() => {
+              setPickedFile(null);
+              setRemoved(true);
+            }}
+          />
+          <div className='flex gap-sm' style={{ marginTop: 12 }}>
+            <StampButton
               type='button'
-              className='journal-thumbnail-picker-option'
-              data-selected={entry.thumbnailUrl === url ? 'true' : 'false'}
-              onClick={() => pick(url)}
-              disabled={Boolean(saving)}
-              aria-label='Use this picture'
+              variant='primary'
+              onClick={handleSave}
+              disabled={(!pickedFile && !removed) || saving}
             >
-              <img src={url} alt='' loading='lazy' />
-            </button>
-          ))}
+              {saving ? 'Saving…' : 'Save'}
+            </StampButton>
+            <StampButton type='button' onClick={onClose} disabled={saving}>
+              Cancel
+            </StampButton>
+          </div>
         </div>
       </div>
     </LightboxBackdrop>
@@ -665,9 +629,15 @@ export function Journal() {
   const [openId, setOpenId] = useState(null);
   const reduce = useReducedMotion();
   const columnCount = useColumnCount();
+  // Also disabled with just 0-1 entries (not only reduced-motion or a
+  // single-column layout) — a couple of columns each barely taller than
+  // the viewport give the drift almost nothing to work with, so it reads
+  // as an unintentional wobble rather than a deliberate effect. Treating
+  // `entries === null` (still loading) the same as "0 entries" is
+  // harmless: there's nothing to visibly offset yet either way.
   const { offsets: columnOffsets } = useParallaxColumnOffsets(
     columnCount,
-    reduce || columnCount === 1,
+    reduce || columnCount === 1 || (entries?.length ?? 0) <= 1,
   );
 
   useEffect(() => {
@@ -714,7 +684,7 @@ export function Journal() {
     <PageMotion>
       <TopBar title='Journal' />
       {entries === null ? (
-        <LoadingSpinner label='Loading your journal...' />
+        <LoadingSpinner label='Loading your journal…' />
       ) : entries.length === 0 ? (
         <div className='quest-empty'>
           <h2>No Entries Yet</h2>

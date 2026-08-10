@@ -18,7 +18,10 @@ export function TrustTag({ status }) {
   }
   if (status === 'under_review') {
     return (
-      <span className="status-stamp" style={{ '--tag-color': 'var(--danger)' }}>
+      <span
+        className="status-stamp"
+        style={{ '--tag-color': 'var(--danger)', '--tag-ink': 'var(--paper-card)' }}
+      >
         Under Review
       </span>
     );

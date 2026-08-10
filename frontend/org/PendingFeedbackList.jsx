@@ -58,7 +58,7 @@ export function PendingFeedbackList({ orgId, title = 'Pending feedback requests'
     await load();
   }
 
-  if (!requests) return <LoadingSpinner label="Loading feedback requests..." />;
+  if (!requests) return <LoadingSpinner label="Loading feedback requests…" />;
 
   return (
     <section style={{ marginBottom: 24 }}>

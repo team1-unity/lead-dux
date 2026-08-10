@@ -57,9 +57,9 @@ function AboutTab({ org }) {
   return (
     <div>
       {org.missionStatement && <p style={{ margin: '0 0 10px' }}>{org.missionStatement}</p>}
-      {(org.city || org.state) && (
+      {org.location && (
         <p className="data-stat">
-          <IconPin /> {[org.city, org.state].filter(Boolean).join(', ')}
+          <IconPin /> {org.location}
         </p>
       )}
       {org.website && (
@@ -109,15 +109,15 @@ function AboutTab({ org }) {
 // they stay put across all three instead of disappearing when Reviews/About
 // is selected.
 //
-// `onClose` (optional) renders a close/back button floating directly on the
-// hero photo itself, matching how a real photo lightbox close button sits
-// over the image — only MapQuestOverlay.jsx passes this; MapQuestPage.jsx
-// (a full standalone page, not an overlay) has nothing to close. Desktop
-// keeps a plain X in the top-right (closing a side panel back to the map);
-// mobile gets a back-chevron in the top-left instead (returning to the
-// sheet's list, a "back" action, not a modal dismissal) — this is the one
-// place in the component that branches on breakpoint, since the icon
-// itself (not just its position) differs.
+// `onClose` (optional) is only ever passed by MapQuestOverlay.jsx —
+// MapQuestPage.jsx (a full standalone page, not an overlay) has nothing to
+// close. Desktop gets a themed "Back to Map" link (the same .back-link
+// treatment used everywhere else in the app) sitting above the hero,
+// rather than a bare X floating on the photo — this isn't a lightbox
+// someone is dismissing, it's a real navigation back to the map, so it
+// reads as one. Mobile keeps its own back-chevron floating in the hero's
+// top-left corner instead (returning to the sheet's list beneath it) —
+// this is the one place in the component that branches on breakpoint.
 //
 // `series.org` (see useMapQuestSeries.js) is the owning organization's full
 // profile doc — optional, and every field read off it below just doesn't
@@ -130,16 +130,17 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
 
   return (
     <div className="map-quest-detail-body">
+      {onClose && isDesktop && (
+        <button type="button" className="back-link map-quest-back-link" onClick={onClose}>
+          <IconChevron style={{ transform: 'rotate(90deg)' }} />
+          Back to Map
+        </button>
+      )}
       <div className="quest-hero">
         <HeroCarousel
           photoPaths={[...(org?.photos || []), ...(series.coverPhotos || [])]}
           orgLogoUrl={org?.logoUrl}
         />
-        {onClose && isDesktop && (
-          <button type="button" className="map-quest-hero-close" onClick={onClose} aria-label="Close">
-            <IconX width={18} height={18} />
-          </button>
-        )}
         {onClose && !isDesktop && (
           <button type="button" className="map-quest-hero-back" onClick={onClose} aria-label="Back to map">
             <IconChevron style={{ transform: 'rotate(90deg)' }} width={20} height={20} />
@@ -174,7 +175,14 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
       )}
 
       <div className="map-quest-info-block" style={{ marginTop: 10 }}>
-        <LocationLink location={primary.location} lat={primary.lat} lng={primary.lng} />
+        {/* Side quests never actually reach this view (no real coordinates
+            to plot on the map — see EventsMap.jsx's own coordinate filter),
+            but guarded the same way mobile/Quests.jsx's inline detail is,
+            for the same reason: their "location" is a generic prompt, not
+            a real address. */}
+        {!primary.isDefault && (
+          <LocationLink location={primary.location} lat={primary.lat} lng={primary.lng} />
+        )}
         {formatEventDate(primary.eventDate) && (
           // Always the soonest *upcoming* date, not a recurrence-pattern
           // summary — useMapQuestSeries.js/EventsMap.jsx both filter a
@@ -214,7 +222,7 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
         <StampButton as={Link} to={fullDetailsHref} variant="primary">
           View full quest details
         </StampButton>
-        <ShareButton seriesId={series.seriesId} iconOnly />
+        <ShareButton seriesId={series.seriesId} questTitle={primary.title} iconOnly />
       </div>
     </div>
   );

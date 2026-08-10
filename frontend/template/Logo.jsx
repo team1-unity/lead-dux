@@ -1,15 +1,20 @@
-// The LEAD-DUX brand mark: a duck on a pond, from the real brand asset
-// (frontend/app/public/brand/duck-mark.png) — a transparent-background PNG,
-// so it drops onto any surface/theme without a color-matched background.
+// The LEAD-DUX brand mark — the full logo-lockup asset (duck + baked-in
+// wordmark, frontend/app/public/brand/logo-lockup.png), set via the
+// --duck-mark-url token in style.css rather than a plain <img src> (kept
+// as a token, not hardcoded here, since a couple of surfaces still want
+// to override it independently of the base rule). No longer theme-swapped
+// — logo-lockup.png only has the one fixed colorway, unlike the old
+// duck-brown/duck-yellow pair this replaced. Size is set
+// via the --duck-size custom property (see .duck-mark in style.css)
+// rather than an inline width/height, so a caller's own className (e.g.
+// .auth-hero-duck) can still override the size with a plain CSS rule.
 export function DuckMark({ size = 32, className }) {
   return (
-    <img
-      src="/brand/duck-mark.png"
-      width={size}
-      height={(size * 889) / 1322}
-      className={className}
-      alt=""
+    <span
+      className={['duck-mark', className].filter(Boolean).join(' ')}
+      role="img"
       aria-hidden="true"
+      style={{ '--duck-size': `${size}px` }}
     />
   );
 }

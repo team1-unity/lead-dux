@@ -89,9 +89,6 @@ export function WelcomeTour() {
     <AnimatePresence>
       <div className="tour-backdrop" role="dialog" aria-modal="true" aria-label="Welcome walkthrough">
         <TourCard slide={slide} Icon={Icon}>
-          <button type="button" className="tour-close" onClick={dismiss} aria-label="Close">
-            &times;
-          </button>
           <div className="tour-dots">
             {slides.map((_, i) => (
               <span key={i} className="tour-dot" data-active={i === step ? 'true' : 'false'} />
@@ -129,6 +126,7 @@ function TourCard({ slide, Icon, children }) {
     <motion.div
       key={slide.title}
       className="ink-card tour-card"
+      data-frame="cozy"
       initial={reduce ? false : { opacity: 0, y: 12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}

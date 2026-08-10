@@ -19,18 +19,25 @@ import { allRanks, pointsToNextRank, progressPercent, rankForPoints } from './ra
 // than trusted blindly). Always fully shown — no expand/collapse toggle;
 // points/progress bar/milestones are as much "who I am" as the rank name
 // itself, so there's no reason to hide them behind a tap.
-export function ProgressCard() {
+//
+// `profile` is optional — Profile.jsx and Quests.jsx don't pass one, so
+// this fetches for itself exactly as before. Home.jsx does pass one: it
+// already holds a live users/{uid} listener for the greeting (name/
+// duckSkin), and without this, ProgressCard was independently re-reading
+// that exact same document on the single most-visited screen in the app.
+export function ProgressCard({ profile: profileProp }) {
   const { user } = useAuth();
-  const [profile, setProfile] = useState(null);
+  const [fetchedProfile, setFetchedProfile] = useState(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (profileProp || !user) return;
     getDoc(doc(db, 'users', user.uid)).then((snap) => {
       const data = snap.exists() ? snap.data() : {};
-      setProfile({ points: data.points || 0, certificateIssued: Boolean(data.certificateIssued) });
+      setFetchedProfile({ points: data.points || 0, certificateIssued: Boolean(data.certificateIssued) });
     });
-  }, [user]);
+  }, [user, profileProp]);
 
+  const profile = profileProp || fetchedProfile;
   if (profile === null) return null;
 
   const { points, certificateIssued } = profile;
@@ -41,46 +48,38 @@ export function ProgressCard() {
   const currentIndex = rankOrder.indexOf(rank);
 
   return (
-    <section className="ink-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div className="quest-card-titles">
-        <h2 style={{ marginBottom: 0 }}>Leadership Rank</h2>
-        <p
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-display)',
-            fontSize: '1.4rem',
-            textTransform: 'uppercase',
-          }}
-        >
-          {rank}
+    <section className='ink-card' style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className='quest-card-titles rank-progress-header'>
+        <h2 style={{ marginBottom: 0 }}>
+          Leadership Rank
+          <span style={{ fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
+            {' '}
+            — {rank}
+          </span>
+        </h2>
+        <p className='data-stat' style={{ margin: 0 }}>
+          {toNext !== null ? `${toNext} to ${rankForPoints(points + toNext)}` : 'Top rank reached'}
         </p>
       </div>
 
-      <p className="data-stat" style={{ marginTop: 4 }}>
-        {points} point{points === 1 ? '' : 's'}
-        {toNext !== null
-          ? ` — ${toNext} to ${rankForPoints(points + toNext)}`
-          : ' — top rank reached'}
-      </p>
-
       <div
-        className="rank-progress-track"
-        role="progressbar"
+        className='rank-progress-track'
+        role='progressbar'
         aria-valuenow={Math.round(percent)}
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className="rank-progress-fill" style={{ width: `${percent}%` }} />
+        <div className='rank-progress-fill' style={{ width: `${percent}%` }} />
       </div>
 
-      <div className="rank-milestones">
+      <div className='rank-milestones'>
         {rankOrder.map((name, i) => {
           const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
           const tone = name.toLowerCase();
           return (
-            <div className="rank-milestone" key={name} data-state={state}>
+            <div className='rank-milestone' key={name} data-state={state}>
               <span
-                className="rank-milestone-dot"
+                className='rank-milestone-dot'
                 style={{
                   '--rank-color': `var(--rank-${tone})`,
                   '--rank-ink': `var(--rank-${tone}-ink)`,
@@ -89,17 +88,17 @@ export function ProgressCard() {
                 {state === 'done' && <IconCheck width={14} height={14} />}
                 {state === 'locked' && <IconLock width={14} height={12} />}
               </span>
-              <span className="rank-milestone-label">{name}</span>
+              <span className='rank-milestone-label'>{name}</span>
             </div>
           );
         })}
       </div>
 
       {certificateIssued && (
-        <div className="rank-certificate-banner">
+        <div className='rank-certificate-banner' data-frame='cozy'>
           <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
-          <Link to="/certificate">
-            <StampButton type="button" variant="primary">
+          <Link to='/certificate'>
+            <StampButton type='button' variant='primary'>
               View certificate
             </StampButton>
           </Link>

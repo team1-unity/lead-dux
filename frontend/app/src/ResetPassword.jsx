@@ -64,7 +64,7 @@ export function ResetPassword() {
         </label>
         {error && <p className="box-danger">{error}</p>}
         <StampButton type="submit" variant="primary" disabled={submitting}>
-          {submitting ? 'Updating...' : 'Update password'}
+          {submitting ? 'Updating…' : 'Update password'}
         </StampButton>
       </form>
     </AuthShell>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { AuthProvider, useAuth } from '@shared/AuthContext.jsx';
@@ -9,36 +9,57 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { WelcomeTour } from '@shared/WelcomeTour.jsx';
 import { RouteErrorBoundary } from '@shared/RouteErrorBoundary.jsx';
-import { EventsMap } from '@shared/EventsMap.jsx';
-import { Landing } from './Landing.jsx';
-import { Login } from './Login.jsx';
-import { ForgotPassword } from './ForgotPassword.jsx';
-import { ResetPassword } from './ResetPassword.jsx';
-import { Settings } from './Settings.jsx';
-import { Profile } from './Profile.jsx';
-import { CheckIn } from './CheckIn.jsx';
-import { Certificate } from './Certificate.jsx';
-import { OrganizationProfile } from './OrganizationProfile.jsx';
-import { QuestDetails } from './QuestDetails.jsx';
-import { SharedQuest } from './SharedQuest.jsx';
-import { MapQuestPage } from './MapQuestPage.jsx';
-import { MapQuestOverlay } from './MapQuestOverlay.jsx';
-import { Register as RegisterPublic } from '@mobile/Register.jsx';
-import { Onboarding } from '@mobile/Onboarding.jsx';
-import { Quests } from '@mobile/Quests.jsx';
-import { Home as HomeScreen } from '@mobile/Home.jsx';
-import { Badges } from '@mobile/Badges.jsx';
-import { Journal } from '@mobile/Journal.jsx';
-import { Register as RegisterOrganization } from '@org/Register.jsx';
-import { Home as OrgHome } from '@org/Home.jsx';
-import { Quests as OrgQuests } from '@org/Quests.jsx';
-import { PhotoSubmissions as OrgPhotoSubmissions } from '@org/PhotoSubmissions.jsx';
-import { FeedbackRequests as OrgFeedbackRequests } from '@org/FeedbackRequests.jsx';
-import { Journal as OrgJournal } from '@org/Journal.jsx';
+import { PreviousPathProvider } from '@shared/PreviousPathContext.jsx';
+import { SmoothScroll } from '@shared/SmoothScroll.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
 import { OrgOnboarding } from '@org/OrgOnboarding.jsx';
-import { Dashboard as AdminDashboard } from '@admin/Dashboard.jsx';
+import { Landing } from './Landing.jsx';
 import '@shared/style.css';
+
+// Route-level pages only, lazy — everything above this line is persistent
+// chrome or needed to decide which route even renders, so it stays a
+// regular eager import. Before this, App.jsx statically imported every
+// route (including EventsMap's maplibre-gl and the admin Dashboard) into
+// one bundle a signed-in "user" who never opens the map or isn't an admin
+// still had to download before first paint. Each of these now becomes its
+// own chunk, fetched only once its route is actually visited. Landing is
+// deliberately NOT lazy — it's the first thing almost every signed-out
+// visitor sees, so lazy-loading it would trade "download it eagerly" for
+// "show a spinner, then download it," a worse cold-load experience for the
+// single most common case rather than a better one.
+const EventsMap = lazy(() => import('@shared/EventsMap.jsx').then((m) => ({ default: m.EventsMap })));
+const Login = lazy(() => import('./Login.jsx').then((m) => ({ default: m.Login })));
+const ForgotPassword = lazy(() => import('./ForgotPassword.jsx').then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import('./ResetPassword.jsx').then((m) => ({ default: m.ResetPassword })));
+const Settings = lazy(() => import('./Settings.jsx').then((m) => ({ default: m.Settings })));
+const Profile = lazy(() => import('./Profile.jsx').then((m) => ({ default: m.Profile })));
+const CheckIn = lazy(() => import('./CheckIn.jsx').then((m) => ({ default: m.CheckIn })));
+const CheckInConfirm = lazy(() => import('./CheckInConfirm.jsx').then((m) => ({ default: m.CheckInConfirm })));
+const Certificate = lazy(() => import('./Certificate.jsx').then((m) => ({ default: m.Certificate })));
+const OrganizationProfile = lazy(() =>
+  import('./OrganizationProfile.jsx').then((m) => ({ default: m.OrganizationProfile })),
+);
+const QuestDetails = lazy(() => import('./QuestDetails.jsx').then((m) => ({ default: m.QuestDetails })));
+const SharedQuest = lazy(() => import('./SharedQuest.jsx').then((m) => ({ default: m.SharedQuest })));
+const MapQuestPage = lazy(() => import('./MapQuestPage.jsx').then((m) => ({ default: m.MapQuestPage })));
+const MapQuestOverlay = lazy(() => import('./MapQuestOverlay.jsx').then((m) => ({ default: m.MapQuestOverlay })));
+const RegisterPublic = lazy(() => import('@mobile/Register.jsx').then((m) => ({ default: m.Register })));
+const Onboarding = lazy(() => import('@mobile/Onboarding.jsx').then((m) => ({ default: m.Onboarding })));
+const Quests = lazy(() => import('@mobile/Quests.jsx').then((m) => ({ default: m.Quests })));
+const HomeScreen = lazy(() => import('@mobile/Home.jsx').then((m) => ({ default: m.Home })));
+const Badges = lazy(() => import('@mobile/Badges.jsx').then((m) => ({ default: m.Badges })));
+const Journal = lazy(() => import('@mobile/Journal.jsx').then((m) => ({ default: m.Journal })));
+const RegisterOrganization = lazy(() => import('@org/Register.jsx').then((m) => ({ default: m.Register })));
+const OrgHome = lazy(() => import('@org/Home.jsx').then((m) => ({ default: m.Home })));
+const OrgQuests = lazy(() => import('@org/Quests.jsx').then((m) => ({ default: m.Quests })));
+const OrgPhotoSubmissions = lazy(() =>
+  import('@org/PhotoSubmissions.jsx').then((m) => ({ default: m.PhotoSubmissions })),
+);
+const OrgFeedbackRequests = lazy(() =>
+  import('@org/FeedbackRequests.jsx').then((m) => ({ default: m.FeedbackRequests })),
+);
+const OrgJournal = lazy(() => import('@org/Journal.jsx').then((m) => ({ default: m.Journal })));
+const AdminDashboard = lazy(() => import('@admin/Dashboard.jsx').then((m) => ({ default: m.Dashboard })));
 
 // role is 'user' or 'pending_org' by the time this renders — Home below has
 // already sent every other role elsewhere. onboarding_user renders the
@@ -175,15 +196,43 @@ function AppShell() {
   const { role } = useAuth();
   const location = useLocation();
   const showNav = location.pathname !== '/' || (role && role !== 'onboarding_user');
+
+  // Tracks the full path (pathname + search) one hop back, for Settings/
+  // Badges/quest-detail's dynamic "Back to X" link (see
+  // PreviousPathContext.jsx) — includes the query string, not just the
+  // route, so a caller that reflects filter/search state in its own URL
+  // (see mobile/Quests.jsx) gets that state back too on the way in, not
+  // just the bare route. A layout effect, not a plain effect — it fires
+  // synchronously before paint, so the corrected value is in place before
+  // the browser ever shows a frame, rather than flashing a stale
+  // one-hop-further-back path for a frame first.
+  const [previousPath, setPreviousPath] = useState(null);
+  const fullPath = location.pathname + location.search;
+  const currentPathRef = useRef(fullPath);
+  useLayoutEffect(() => {
+    if (currentPathRef.current !== fullPath) {
+      setPreviousPath(currentPathRef.current);
+      currentPathRef.current = fullPath;
+    }
+  }, [fullPath]);
+
   return (
-    <>
+    <PreviousPathProvider value={previousPath}>
       <RouteErrorBoundary resetKey={location.pathname}>
-        <Outlet />
+        {/* Its own boundary, not just the outer one AppRoutes wraps
+            everything in below — lazy page chunks now suspend here, and
+            nesting this Suspense inside AppShell (rather than relying on
+            that outer one) means BottomNav/WelcomeTour/OrgOnboarding stay
+            mounted and visible while a route's chunk loads, instead of the
+            whole shell (nav included) disappearing behind the fallback. */}
+        <Suspense fallback={<LoadingSpinner />}>
+          <Outlet />
+        </Suspense>
       </RouteErrorBoundary>
       {showNav && <BottomNav />}
       <WelcomeTour />
       <OrgOnboarding />
-    </>
+    </PreviousPathProvider>
   );
 }
 
@@ -207,7 +256,14 @@ function AppRoutes() {
   const backgroundLocation = location.state?.backgroundLocation;
 
   return (
-    <>
+    // Covers the routes below that render outside AppShell (Login,
+    // Register, the /share and /check-in links) — those have no
+    // persistent chrome of their own to preserve, so one boundary here is
+    // enough for them. AppShell's own routes are already covered by the
+    // narrower Suspense around its <Outlet/> above, which takes
+    // precedence for anything suspending in that subtree; this one is
+    // just the fallback for everything that isn't nested inside it.
+    <Suspense fallback={<LoadingSpinner />}>
       <Routes location={backgroundLocation || location}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterPublic />} />
@@ -222,6 +278,16 @@ function AppRoutes() {
             MapQuestDetailBody.jsx) rather than a second, map-flavored
             share page — one shareable link per quest, not two. */}
         <Route path="/share/:seriesId" element={<SharedQuest />} />
+        {/* Deliberately outside AppShell too, same reasoning as /share
+            above — an event QR's own URL (see functions/main.py's
+            _check_in_url) has to work the moment it's scanned with a
+            phone's native camera app, not just from inside this app's own
+            nav chrome. Unlike /share, this one does require signing in
+            (check_in_to_event itself requires auth) — CheckInConfirm.jsx
+            handles that itself with a plain "log in, then scan again"
+            prompt rather than a redirect-back-after-login flow, since the
+            QR is a durable, reusable link either way. */}
+        <Route path="/check-in/:questId/:token" element={<CheckInConfirm />} />
         <Route element={<AppShell />}>
           <Route path="/" element={<Home />} />
           <Route path="/quests" element={<QuestsPage />} />
@@ -295,7 +361,7 @@ function AppRoutes() {
           <Route path="/map/:seriesId" element={<MapQuestOverlay />} />
         </Routes>
       )}
-    </>
+    </Suspense>
   );
 }
 
@@ -303,6 +369,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <SmoothScroll />
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

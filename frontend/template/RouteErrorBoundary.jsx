@@ -32,7 +32,8 @@ export class RouteErrorBoundary extends Component {
     if (this.state.error) {
       return (
         <div className="quest-empty">
-          <h2>Something went wrong on this page</h2>
+          <img src="/brand/404.png" alt="" width={140} />
+          <h2>This page hit a snag</h2>
           <p>Use the nav below to head somewhere else, or try reloading.</p>
           <Link to="/">Back to home</Link>
         </div>

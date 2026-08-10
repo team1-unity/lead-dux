@@ -96,53 +96,51 @@ function OrgOnboardingWizard({ onComplete }) {
 
   return (
     <div className="tour-backdrop" role="dialog" aria-modal="true" aria-label="Organization walkthrough">
-      <div className="ink-card tour-card org-onboarding-card">
-        <button type="button" className="tour-close" onClick={onComplete} aria-label="Skip walkthrough">
-          &times;
-        </button>
+      <div className="ink-card tour-card org-onboarding-card" data-frame="cozy">
+        <div className="org-onboarding-card-scroll">
+          <div className="onboarding-progress">
+            <div className="onboarding-progress-fill" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+          </div>
+          <p className="field-optional" style={{ margin: '0 0 12px' }}>
+            Step {step + 1} of {STEPS.length}
+          </p>
 
-        <div className="onboarding-progress">
-          <div className="onboarding-progress-fill" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
-        </div>
-        <p className="field-optional" style={{ margin: '0 0 12px' }}>
-          Step {step + 1} of {STEPS.length}
-        </p>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={reduce ? false : { opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reduce ? undefined : { opacity: 0, x: -10 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              className="org-onboarding-slide"
+            >
+              <Icon className="tour-icon" />
+              <h2>{slide.title}</h2>
+              <p>{slide.body}</p>
+              {slide.visual && <div style={{ marginTop: 10 }}>{slide.visual}</div>}
+            </motion.div>
+          </AnimatePresence>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={step}
-            initial={reduce ? false : { opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={reduce ? undefined : { opacity: 0, x: -10 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-            className="org-onboarding-slide"
-          >
-            <Icon className="tour-icon" />
-            <h2>{slide.title}</h2>
-            <p>{slide.body}</p>
-            {slide.visual && <div style={{ marginTop: 10 }}>{slide.visual}</div>}
-          </motion.div>
-        </AnimatePresence>
-
-        <div className="tour-actions" style={{ marginTop: 22 }}>
-          {!isLast && (
-            <StampButton type="button" onClick={onComplete}>
-              Skip
+          <div className="tour-actions" style={{ marginTop: 22 }}>
+            {!isLast && (
+              <StampButton type="button" onClick={onComplete}>
+                Skip
+              </StampButton>
+            )}
+            {step > 0 && (
+              <StampButton type="button" onClick={() => setStep((s) => s - 1)}>
+                Back
+              </StampButton>
+            )}
+            <StampButton
+              type="button"
+              variant="primary"
+              style={{ marginLeft: isLast ? 'auto' : undefined }}
+              onClick={isLast ? onComplete : () => setStep((s) => s + 1)}
+            >
+              {isLast ? 'Done' : 'Next'}
             </StampButton>
-          )}
-          {step > 0 && (
-            <StampButton type="button" onClick={() => setStep((s) => s - 1)}>
-              Back
-            </StampButton>
-          )}
-          <StampButton
-            type="button"
-            variant="primary"
-            style={{ marginLeft: isLast ? 'auto' : undefined }}
-            onClick={isLast ? onComplete : () => setStep((s) => s + 1)}
-          >
-            {isLast ? 'Done' : 'Next'}
-          </StampButton>
+          </div>
         </div>
       </div>
     </div>

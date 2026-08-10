@@ -74,71 +74,71 @@ OLD_ORG_EMAILS = [
 
 ORGS = [
     {
-        "slug": "jc-community-kitchen", "name": "Jersey City Community Kitchen",
+        "slug": "manhattan-community-kitchen", "name": "Manhattan Community Kitchen",
         "email": f"jc.kitchen@{EMAIL_DOMAIN}", "category": "Food Pantry", "group": "recurring",
-        "city": "Jersey City", "state": "NJ", "phone": "(201) 555-0142",
-        "website": "https://jccommunitykitchen.org",
-        "missionStatement": "Ensuring every neighbor in Jersey City has access to a warm meal and a welcoming table.",
+        "city": "Manhattan", "state": "NY", "phone": "(212) 555-0142",
+        "website": "https://manhattancommunitykitchen.org",
+        "missionStatement": "Ensuring every neighbor in East Harlem has access to a warm meal and a welcoming table.",
         "reason": "We started in a church basement in 2014 packing lunches for day laborers, and now we run a full community kitchen five days a week. Today we serve roughly 300 meals a week across weeknight dinners, weekend service, and holiday meal drives, almost entirely powered by volunteers from the neighborhood we feed.",
-        "social": {"instagram": "https://instagram.com/jccommunitykitchen", "facebook": "https://facebook.com/jccommunitykitchen"},
+        "social": {"instagram": "https://instagram.com/manhattancommunitykitchen", "facebook": "https://facebook.com/manhattancommunitykitchen"},
         "photos": 9,
     },
     {
-        "slug": "hudson-youth-leadership", "name": "Hudson Youth Leadership Center",
+        "slug": "bronx-youth-leadership", "name": "Bronx Youth Leadership Center",
         "email": f"hudson.youth@{EMAIL_DOMAIN}", "category": "Youth Leadership", "group": "normal",
-        "city": "Union City", "state": "NJ", "phone": "(201) 555-0198",
-        "website": "https://hudsonyouthleadership.org",
+        "city": "Bronx", "state": "NY", "phone": "(718) 555-0198",
+        "website": "https://bronxyouthleadership.org",
         "missionStatement": "Building tomorrow's community leaders through mentorship, public speaking, and hands-on civic projects.",
-        "reason": "Hudson County teens told us they wanted more say in their own neighborhoods — this Center is our answer. We run after-school public speaking workshops, a civic leadership roundtable series, and student council training for every middle and high school in the county.",
-        "social": {"instagram": "https://instagram.com/hudsonyouthleadership", "facebook": "https://facebook.com/hudsonyouthleadership", "youtube": "https://youtube.com/@hudsonyouthleadership"},
+        "reason": "Fordham teens told us they wanted more say in their own neighborhoods — this Center is our answer. We run after-school public speaking workshops, a civic leadership roundtable series, and student council training for every middle and high school in the borough.",
+        "social": {"instagram": "https://instagram.com/bronxyouthleadership", "facebook": "https://facebook.com/bronxyouthleadership", "youtube": "https://youtube.com/@bronxyouthleadership"},
         "photos": 10,
     },
     {
-        "slug": "green-tomorrow-nj", "name": "Green Tomorrow NJ",
+        "slug": "green-tomorrow-nyc", "name": "Green Tomorrow NYC",
         "email": f"green.tomorrow@{EMAIL_DOMAIN}", "category": "Environmental", "group": "recurring",
-        "city": "Montclair", "state": "NJ", "phone": "(973) 555-0176",
+        "city": "Queens", "state": "NY", "phone": "(718) 555-0176",
         "website": "https://green-tomorrow.org",
-        "missionStatement": "A cleaner, greener New Jersey, one park cleanup and native planting at a time.",
-        "reason": "Founded by a handful of Montclair neighbors after a particularly bad litter season along the Third River, we've since restored six acres of parkland and planted over two thousand native seedlings across Essex County.",
-        "social": {"instagram": "https://instagram.com/greentomorrownj", "twitter": "https://x.com/greentomorrownj"},
+        "missionStatement": "A cleaner, greener New York City, one park cleanup and native planting at a time.",
+        "reason": "Founded by a handful of Astoria neighbors after a particularly bad litter season along Astoria Park, we've since restored six acres of parkland and planted over two thousand native seedlings across Queens.",
+        "social": {"instagram": "https://instagram.com/greentomorrownyc", "twitter": "https://x.com/greentomorrownyc"},
         "photos": 12,
     },
     {
-        "slug": "hoboken-animal-rescue", "name": "Hoboken Animal Rescue",
+        "slug": "brooklyn-animal-rescue", "name": "Brooklyn Animal Rescue",
         "email": f"hoboken.rescue@{EMAIL_DOMAIN}", "category": "Animal Rescue", "group": "normal",
-        "city": "Hoboken", "state": "NJ", "phone": "(201) 555-0133",
-        "website": "https://hobokenrescue.org",
-        "missionStatement": "No adoptable animal in Hudson County should wait more than 60 days for a home.",
-        "reason": "What began as one foster home in a Hoboken brownstone is now a full rescue network across Hudson County, running weekly adoption fairs, a foster-volunteer pipeline, and a shelter that never turns an animal away.",
-        "social": {"instagram": "https://instagram.com/hobokenrescue", "facebook": "https://facebook.com/hobokenrescue", "tiktok": "https://tiktok.com/@hobokenrescue"},
+        "city": "Brooklyn", "state": "NY", "phone": "(718) 555-0133",
+        "website": "https://brooklynanimalrescue.org",
+        "missionStatement": "No adoptable animal in Brooklyn should wait more than 60 days for a home.",
+        "reason": "What began as one foster home in a Bushwick brownstone is now a full rescue network across Brooklyn, running weekly adoption fairs, a foster-volunteer pipeline, and a shelter that never turns an animal away.",
+        "social": {"instagram": "https://instagram.com/brooklynanimalrescue", "facebook": "https://facebook.com/brooklynanimalrescue", "tiktok": "https://tiktok.com/@brooklynanimalrescue"},
         "photos": 8,
     },
     {
         "slug": "nextgen-mentors", "name": "NextGen Mentors",
         "email": f"nextgen.mentors@{EMAIL_DOMAIN}", "category": "Education", "group": "normal",
-        "city": "Newark", "state": "NJ", "phone": "(973) 555-0154",
+        "city": "Bronx", "state": "NY", "phone": "(718) 555-0154",
         "website": "https://nextgenmentors.org",
-        "missionStatement": "Pairing Newark students with working professionals who looked like them growing up.",
-        "reason": "Every mentor in our program was once a mentee — the whole model is built on paying it forward. We run resume workshops, mock interviews, and a year-round 1:1 mentor match program for Newark high schoolers.",
+        "missionStatement": "Pairing Mott Haven students with working professionals who looked like them growing up.",
+        "reason": "Every mentor in our program was once a mentee — the whole model is built on paying it forward. We run resume workshops, mock interviews, and a year-round 1:1 mentor match program for Bronx high schoolers.",
         "social": {"instagram": "https://instagram.com/nextgenmentors", "linkedin": "https://linkedin.com/company/nextgenmentors"},
         "photos": 7,
     },
     {
-        "slug": "garden-state-volunteers", "name": "Garden State Volunteers",
+        "slug": "empire-state-volunteers", "name": "Empire State Volunteers",
         "email": f"garden.state@{EMAIL_DOMAIN}", "category": "Senior Services", "group": "normal",
-        "city": "Bayonne", "state": "NJ", "phone": "(201) 555-0187",
-        "website": "https://gardenstatevolunteers.org",
-        "missionStatement": "Keeping Bayonne's senior residents connected, independent, and never alone on a Tuesday afternoon.",
-        "reason": "We run grocery runs, friendly visits, and tech-help sessions for seniors across Bayonne — most of our volunteers see the same handful of neighbors week after week.",
-        "social": {"facebook": "https://facebook.com/gardenstatevolunteers"},
+        "city": "Staten Island", "state": "NY", "phone": "(718) 555-0187",
+        "website": "https://empirestatevolunteers.org",
+        "missionStatement": "Keeping St. George's senior residents connected, independent, and never alone on a Tuesday afternoon.",
+        "reason": "We run grocery runs, friendly visits, and tech-help sessions for seniors across Staten Island — most of our volunteers see the same handful of neighbors week after week.",
+        "social": {"facebook": "https://facebook.com/empirestatevolunteers"},
         "photos": 6,
     },
     {
         "slug": "riverfront-community-garden", "name": "Riverfront Community Garden",
         "email": f"community.garden@{EMAIL_DOMAIN}", "category": "Community Garden", "group": "normal",
-        "city": "Weehawken", "state": "NJ", "phone": "(201) 555-0165",
+        "city": "Queens", "state": "NY", "phone": "(718) 555-0165",
         "website": "https://communitygarden.org",
-        "missionStatement": "Turning an unused lot along the Hudson into fresh vegetables for the families who need them most.",
+        "missionStatement": "Turning an unused lot along the Long Island City waterfront into fresh vegetables for the families who need them most.",
         "reason": "The garden started with six raised beds behind the rec center — we're up to forty now, donating over a ton of produce a year to local food pantries.",
         "social": {"instagram": "https://instagram.com/riverfrontgarden", "facebook": "https://facebook.com/riverfrontgarden"},
         "photos": 11,
@@ -146,9 +146,9 @@ ORGS = [
     {
         "slug": "liberty-youth-sports", "name": "Liberty Youth Sports",
         "email": f"liberty.sports@{EMAIL_DOMAIN}", "category": "Community Sports", "group": "normal",
-        "city": "Jersey City", "state": "NJ", "phone": "(201) 555-0121",
+        "city": "Brooklyn", "state": "NY", "phone": "(718) 555-0121",
         "website": "https://libertysports.org",
-        "missionStatement": "Every kid in Jersey City deserves a team, a coach, and a place to belong.",
+        "missionStatement": "Every kid in Sunset Park deserves a team, a coach, and a place to belong.",
         "reason": "We field rec-league soccer, flag football, and track teams for kids who'd otherwise sit the season out, and we're always short on volunteer coaches and gameday help.",
         "social": {"instagram": "https://instagram.com/libertyyouthsports", "facebook": "https://facebook.com/libertyyouthsports", "youtube": "https://youtube.com/@libertyyouthsports"},
         "photos": 9,
@@ -156,22 +156,32 @@ ORGS = [
     {
         "slug": "downtown-neighborhood-alliance", "name": "Downtown Neighborhood Alliance",
         "email": f"downtown.alliance@{EMAIL_DOMAIN}", "category": "Neighborhood Association", "group": "brand_new",
-        "city": "Jersey City", "state": "NJ", "phone": "(201) 555-0110",
+        "city": "Manhattan", "state": "NY", "phone": "(212) 555-0110",
         "website": "https://downtownalliance.org",
         "missionStatement": "A stronger downtown starts with neighbors who actually know each other.",
         "reason": "We just got our nonprofit paperwork finalized this spring — block parties, safety walks, and a monthly potluck are our first real events as an organization.",
-        "social": {"instagram": "https://instagram.com/downtownallianceJC", "facebook": "https://facebook.com/downtownallianceJC"},
+        "social": {"instagram": "https://instagram.com/downtownallianceNYC", "facebook": "https://facebook.com/downtownallianceNYC"},
         "photos": 5,
     },
     {
         "slug": "creative-futures-collective", "name": "Creative Futures Collective",
         "email": f"creative.futures@{EMAIL_DOMAIN}", "category": "Arts & Culture", "group": "brand_new",
-        "city": "Newark", "state": "NJ", "phone": "(973) 555-0143",
+        "city": "Staten Island", "state": "NY", "phone": "(718) 555-0143",
         "website": "https://creativefutures.org",
-        "missionStatement": "Free studio space and real audiences for Newark's next generation of working artists.",
-        "reason": "We signed the lease on a vacant storefront on Halsey Street last month and are just now opening it up as a gallery, workshop, and performance space for local artists.",
-        "social": {"instagram": "https://instagram.com/creativefuturesnwk", "tiktok": "https://tiktok.com/@creativefuturesnwk", "youtube": "https://youtube.com/@creativefuturesnwk"},
+        "missionStatement": "Free studio space and real audiences for Staten Island's next generation of working artists.",
+        "reason": "We signed the lease on a vacant storefront in Stapleton last month and are just now opening it up as a gallery, workshop, and performance space for local artists.",
+        "social": {"instagram": "https://instagram.com/creativefuturesnyc", "tiktok": "https://tiktok.com/@creativefuturesnyc", "youtube": "https://youtube.com/@creativefuturesnyc"},
         "photos": 5,
+    },
+    {
+        "slug": "queens-volleyball-club", "name": "Queens Volleyball Club",
+        "email": f"jc.volleyball@{EMAIL_DOMAIN}", "category": "Community Sports", "group": "normal",
+        "city": "Queens", "state": "NY", "phone": "(718) 555-0176",
+        "website": "https://queensvolleyballclub.org",
+        "missionStatement": "Free volleyball leagues and clinics for every age and skill level in Queens.",
+        "reason": "We started with one Sunday pickup game at Rockaway Beach and grew into a full rec league running beach and indoor volleyball year-round — coaches, referees, and gameday setup are all volunteer-run.",
+        "social": {"instagram": "https://instagram.com/queensvolleyballclub", "facebook": "https://facebook.com/queensvolleyballclub"},
+        "photos": 8,
     },
 ]
 
@@ -212,59 +222,65 @@ def _next_accommodation():
 # tag-badge (badges.js), same as user interests below; extra descriptive
 # tags beyond those 9 are fine too (TagStamp just renders them neutral).
 QUEST_TEMPLATES = {
-    "jc-community-kitchen": [
-        {"key": "completed_small", "title": "Thanksgiving Food Drive Sorting", "days": -60, "capacity": 10, "count": 4, "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City"},
-        {"key": "completed_big", "title": "Weekend Meal Prep & Serve", "days": -35, "capacity": 15, "count": 13, "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City"},
-        {"key": "near_full", "title": "Holiday Meal Packing Day", "days": 5, "capacity": 15, "count": 14, "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City", "qr_precheck": 2},
+    "manhattan-community-kitchen": [
+        {"key": "completed_small", "title": "Thanksgiving Food Drive Sorting", "days": -60, "capacity": 10, "count": 4, "tags": ["community", "food-security"], "location": "Manhattan Community Kitchen, East Harlem"},
+        {"key": "completed_big", "title": "Weekend Meal Prep & Serve", "days": -35, "capacity": 15, "count": 13, "tags": ["community", "food-security"], "location": "Manhattan Community Kitchen, East Harlem"},
+        {"key": "near_full", "title": "Holiday Meal Packing Day", "days": 5, "capacity": 15, "count": 14, "tags": ["community", "food-security"], "location": "Manhattan Community Kitchen, East Harlem", "qr_precheck": 2},
     ],
-    "hudson-youth-leadership": [
-        {"key": "completed_small", "title": "Civic Leadership Roundtable", "days": -50, "capacity": 12, "count": 3, "tags": ["youth", "community"], "location": "Union City Library"},
-        {"key": "completed_big", "title": "Public Speaking Workshop for Teens", "days": -28, "capacity": 20, "count": 16, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
-        {"key": "upcoming", "title": "Youth Leadership Training: Goal Setting", "days": 14, "capacity": 20, "count": 5, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
-        {"key": "full", "title": "Student Council Bootcamp", "days": 7, "capacity": 12, "count": 12, "tags": ["youth", "education"], "location": "Hudson Youth Leadership Center, Union City"},
+    "bronx-youth-leadership": [
+        {"key": "completed_small", "title": "Civic Leadership Roundtable", "days": -50, "capacity": 12, "count": 3, "tags": ["youth", "community"], "location": "Fordham Library Center, Bronx"},
+        {"key": "completed_big", "title": "Public Speaking Workshop for Teens", "days": -28, "capacity": 20, "count": 16, "tags": ["youth", "education"], "location": "Bronx Youth Leadership Center, Bronx"},
+        {"key": "upcoming", "title": "Youth Leadership Training: Goal Setting", "days": 14, "capacity": 20, "count": 5, "tags": ["youth", "education"], "location": "Bronx Youth Leadership Center, Bronx"},
+        {"key": "full", "title": "Student Council Bootcamp", "days": 7, "capacity": 12, "count": 12, "tags": ["youth", "education"], "location": "Bronx Youth Leadership Center, Bronx"},
     ],
-    "green-tomorrow-nj": [
-        {"key": "completed_small", "title": "Native Plant Restoration Day", "days": -45, "capacity": 12, "count": 5, "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair"},
-        {"key": "completed_big", "title": "Third River Park Cleanup", "days": -21, "capacity": 20, "count": 18, "tags": ["environment", "outdoors"], "location": "Third River Park, Montclair"},
-        {"key": "near_full", "title": "Branch Brook Park Cleanup", "days": 4, "capacity": 25, "count": 23, "tags": ["environment", "outdoors"], "location": "Branch Brook Park, Montclair", "qr_precheck": 2},
+    "green-tomorrow-nyc": [
+        {"key": "completed_small", "title": "Native Plant Restoration Day", "days": -45, "capacity": 12, "count": 5, "tags": ["environment", "outdoors"], "location": "Astoria Park, Queens"},
+        {"key": "completed_big", "title": "Astoria Park Cleanup", "days": -21, "capacity": 20, "count": 18, "tags": ["environment", "outdoors"], "location": "Astoria Park, Queens"},
+        {"key": "near_full", "title": "Socrates Sculpture Park Cleanup", "days": 4, "capacity": 25, "count": 23, "tags": ["environment", "outdoors"], "location": "Socrates Sculpture Park, Queens", "qr_precheck": 2},
     ],
-    "hoboken-animal-rescue": [
-        {"key": "completed_small", "title": "Shelter Deep-Clean & Enrichment Day", "days": -55, "capacity": 8, "count": 3, "tags": ["community"], "location": "Hoboken Animal Rescue Shelter"},
-        {"key": "completed_big", "title": "Adoption Fair Volunteer Day", "days": -30, "capacity": 12, "count": 11, "tags": ["community", "outdoors"], "location": "Church Square Park, Hoboken"},
-        {"key": "upcoming", "title": "Foster Orientation Night", "days": 9, "capacity": 10, "count": 3, "tags": ["community", "education"], "location": "Hoboken Animal Rescue Shelter"},
-        {"key": "full", "title": "Winter Coat & Supply Drive", "days": 6, "capacity": 8, "count": 8, "tags": ["community"], "location": "Hoboken Animal Rescue Shelter"},
+    "brooklyn-animal-rescue": [
+        {"key": "completed_small", "title": "Shelter Deep-Clean & Enrichment Day", "days": -55, "capacity": 8, "count": 3, "tags": ["community"], "location": "Brooklyn Animal Rescue Shelter"},
+        {"key": "completed_big", "title": "Adoption Fair Volunteer Day", "days": -30, "capacity": 12, "count": 11, "tags": ["community", "outdoors"], "location": "Bushwick Inlet Park, Brooklyn"},
+        {"key": "upcoming", "title": "Foster Orientation Night", "days": 9, "capacity": 10, "count": 3, "tags": ["community", "education"], "location": "Brooklyn Animal Rescue Shelter"},
+        {"key": "full", "title": "Winter Coat & Supply Drive", "days": 6, "capacity": 8, "count": 8, "tags": ["community"], "location": "Brooklyn Animal Rescue Shelter"},
     ],
     "nextgen-mentors": [
-        {"key": "completed_small", "title": "Resume & Interview Workshop", "days": -48, "capacity": 10, "count": 4, "tags": ["education"], "location": "NextGen Mentors HQ, Newark"},
-        {"key": "completed_big", "title": "Mentor Match Night", "days": -24, "capacity": 20, "count": 17, "tags": ["education", "youth"], "location": "Newark Public Library"},
-        {"key": "upcoming", "title": "New Mentor Orientation", "days": 16, "capacity": 12, "count": 4, "tags": ["education", "community"], "location": "NextGen Mentors HQ, Newark"},
-        {"key": "near_full", "title": "Career Panel: Careers in Tech", "days": 5, "capacity": 20, "count": 19, "tags": ["education", "technology"], "location": "Newark Public Library"},
+        {"key": "completed_small", "title": "Resume & Interview Workshop", "days": -48, "capacity": 10, "count": 4, "tags": ["education"], "location": "NextGen Mentors HQ, Bronx"},
+        {"key": "completed_big", "title": "Mentor Match Night", "days": -24, "capacity": 20, "count": 17, "tags": ["education", "youth"], "location": "Mott Haven Branch Library, Bronx"},
+        {"key": "upcoming", "title": "New Mentor Orientation", "days": 16, "capacity": 12, "count": 4, "tags": ["education", "community"], "location": "NextGen Mentors HQ, Bronx"},
+        {"key": "near_full", "title": "Career Panel: Careers in Tech", "days": 5, "capacity": 20, "count": 19, "tags": ["education", "technology"], "location": "Mott Haven Branch Library, Bronx"},
     ],
-    "garden-state-volunteers": [
-        {"key": "completed_small", "title": "Tech Help Desk for Seniors", "days": -62, "capacity": 6, "count": 3, "tags": ["community", "technology"], "location": "Bayonne Senior Center"},
-        {"key": "completed_big", "title": "Grocery Run for Seniors", "days": -33, "capacity": 10, "count": 9, "tags": ["community"], "location": "Bayonne Senior Center"},
-        {"key": "upcoming", "title": "Friendly Visits Volunteer Training", "days": 11, "capacity": 10, "count": 2, "tags": ["community"], "location": "Bayonne Senior Center"},
-        {"key": "full", "title": "Senior Center Holiday Party Setup", "days": 8, "capacity": 10, "count": 10, "tags": ["community"], "location": "Bayonne Senior Center"},
+    "empire-state-volunteers": [
+        {"key": "completed_small", "title": "Tech Help Desk for Seniors", "days": -62, "capacity": 6, "count": 3, "tags": ["community", "technology"], "location": "St. George Senior Center, Staten Island"},
+        {"key": "completed_big", "title": "Grocery Run for Seniors", "days": -33, "capacity": 10, "count": 9, "tags": ["community"], "location": "St. George Senior Center, Staten Island"},
+        {"key": "upcoming", "title": "Friendly Visits Volunteer Training", "days": 11, "capacity": 10, "count": 2, "tags": ["community"], "location": "St. George Senior Center, Staten Island"},
+        {"key": "full", "title": "Senior Center Holiday Party Setup", "days": 8, "capacity": 10, "count": 10, "tags": ["community"], "location": "St. George Senior Center, Staten Island"},
     ],
     "riverfront-community-garden": [
-        {"key": "completed_small", "title": "Compost Bin Build Day", "days": -52, "capacity": 10, "count": 4, "tags": ["environment", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
-        {"key": "completed_big", "title": "Fall Harvest Volunteer Day", "days": -26, "capacity": 20, "count": 17, "tags": ["community", "outdoors", "food-security"], "location": "Riverfront Community Garden, Weehawken"},
-        {"key": "upcoming", "title": "Spring Bed Prep Workshop", "days": 18, "capacity": 20, "count": 5, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
-        {"key": "near_full", "title": "Community Planting Day", "days": 3, "capacity": 20, "count": 19, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Weehawken"},
+        {"key": "completed_small", "title": "Compost Bin Build Day", "days": -52, "capacity": 10, "count": 4, "tags": ["environment", "outdoors"], "location": "Riverfront Community Garden, Long Island City"},
+        {"key": "completed_big", "title": "Fall Harvest Volunteer Day", "days": -26, "capacity": 20, "count": 17, "tags": ["community", "outdoors", "food-security"], "location": "Riverfront Community Garden, Long Island City"},
+        {"key": "upcoming", "title": "Spring Bed Prep Workshop", "days": 18, "capacity": 20, "count": 5, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Long Island City"},
+        {"key": "near_full", "title": "Community Planting Day", "days": 3, "capacity": 20, "count": 19, "tags": ["community", "outdoors"], "location": "Riverfront Community Garden, Long Island City"},
     ],
     "liberty-youth-sports": [
-        {"key": "completed_small", "title": "Flag Football Jamboree Volunteer Day", "days": -44, "capacity": 10, "count": 3, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
-        {"key": "completed_big", "title": "Fall Soccer Coaching Clinic", "days": -20, "capacity": 15, "count": 12, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
-        {"key": "upcoming", "title": "Winter Track Coaching Signup Night", "days": 13, "capacity": 15, "count": 3, "tags": ["youth", "fitness"], "location": "Liberty Youth Sports HQ, Jersey City"},
-        {"key": "full", "title": "Youth Soccer Tournament Volunteer Day", "days": 6, "capacity": 15, "count": 15, "tags": ["youth", "fitness"], "location": "Lincoln Park, Jersey City"},
+        {"key": "completed_small", "title": "Flag Football Jamboree Volunteer Day", "days": -44, "capacity": 10, "count": 3, "tags": ["youth", "fitness"], "location": "Sunset Park, Brooklyn"},
+        {"key": "completed_big", "title": "Fall Soccer Coaching Clinic", "days": -20, "capacity": 15, "count": 12, "tags": ["youth", "fitness"], "location": "Sunset Park, Brooklyn"},
+        {"key": "upcoming", "title": "Winter Track Coaching Signup Night", "days": 13, "capacity": 15, "count": 3, "tags": ["youth", "fitness"], "location": "Liberty Youth Sports HQ, Brooklyn"},
+        {"key": "full", "title": "Youth Soccer Tournament Volunteer Day", "days": 6, "capacity": 15, "count": 15, "tags": ["youth", "fitness"], "location": "Sunset Park, Brooklyn"},
     ],
     "downtown-neighborhood-alliance": [
-        {"key": "upcoming", "title": "Monthly Neighbor Potluck", "days": 10, "capacity": 30, "count": 6, "tags": ["community"], "location": "Van Vorst Park, Jersey City"},
-        {"key": "near_full", "title": "Downtown Mural Cleanup Day", "days": 4, "capacity": 20, "count": 18, "tags": ["community", "arts"], "location": "Downtown Jersey City"},
+        {"key": "upcoming", "title": "Monthly Neighbor Potluck", "days": 10, "capacity": 30, "count": 6, "tags": ["community"], "location": "Battery Park, Manhattan"},
+        {"key": "near_full", "title": "Downtown Mural Cleanup Day", "days": 4, "capacity": 20, "count": 18, "tags": ["community", "arts"], "location": "Downtown Manhattan"},
     ],
     "creative-futures-collective": [
-        {"key": "upcoming", "title": "Youth Art Workshop: Community Murals", "days": 15, "capacity": 16, "count": 4, "tags": ["arts", "youth"], "location": "Halsey Street Studio, Newark"},
-        {"key": "near_full", "title": "Halsey Street Pop-Up Gallery Fundraiser", "days": 5, "capacity": 10, "count": 9, "tags": ["arts", "community"], "location": "Halsey Street Studio, Newark"},
+        {"key": "upcoming", "title": "Youth Art Workshop: Community Murals", "days": 15, "capacity": 16, "count": 4, "tags": ["arts", "youth"], "location": "Bay Street Studio, Staten Island"},
+        {"key": "near_full", "title": "Bay Street Pop-Up Gallery Fundraiser", "days": 5, "capacity": 10, "count": 9, "tags": ["arts", "community"], "location": "Bay Street Studio, Staten Island"},
+    ],
+    "queens-volleyball-club": [
+        {"key": "completed_small", "title": "Beach Volleyball Clinic for Kids", "days": -40, "capacity": 12, "count": 5, "tags": ["youth", "fitness"], "location": "Rockaway Beach, Queens"},
+        {"key": "completed_big", "title": "Fall Rec League Kickoff Tournament", "days": -18, "capacity": 24, "count": 20, "tags": ["community", "fitness"], "location": "Rockaway Beach, Queens"},
+        {"key": "upcoming", "title": "Referee & Scorekeeper Training Night", "days": 12, "capacity": 15, "count": 4, "tags": ["community", "fitness"], "location": "Queens Volleyball Club HQ, Queens"},
+        {"key": "near_full", "title": "Winter Indoor League Volunteer Day", "days": 5, "capacity": 20, "count": 18, "tags": ["community", "fitness"], "location": "Rockaway Beach, Queens", "qr_precheck": 2},
     ],
 }
 
@@ -277,51 +293,52 @@ QUEST_TEMPLATES = {
 # single seed_org_quests pass can't produce, since that always makes
 # standalone quests.
 RECURRING_SERIES = {
-    "jc-community-kitchen": {
+    "manhattan-community-kitchen": {
         "title": "Weeknight Dinner Service", "capacity": 15,
-        "tags": ["community", "food-security"], "location": "JC Community Kitchen, Jersey City",
+        "tags": ["community", "food-security"], "location": "Manhattan Community Kitchen, East Harlem",
         "occurrences": [(-7, 5), (7, 4), (14, 2)],
     },
-    "green-tomorrow-nj": {
+    "green-tomorrow-nyc": {
         "title": "Pollinator Garden Planting", "capacity": 18,
-        "tags": ["environment", "outdoors"], "location": "Edgemont Park, Montclair",
+        "tags": ["environment", "outdoors"], "location": "Astoria Park, Queens",
         "occurrences": [(-14, 6), (7, 5), (21, 3)],
     },
 }
 
 LOCATION_COORDS = {
-    "JC Community Kitchen, Jersey City": (40.7178, -74.0431),
-    "Hudson Youth Leadership Center, Union City": (40.7795, -74.0246),
-    "Union City Library": (40.7724, -74.0396),
-    "Third River Park, Montclair": (40.8259, -74.2090),
-    "Edgemont Park, Montclair": (40.8177, -74.2196),
-    "Branch Brook Park, Montclair": (40.7690, -74.1735),
-    "Church Square Park, Hoboken": (40.7440, -74.0341),
-    "Hoboken Animal Rescue Shelter": (40.7439, -74.0324),
-    "Newark Public Library": (40.7395, -74.1723),
-    "NextGen Mentors HQ, Newark": (40.7357, -74.1724),
-    "Bayonne Senior Center": (40.6687, -74.1143),
-    "Riverfront Community Garden, Weehawken": (40.7695, -74.0110),
-    "Lincoln Park, Jersey City": (40.7247, -74.0793),
-    "Liberty Youth Sports HQ, Jersey City": (40.7178, -74.0648),
-    "Downtown Jersey City": (40.7178, -74.0431),
-    "Van Vorst Park, Jersey City": (40.7188, -74.0447),
-    "Halsey Street Studio, Newark": (40.7368, -74.1686),
+    "Manhattan Community Kitchen, East Harlem": (40.7957, -73.9389),
+    "Bronx Youth Leadership Center, Bronx": (40.8610, -73.8977),
+    "Fordham Library Center, Bronx": (40.8610, -73.8901),
+    "Astoria Park, Queens": (40.7794, -73.9235),
+    "Socrates Sculpture Park, Queens": (40.7694, -73.9385),
+    "Bushwick Inlet Park, Brooklyn": (40.7217, -73.9552),
+    "Brooklyn Animal Rescue Shelter": (40.6944, -73.9213),
+    "Mott Haven Branch Library, Bronx": (40.8079, -73.9209),
+    "NextGen Mentors HQ, Bronx": (40.8090, -73.9226),
+    "St. George Senior Center, Staten Island": (40.6437, -74.0765),
+    "Riverfront Community Garden, Long Island City": (40.7477, -73.9599),
+    "Sunset Park, Brooklyn": (40.6602, -74.0000),
+    "Liberty Youth Sports HQ, Brooklyn": (40.6590, -74.0089),
+    "Battery Park, Manhattan": (40.7033, -74.0170),
+    "Downtown Manhattan": (40.7075, -74.0113),
+    "Bay Street Studio, Staten Island": (40.6268, -74.0776),
+    "Rockaway Beach, Queens": (40.5834, -73.8171),
+    "Queens Volleyball Club HQ, Queens": (40.5852, -73.8155),
 }
 
 QUEST_DESCRIPTIONS = {
-    "Weekend Meal Prep & Serve": "Join our kitchen crew prepping and serving a full weekend meal service for Jersey City families.",
+    "Weekend Meal Prep & Serve": "Join our kitchen crew prepping and serving a full weekend meal service for East Harlem families.",
     "Thanksgiving Food Drive Sorting": "Help sort and pack donated Thanksgiving groceries into family-sized boxes ahead of the holiday.",
     "Weeknight Dinner Service": "Prep, cook, and serve a weeknight dinner for neighbors who rely on our kitchen.",
-    "Holiday Meal Packing Day": "Pack holiday meal kits for delivery to families across Jersey City.",
+    "Holiday Meal Packing Day": "Pack holiday meal kits for delivery to families across East Harlem.",
     "Public Speaking Workshop for Teens": "A hands-on workshop where teens practice public speaking with real feedback from mentors.",
     "Civic Leadership Roundtable": "Teens sit down with local civic leaders to talk about what leadership actually looks like day to day.",
     "Youth Leadership Training: Goal Setting": "A session on setting real, trackable leadership goals for the semester ahead.",
-    "Student Council Bootcamp": "An intensive day of training for incoming student council members across Hudson County schools.",
-    "Third River Park Cleanup": "Bring gloves and good shoes — we're clearing litter and invasive growth along the Third River.",
-    "Native Plant Restoration Day": "Help us plant native species that support local pollinators along the Edgemont Park trail.",
+    "Student Council Bootcamp": "An intensive day of training for incoming student council members across Bronx schools.",
+    "Astoria Park Cleanup": "Bring gloves and good shoes — we're clearing litter and invasive growth along the East River waterfront.",
+    "Native Plant Restoration Day": "Help us plant native species that support local pollinators along the Astoria Park shoreline.",
     "Pollinator Garden Planting": "Plant this season's pollinator-friendly bed alongside garden members and neighborhood families.",
-    "Branch Brook Park Cleanup": "A full-morning cleanup across Branch Brook Park's cherry blossom groves.",
+    "Socrates Sculpture Park Cleanup": "A full-morning cleanup across Socrates Sculpture Park's waterfront lawns and art installations.",
     "Adoption Fair Volunteer Day": "Help run our outdoor adoption fair — set up, greet visitors, and walk dogs between meet-and-greets.",
     "Shelter Deep-Clean & Enrichment Day": "A deep clean of the shelter plus enrichment activities for animals waiting on their forever homes.",
     "Foster Orientation Night": "Thinking about fostering? Come learn what it actually involves from our current foster network.",
@@ -342,10 +359,14 @@ QUEST_DESCRIPTIONS = {
     "Flag Football Jamboree Volunteer Day": "Help run stations, keep score, and cheer on our flag football jamboree.",
     "Winter Track Coaching Signup Night": "Sign up to coach or help with our winter indoor track program.",
     "Youth Soccer Tournament Volunteer Day": "Volunteers needed to run our end-of-season youth soccer tournament.",
-    "Monthly Neighbor Potluck": "Bring a dish, meet your neighbors — our very first monthly potluck at Van Vorst Park.",
+    "Monthly Neighbor Potluck": "Bring a dish, meet your neighbors — our very first monthly potluck at Battery Park.",
     "Downtown Mural Cleanup Day": "Clean and touch up the community mural wall downtown ahead of its anniversary.",
     "Youth Art Workshop: Community Murals": "Teens design and paint a mural panel with guidance from a working muralist.",
-    "Halsey Street Pop-Up Gallery Fundraiser": "A one-night pop-up gallery and fundraiser supporting next year's studio scholarships — our very first public event.",
+    "Bay Street Pop-Up Gallery Fundraiser": "A one-night pop-up gallery and fundraiser supporting next year's studio scholarships — our very first public event.",
+    "Beach Volleyball Clinic for Kids": "A beginner-friendly beach volleyball clinic teaching kids the basics — serving, bumping, and setting.",
+    "Fall Rec League Kickoff Tournament": "Help run our fall rec league's opening tournament — court setup, scorekeeping, and gameday hosting.",
+    "Referee & Scorekeeper Training Night": "Training for volunteers signing up to referee or keep score for this season's league games.",
+    "Winter Indoor League Volunteer Day": "Court setup, check-in, and scorekeeping for a full night of our winter indoor league games.",
 }
 
 
@@ -353,7 +374,7 @@ QUEST_DESCRIPTIONS = {
 
 USERS = [
     # Iron: 0-99 points
-    {"name": "Maria Ortiz", "points": 0, "interests": ["community", "food-security"]},
+    {"name": "Jordan Ortiz", "points": 0, "interests": ["community", "food-security"]},
     {"name": "Devon Carter", "points": 20, "interests": ["environment", "outdoors"]},
     {"name": "Priya Nair", "points": 40, "interests": ["education", "technology"], "accommodationNeeds": ["wheelchair-accessible"]},
     {"name": "Malik Thompson", "points": 60, "interests": ["youth", "fitness"]},
@@ -402,14 +423,14 @@ MOTIVATION_CYCLE = ["experience", "community", "impact", "requirement"]
 # placeId/lat/lng (and _has_enough_accessible_org_quests, for the 5 users
 # above with accommodationNeeds) have real values to work with — a gap in
 # the previous seeder, which left every demo user with no location at all.
-NJ_LOCATIONS = [
-    ("Jersey City, NJ", "seed-place-jersey-city", 40.7178, -74.0431),
-    ("Hoboken, NJ", "seed-place-hoboken", 40.7440, -74.0324),
-    ("Union City, NJ", "seed-place-union-city", 40.7795, -74.0246),
-    ("Newark, NJ", "seed-place-newark", 40.7357, -74.1724),
-    ("Montclair, NJ", "seed-place-montclair", 40.8259, -74.2090),
-    ("Bayonne, NJ", "seed-place-bayonne", 40.6687, -74.1143),
-    ("Weehawken, NJ", "seed-place-weehawken", 40.7695, -74.0110),
+# The 5 NYC boroughs — demo users and organizations (see ORGS above) both
+# live in the city itself now, not a nearby state.
+NY_LOCATIONS = [
+    ("Manhattan, NY", "seed-place-manhattan", 40.7831, -73.9712),
+    ("Brooklyn, NY", "seed-place-brooklyn", 40.6782, -73.9442),
+    ("Queens, NY", "seed-place-queens", 40.7282, -73.7949),
+    ("Bronx, NY", "seed-place-bronx", 40.8448, -73.8648),
+    ("Staten Island, NY", "seed-place-staten-island", 40.5795, -74.1502),
 ]
 
 REVIEW_BODIES = [
@@ -549,7 +570,7 @@ TIER_QUEST_LISTS = {
 # admin review), "completed" (approved — real attendance + tier points).
 # Only users whose rank actually unlocks a tier are ever assigned to it.
 TIER_COMPLETION_PLAN = {
-    "iron": [("Maria Ortiz", "rsvp_only", 0), ("Devon Carter", "pending", 1), ("Priya Nair", "completed", 2)],
+    "iron": [("Jordan Ortiz", "rsvp_only", 0), ("Devon Carter", "pending", 1), ("Priya Nair", "completed", 2)],
     "bronze": [("Liam Chen", "rsvp_only", 2), ("Amara Okafor", "pending", 1), ("Ethan Walsh", "completed", 0)],
     "silver": [("Aaliyah Jackson", "rsvp_only", 2), ("Tyler Brooks", "pending", 1), ("Camila Torres", "completed", 0)],
     "gold": [("Isabella Rossi", "pending", 1), ("Marcus Bell", "completed", 0)],
@@ -599,7 +620,7 @@ JOURNAL_QUEST_PHOTOS = {
     "Civic Leadership Roundtable": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=800&q=60",
     "Public Speaking Workshop for Teens": "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=800&q=60",
     "Native Plant Restoration Day": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=800&q=60",
-    "Third River Park Cleanup": "https://images.unsplash.com/photo-1618477388954-7852f32655ec?auto=format&fit=crop&w=800&q=60",
+    "Astoria Park Cleanup": "https://images.unsplash.com/photo-1618477388954-7852f32655ec?auto=format&fit=crop&w=800&q=60",
     "Pollinator Garden Planting": "https://images.unsplash.com/photo-1471193945509-9ad0617afabf?auto=format&fit=crop&w=800&q=60",
     "Shelter Deep-Clean & Enrichment Day": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=800&q=60",
     "Adoption Fair Volunteer Day": "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=800&q=60",
@@ -679,6 +700,27 @@ def wipe_old_demo_accounts():
     print(f"  Removed {removed} old demo account(s) from the previous email domain")
 
 
+# One-off rename: "Maria Ortiz" became "Jordan Ortiz" in USERS above.
+# get_or_create_user (used by seed_users) only ever looks up by the
+# CURRENT derived email, so without this the account from a previous run
+# would just sit around under maria.ortiz@lead-dux.app, unreferenced, while
+# seed_users created a brand-new jordan.ortiz@lead-dux.app account (and
+# lost the original's uid, rank/points history, etc. in the process). A
+# no-op on a completely fresh project, where the old email never existed.
+def rename_demo_user(old_name, new_name):
+    old_email = f"{old_name.lower().replace(' ', '.')}@{EMAIL_DOMAIN}"
+    new_email = f"{new_name.lower().replace(' ', '.')}@{EMAIL_DOMAIN}"
+    try:
+        user = auth.get_user_by_email(old_email)
+    except auth.UserNotFoundError:
+        return
+    auth.update_user(user.uid, email=new_email, display_name=new_name)
+    db.collection("users").document(user.uid).set(
+        {"name": new_name, "email": new_email}, merge=True
+    )
+    print(f"  Renamed demo user: {old_name} -> {new_name} ({user.uid})")
+
+
 def seed_admin():
     user = get_or_create_user(ADMIN_EMAIL, DEMO_PASSWORD, ADMIN_NAME)
     auth.set_custom_user_claims(user.uid, {"role": "admin"})
@@ -714,8 +756,6 @@ def seed_organizations():
             "logoUrl": ORG_LOGO_PHOTOS.get(org["slug"]),
             "category": org["category"],
             "missionStatement": org["missionStatement"],
-            "city": org["city"],
-            "state": org["state"],
             "website": org["website"],
             "contactEmail": org["email"],
             "socialLinks": org["social"],
@@ -739,7 +779,7 @@ def seed_users():
 
         points = u["points"] + (20 if u["name"] in FEEDBACK_BONUS_RECIPIENTS else 0)
         rank = main._rank_for_points(points)
-        location, place_id, lat, lng = NJ_LOCATIONS[i % len(NJ_LOCATIONS)]
+        location, place_id, lat, lng = NY_LOCATIONS[i % len(NY_LOCATIONS)]
         doc = {
             "email": email,
             "name": u["name"],
@@ -1212,14 +1252,14 @@ def seed_org_quest_photo_submissions(completed_quests, org_uids, admin_uid):
             ref.set({**base, "status": "rejected", "pointsAwarded": 0, "rejectionReason": "Photo doesn't clearly show participation at the event — could you resubmit with the event visible in frame?", "reviewedAt": firestore.SERVER_TIMESTAMP, "reviewedBy": cq["org_uid"]})
         print(f"  Org-quest bonus photo: {cq['title']} — {user_name}: {state}")
 
-    # A few more pending photos specifically for Jersey City Community
+    # A few more pending photos specifically for Manhattan Community
     # Kitchen — the org most manual test/demo sessions log into — so
     # PendingPhotoReview's bento grid + swipe stack has real volume to
     # exercise instead of a single-tile queue. Drawn from each of that
     # org's own completed quests' real attendees (skipping attendees[0],
     # already used by the single "pending" pick above if that quest is
     # completed_quests[0]).
-    jc_org_uid = org_uids.get("jc-community-kitchen")
+    jc_org_uid = org_uids.get("manhattan-community-kitchen")
     jc_quests = [cq for cq in completed_quests if cq["org_uid"] == jc_org_uid]
     extra_picks = [(cq, uid) for cq in jc_quests for uid in cq["attendees"][1:3]]
     for i, (cq, uid) in enumerate(extra_picks):
@@ -1385,7 +1425,7 @@ def seed_feedback_and_journal(completed_quests, user_uids):
 # so the demo can also show (or live-fill) the "tap to reflect" empty
 # state rather than presenting an unrealistically perfect account.
 HERO_JOURNALS = {
-    "Maria Ortiz": {
+    "Jordan Ortiz": {
         "filled": [
             ("Thanksgiving Food Drive Sorting", "This was my very first quest and I had no idea what to expect. Turns out sorting canned goods for three hours with total strangers is a great way to make friends fast — we packed something like 40 family boxes by the end of the shift."),
         ],
@@ -1410,7 +1450,7 @@ HERO_JOURNALS = {
     "Ethan Walsh": {
         "filled": [
             ("Native Plant Restoration Day", "Learned the hard way that 'native plant' doesn't mean 'easy to plant' — half our seedlings needed a specific soil depth I was definitely eyeballing wrong for the first hour. Got better by the end."),
-            ("Third River Park Cleanup", "Filled eleven contractor bags along maybe a quarter mile of trail. Kept thinking about how none of that litter blows in from nowhere — it's just what gets left behind, one piece at a time, by people who probably meant to pick it up later."),
+            ("Astoria Park Cleanup", "Filled eleven contractor bags along maybe a quarter mile of trail. Kept thinking about how none of that litter blows in from nowhere — it's just what gets left behind, one piece at a time, by people who probably meant to pick it up later."),
         ],
         "blank": "Pollinator Garden Planting",
     },
@@ -1469,50 +1509,50 @@ def seed_hero_journal_entries(completed_quests, user_uids):
         _ensure_attended(blank_cq, uid)
     print(f"  Hero journals: {len(HERO_JOURNALS)} users, {filled_count} reflections + matching photos, 1 blank entry each")
 
-    # Maria Ortiz's Thanksgiving Food Drive Sorting entry additionally gets
+    # Jordan Ortiz's Thanksgiving Food Drive Sorting entry additionally gets
     # a completed feedback response — a concrete "reflection already
     # written, feedback arrives afterward" example for the Journal page
     # (FeedbackStatus renders below the reflection body there, set off by
     # its own divider), same shape as seed_feedback_and_journal's own
     # completed_feedback cases above, just targeted at a specific named
     # hero/quest instead of whichever completed_quests[0]/[1] happen to be.
-    maria_uid = name_to_uid["Maria Ortiz"]
-    maria_cq = by_title["Thanksgiving Food Drive Sorting"]
-    _ensure_attended(maria_cq, maria_uid)
-    maria_answers = {"engagement": 9, "presence": 9, "involvement": 8, "initiative": 8, "attitude": 10}
-    maria_score = round(sum(maria_answers.values()) / len(maria_answers), 1)
-    maria_points = main.FEEDBACK_BONUS_POINTS if maria_score >= main.FEEDBACK_SCORE_THRESHOLD else 0
-    maria_extra_thoughts = (
-        "Maria jumped right in without needing much direction, even as a first-timer — exactly "
+    jordan_uid = name_to_uid["Jordan Ortiz"]
+    jordan_cq = by_title["Thanksgiving Food Drive Sorting"]
+    _ensure_attended(jordan_cq, jordan_uid)
+    jordan_answers = {"engagement": 9, "presence": 9, "involvement": 8, "initiative": 8, "attitude": 10}
+    jordan_score = round(sum(jordan_answers.values()) / len(jordan_answers), 1)
+    jordan_points = main.FEEDBACK_BONUS_POINTS if jordan_score >= main.FEEDBACK_SCORE_THRESHOLD else 0
+    jordan_extra_thoughts = (
+        "Jordan jumped right in without needing much direction, even as a first-timer — exactly "
         "the energy we hope every new volunteer brings."
     )
     # Hand-written, not generated — seeding shouldn't depend on a live
     # GEMINI_API_KEY. Every category is 8+ here, so growthArea stays empty
     # per _generate_feedback_summary's own rule 7.
-    maria_summary = (
+    jordan_summary = (
         "You were actively engaged throughout the quest and consistently stayed focused on the "
         "experience. Your contributions helped move the group forward, and you regularly stepped "
         "up to help when opportunities arose. You maintained a positive, cooperative attitude that "
         "made working together enjoyable, and your overall presence strengthened the team's "
         "success. Keep bringing this level of energy and teamwork to future quests."
     )
-    maria_growth_area = ""
-    main._feedback_request_ref(db, maria_cq["quest_id"], maria_uid).set({
-        "questId": maria_cq["quest_id"], "uid": maria_uid, "requesterName": "Maria Ortiz",
-        "orgId": maria_cq["org_uid"], "orgName": maria_cq["org_name"],
-        "questTitle": maria_cq["title"], "eventDate": maria_cq["event_date"],
+    jordan_growth_area = ""
+    main._feedback_request_ref(db, jordan_cq["quest_id"], jordan_uid).set({
+        "questId": jordan_cq["quest_id"], "uid": jordan_uid, "requesterName": "Jordan Ortiz",
+        "orgId": jordan_cq["org_uid"], "orgName": jordan_cq["org_name"],
+        "questTitle": jordan_cq["title"], "eventDate": jordan_cq["event_date"],
         "requestedAt": NOW - timedelta(days=3), "expiresAt": NOW + timedelta(days=11),
-        "status": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
-        "score": maria_score, "summary": maria_summary, "growthArea": maria_growth_area,
-        "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+        "status": "completed", "answers": jordan_answers, "extraThoughts": jordan_extra_thoughts,
+        "score": jordan_score, "summary": jordan_summary, "growthArea": jordan_growth_area,
+        "pointsAwarded": jordan_points, "completedAt": NOW - timedelta(days=1),
     })
-    main._journal_ref(db, maria_uid, maria_cq["quest_id"]).set({
-        "requestStatus": "completed", "answers": maria_answers, "extraThoughts": maria_extra_thoughts,
-        "score": maria_score, "summary": maria_summary, "growthArea": maria_growth_area,
-        "pointsAwarded": maria_points, "completedAt": NOW - timedelta(days=1),
+    main._journal_ref(db, jordan_uid, jordan_cq["quest_id"]).set({
+        "requestStatus": "completed", "answers": jordan_answers, "extraThoughts": jordan_extra_thoughts,
+        "score": jordan_score, "summary": jordan_summary, "growthArea": jordan_growth_area,
+        "pointsAwarded": jordan_points, "completedAt": NOW - timedelta(days=1),
         "notified": False, "read": False,
     }, merge=True)
-    print(f"  Maria Ortiz completed feedback: Thanksgiving Food Drive Sorting, score {maria_score}")
+    print(f"  Jordan Ortiz completed feedback: Thanksgiving Food Drive Sorting, score {jordan_score}")
 
 
 def seed_notifications(user_uids):
@@ -1522,7 +1562,7 @@ def seed_notifications(user_uids):
     or reschedule a live quest first."""
     by_name = {row["name"]: row["uid"] for row in user_uids}
     main._notify_user(
-        db, by_name["Maria Ortiz"], kind="quest_cancelled",
+        db, by_name["Jordan Ortiz"], kind="quest_cancelled",
         quest_id="seed-demo-cancelled-quest", quest_title="Fall Cleanup Meetup",
     )
     main._notify_user(
@@ -1530,18 +1570,18 @@ def seed_notifications(user_uids):
         quest_id="seed-demo-rescheduled-quest", quest_title="Riverside Trail Restoration",
         extra={"newEventDate": NOW + timedelta(days=20)},
     )
-    print("  Notifications: quest_cancelled -> Maria Ortiz, quest_rescheduled -> Devon Carter")
+    print("  Notifications: quest_cancelled -> Jordan Ortiz, quest_rescheduled -> Devon Carter")
 
 
 PENDING_ORG_APPLICATIONS = [
     {
         "email": f"riverside.arts@{EMAIL_DOMAIN}", "name": "Riverside Arts Collective",
-        "phone": "(201) 555-0199", "location": "Jersey City, NJ", "placeId": "seed-place-jersey-city",
+        "phone": "(718) 555-0199", "location": "Brooklyn, NY", "placeId": "seed-place-brooklyn",
         "reason": "We're a small group of working artists looking to run free weekend workshops along the waterfront.",
     },
     {
         "email": f"northward.trades@{EMAIL_DOMAIN}", "name": "Northward Trade Skills Initiative",
-        "phone": "(973) 555-0188", "location": "Newark, NJ", "placeId": "seed-place-newark",
+        "phone": "(718) 555-0188", "location": "Bronx, NY", "placeId": "seed-place-bronx",
         "reason": "We teach basic home-repair and trade skills to young adults aging out of foster care and want to start hosting hands-on volunteer sessions.",
     },
 ]
@@ -1593,6 +1633,9 @@ def print_demo_accounts(org_uids, user_uids):
 def main_seed():
     print("Removing accounts from the previous seed generation...")
     wipe_old_demo_accounts()
+
+    print("\nRenaming carried-over demo users...")
+    rename_demo_user("Maria Ortiz", "Jordan Ortiz")
 
     print("\nWiping old seed quest/series/attendance/photo/feedback docs...")
     wipe_old_seed_data()

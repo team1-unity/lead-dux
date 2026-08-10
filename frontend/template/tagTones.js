@@ -71,10 +71,10 @@ export function duckAvatarByIndex(index) {
 // can't resolve var(--tag-community) themselves. Keep in sync with style.css
 // by hand; there's no build step that generates one from the other.
 export const TONE_HEX = {
-  community: { fill: '#fbeba9', ink: '#6b4e05' },
+  community: { fill: '#f2edc7', ink: '#776919' },
   education: { fill: '#d6ecf7', ink: '#1b4e66' },
-  environment: { fill: '#cfead9', ink: '#1e5c3c' },
-  outdoors: { fill: '#fbe1c4', ink: '#7a4413' },
+  environment: { fill: '#dcefdc', ink: '#3c7446' },
+  outdoors: { fill: '#f7e4cf', ink: '#91591f' },
   technology: { fill: '#cfe9e6', ink: '#15574f' },
   youth: { fill: '#d7e4f7', ink: '#1e3a73' },
   fitness: { fill: '#f6d6d0', ink: '#7a2c22' },

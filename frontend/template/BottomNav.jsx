@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from './AuthContext.jsx';
 import { db } from './firebaseapp.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
+import { useEarnedBadges } from './useEarnedBadges.js';
+import { EditProfileModal } from './EditProfileModal.jsx';
+import { BadgeRing } from '../mobile/Badges.jsx';
 import {
   IconList,
   IconGrid,
@@ -15,8 +19,11 @@ import {
   IconPlus,
   IconMap,
   IconHome,
+  IconLogout,
+  IconEdit,
 } from './icons.jsx';
-import { Logo, DuckMark } from './Logo.jsx';
+import { Logo } from './Logo.jsx';
+import { UserAvatar } from './UserAvatar.jsx';
 import { OrgAvatar } from './OrgAvatar.jsx';
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
@@ -101,21 +108,6 @@ function fabCircleStyle(i, n) {
   return { left: `calc(50% + ${x}px)`, bottom: `calc(100% + ${y}px)` };
 }
 
-// A member's own nav avatar — their uploaded photoURL (see Profile.jsx's
-// EditProfileModal), or the duck mascot when they haven't set one. Mirrors
-// Profile.jsx's own UserAvatar; not reused directly since that one's local
-// to app/src/Profile.jsx and this nav lives in the shared template instead.
-function PersonAvatar({ photoURL }) {
-  if (!photoURL) return <DuckMark size={22} />;
-  return (
-    <img
-      src={photoURL}
-      alt=''
-      style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }}
-    />
-  );
-}
-
 // Unread count for the Journal badge — a live listener (not a one-time
 // fetch), so it updates the moment an organization answers a feedback
 // request while the app is open, same as NotificationBanner's Home-screen
@@ -139,15 +131,42 @@ function useUnreadFeedbackCount(user, role) {
 }
 
 export function BottomNav() {
-  const { role, user } = useAuth();
+  const { role, user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const [displayName, setDisplayName] = useState(null);
-  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [photoURL, setPhotoURL] = useState(null);
+  const [duckSkin, setDuckSkin] = useState(null);
+  const [orgLogoUrl, setOrgLogoUrl] = useState(null);
   const [duckColorIndex, setDuckColorIndex] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  // Sticks true after the first open and never resets — lets the badges
+  // fetch below run once per session (on first open) instead of never
+  // re-triggering the effect on every subsequent open/close toggle.
+  const [avatarMenuEverOpened, setAvatarMenuEverOpened] = useState(false);
+  // Edit profile opens right here, wherever in the app the caller clicked
+  // it from (see EditProfileModal.jsx) — no route change, so it no longer
+  // routes through /profile first the way it briefly did.
+  const [editingProfile, setEditingProfile] = useState(false);
+  // Desktop sidebar collapse/expand — click-toggled via the brand logo
+  // (see .bottom-nav-brand's onClick below), not hover; collapsed by
+  // default so the rail starts icon-only.
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const unreadFeedback = useUnreadFeedbackCount(user, role);
+  const reduce = useReducedMotion();
+  // Gated behind the menu having been opened at least once — this nav
+  // renders on every desktop page, so fetching quests/attendance/user-doc
+  // (see useEarnedBadges) unconditionally would mean 3 extra Firestore
+  // reads on every page load whether or not anyone ever opens the dropup.
+  const earnedBadges = useEarnedBadges(
+    role === 'user' && avatarMenuEverOpened ? user : null,
+  );
+  const recentBadges = (earnedBadges || [])
+    .slice()
+    .sort((a, b) => a.progress - a.target - (b.progress - b.target))
+    .slice(0, 3);
 
   // A route change (including one triggered by picking a FAB or avatar menu
   // item) always closes both menus — BottomNav stays mounted across
@@ -158,26 +177,41 @@ export function BottomNav() {
   }, [location.pathname]);
 
   // Only fetched for roles that render an avatar (desktop only) — an
-  // organization's own name/logoUrl from its org doc, a member's own
-  // name/photoURL from their user doc. Every other role never touches this.
+  // organization's own name and logo (see OrgAvatar — same logoUrl field
+  // its own OrganizationProfile.jsx page reads) and its assigned duck
+  // color (see _assign_duck_color_index in main.py) from its org doc, a
+  // member's own name and photo (for the image-or-duck avatar below — see
+  // UserAvatar) from their user doc. Every other role never touches this.
+  //
+  // A live listener, not a one-time getDoc — this same edit is also
+  // reachable from Profile.jsx/OrganizationProfile.jsx's own pages, which
+  // keep their own separate copy of this same state (see those files'
+  // own notes). BottomNav stays mounted across every navigation (see
+  // AppShell), so a save made through one of those pages would otherwise
+  // never reach this already-mounted nav's local state, leaving the small
+  // avatar shown here stuck on the old photo/duck/name until a full
+  // reload.
   useEffect(() => {
     if (!user) return;
     if (role === 'organization') {
-      getDoc(doc(db, 'organizations', user.uid)).then((snap) => {
-        if (snap.exists()) {
-          setDisplayName(snap.data().name || '');
-          setAvatarUrl(snap.data().logoUrl || null);
-          setDuckColorIndex(snap.data().duckColorIndex ?? null);
-        }
-      });
-    } else if (role === 'user' || role === 'pending_org') {
-      getDoc(doc(db, 'users', user.uid)).then((snap) => {
-        if (snap.exists()) {
-          setDisplayName(snap.data().name || '');
-          setAvatarUrl(snap.data().photoURL || null);
-        }
+      return onSnapshot(doc(db, 'organizations', user.uid), (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        setDisplayName(data.name || '');
+        setOrgLogoUrl(data.logoUrl || null);
+        setDuckColorIndex(data.duckColorIndex ?? null);
       });
     }
+    if (role === 'user' || role === 'pending_org') {
+      return onSnapshot(doc(db, 'users', user.uid), (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        setDisplayName(data.name || '');
+        // Custom-uploaded photo wins over the Google account photo wins
+        // over the chosen duck fallback — same priority as Profile.jsx.
+        setPhotoURL(data.photoURL || user.photoURL || null);
+        setDuckSkin(data.duckSkin || null);
+      });
+    }
+    return undefined;
   }, [role, user]);
 
   // Profile's destination becomes a top-right avatar on desktop (matching
@@ -186,9 +220,10 @@ export function BottomNav() {
   // every role, unchanged.
   const avatarOnDesktop =
     (role === 'organization' || role === 'user' || role === 'pending_org') && isDesktop;
-  // Only the org view shows its name in text next to the avatar (matching
-  // that wireframe); the user view's avatar stands alone.
-  const showNameNextToAvatar = role === 'organization';
+  // Both the org and user views show their name next to the avatar once the
+  // sidebar is a left rail with room for text (the org wireframe always had
+  // this; the user view picked it up once the sidebar could expand).
+  const showNameNextToAvatar = role === 'organization' || role === 'user';
   const features = FEATURES_BY_ROLE[role] || [];
   // `user` and `organization` both get the redesigned flat nav — no FAB at
   // all, features always shown as normal pills (mobile and desktop alike).
@@ -238,10 +273,34 @@ export function BottomNav() {
           aria-hidden='true'
         />
       )}
-      <div className='bottom-nav' role='navigation' aria-label='Primary'>
-        <Link to='/' className='bottom-nav-brand' aria-hidden='true' tabIndex={-1}>
-          <Logo size={24} />
-        </Link>
+      <motion.div
+        className='bottom-nav'
+        role='navigation'
+        aria-label='Primary'
+        data-expanded={isDesktop ? sidebarExpanded : undefined}
+      >
+        <div className='bottom-nav-brand-row'>
+          {isDesktop ? (
+            // Desktop: the logo IS the sidebar toggle — no separate chevron
+            // button, and it no longer routes home (that's what the Home
+            // nav item below is for). A click toggle, not hover — stays
+            // open/closed exactly as left rather than snapping shut the
+            // instant the pointer wanders off.
+            <button
+              type='button'
+              className='bottom-nav-brand'
+              onClick={() => setSidebarExpanded((v) => !v)}
+              aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+              title={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              <Logo size={24} />
+            </button>
+          ) : (
+            <Link to='/' className='bottom-nav-brand' aria-hidden='true' tabIndex={-1}>
+              <Logo size={24} />
+            </Link>
+          )}
+        </div>
         {items.map((item, i) => {
           const Icon = item.icon;
           const current = location.pathname === item.to;
@@ -253,6 +312,14 @@ export function BottomNav() {
               aria-current={current ? 'page' : undefined}
               title={item.label}
             >
+              {current && (
+                <motion.span
+                  layoutId='nav-active-pill'
+                  className='bottom-nav-active-pill'
+                  aria-hidden='true'
+                  transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
               <span className='bottom-nav-icon'>
                 <Icon />
                 {item.badge && unreadFeedback > 0 && (
@@ -308,41 +375,205 @@ export function BottomNav() {
         {avatarOnDesktop && (
           <div className='bottom-nav-avatar-wrap'>
             {role === 'organization' ? (
-              // An organization's "profile" IS its own public profile page
-              // (editable in place there when isOwner — see
-              // OrganizationProfile.jsx), same as clicking the avatar on
-              // org/Home.jsx — so this goes straight there instead of
-              // opening a menu. Settings moved to a gear icon on that page
-              // itself (matching the member Profile.jsx pattern) rather
-              // than living in a dropdown here.
-              <Link
-                to={`/organizations/${user.uid}`}
-                className='bottom-nav-avatar-link'
-                aria-current={
-                  location.pathname === `/organizations/${user.uid}` ? 'page' : undefined
-                }
-              >
-                {showNameNextToAvatar && displayName && (
-                  <span className='bottom-nav-org-name'>{displayName}</span>
+              <>
+                <button
+                  type='button'
+                  className='bottom-nav-avatar-link'
+                  aria-haspopup='menu'
+                  aria-expanded={avatarMenuOpen}
+                  onClick={() => setAvatarMenuOpen((v) => !v)}
+                >
+                  {/* Avatar always first (left) — same order as the `user`
+                      role's own button below; a name long enough to need
+                      truncation reads oddly leading into a picture instead
+                      of following it. */}
+                  <div className='nav-avatar'>
+                    <OrgAvatar name={displayName} seed={user.uid} logoUrl={orgLogoUrl} duckColorIndex={duckColorIndex} />
+                  </div>
+                  {showNameNextToAvatar && displayName && (
+                    <span className='bottom-nav-org-name'>{displayName}</span>
+                  )}
+                </button>
+                {avatarMenuOpen && (
+                  <div className='bottom-nav-avatar-menu bottom-nav-avatar-menu-google' role='menu'>
+                    {/* Same Google-account-menu header shape as the `user`
+                        role's own dropdown below (logo, name, email) — an
+                        org signs in through the same Firebase Auth account
+                        as everyone else, so it has a real email to show
+                        here too. */}
+                    <div className='bottom-nav-avatar-menu-header'>
+                      <div className='nav-avatar'>
+                        <OrgAvatar name={displayName} seed={user.uid} logoUrl={orgLogoUrl} duckColorIndex={duckColorIndex} />
+                      </div>
+                      <div className='bottom-nav-avatar-menu-identity'>
+                        <p className='bottom-nav-avatar-menu-name'>
+                          <span className='bottom-nav-avatar-menu-name-text'>
+                            {displayName || 'Your organization'}
+                          </span>
+                        </p>
+                        <p className='bottom-nav-avatar-menu-email'>{user.email}</p>
+                      </div>
+                    </div>
+                    <div className='bottom-nav-avatar-menu-divider' />
+                    {/* Both route to the exact same org profile page and
+                        URL — the only difference is this state flag (see
+                        OrganizationProfile.jsx's own editMode), which is
+                        the *only* way into edit mode there (no page-level
+                        toggle). Without it ("View profile," or reaching
+                        this same page any other way), the org sees the
+                        identical read-only content a visitor does — no
+                        pencils, no add/delete photo controls, nothing
+                        owner-only. */}
+                    <Link
+                      to={`/organizations/${user.uid}`}
+                      state={{ editMode: true }}
+                      role='menuitem'
+                      // Both links share the exact same pathname (see the
+                      // note above) — a pathname-only aria-current check
+                      // can't tell them apart, so whichever one matched on
+                      // an *earlier* navigation just stayed lit regardless
+                      // of which one was actually clicked most recently.
+                      // location.state?.editMode (OrganizationProfile.jsx's
+                      // own read of it) is the only thing that actually
+                      // differs between them, so both checks below key off
+                      // it instead, matching what the page itself is doing.
+                      aria-current={
+                        location.pathname === `/organizations/${user.uid}` && location.state?.editMode
+                          ? 'page'
+                          : undefined
+                      }
+                    >
+                      <IconEdit /> Edit profile
+                    </Link>
+                    <Link
+                      to={`/organizations/${user.uid}`}
+                      role='menuitem'
+                      aria-current={
+                        location.pathname === `/organizations/${user.uid}` && !location.state?.editMode
+                          ? 'page'
+                          : undefined
+                      }
+                    >
+                      <IconPerson /> View profile
+                    </Link>
+                    <Link
+                      to='/settings'
+                      role='menuitem'
+                      aria-current={location.pathname === '/settings' ? 'page' : undefined}
+                    >
+                      <IconGear /> Settings
+                    </Link>
+                    <div className='bottom-nav-avatar-menu-divider' />
+                    <button
+                      type='button'
+                      role='menuitem'
+                      onClick={async () => {
+                        await logout();
+                        navigate('/login', { replace: true });
+                      }}
+                    >
+                      <IconLogout /> Log out
+                    </button>
+                  </div>
                 )}
-                <span className='nav-avatar'>
-                  <OrgAvatar name={displayName} seed={user.uid} logoUrl={avatarUrl} duckColorIndex={duckColorIndex} />
-                </span>
-              </Link>
+              </>
             ) : role === 'user' ? (
-              // Same reasoning as the organization branch above — Settings
-              // is a gear icon on the Profile page itself (see Profile.jsx),
-              // so there's nothing a dropdown here would add over just
-              // going straight to Profile.
-              <Link
-                to='/profile'
-                className='bottom-nav-avatar-link'
-                aria-current={location.pathname === '/profile' ? 'page' : undefined}
-              >
-                <span className='nav-avatar'>
-                  <PersonAvatar photoURL={avatarUrl} />
-                </span>
-              </Link>
+              // Google-account-menu style: a header (bigger avatar + name/
+              // badges/email) above Settings/Edit profile/Log out —
+              // clicking the small nav avatar reveals who you are before
+              // offering where to go, rather than jumping straight to a
+              // page with no confirmation of which account.
+              <>
+                <button
+                  type='button'
+                  className='bottom-nav-avatar-link'
+                  aria-haspopup='menu'
+                  aria-expanded={avatarMenuOpen}
+                  onClick={() => {
+                    setAvatarMenuOpen((v) => !v);
+                    setAvatarMenuEverOpened(true);
+                  }}
+                >
+                  <UserAvatar photoURL={photoURL} duckSkin={duckSkin} className='nav-avatar nav-avatar-photo' />
+                  {showNameNextToAvatar && displayName && (
+                    <span className='bottom-nav-org-name'>{displayName}</span>
+                  )}
+                </button>
+                {avatarMenuOpen && (
+                  <div className='bottom-nav-avatar-menu bottom-nav-avatar-menu-google' role='menu'>
+                    <div className='bottom-nav-avatar-menu-header'>
+                      <UserAvatar
+                        photoURL={photoURL}
+                        duckSkin={duckSkin}
+                        className='user-avatar bottom-nav-avatar-menu-photo'
+                      />
+                      <div className='bottom-nav-avatar-menu-identity'>
+                        <p className='bottom-nav-avatar-menu-name'>
+                          <span className='bottom-nav-avatar-menu-name-text'>
+                            {displayName || 'Your profile'}
+                          </span>
+                          {recentBadges.length > 0 && (
+                            <Link
+                              to='/badges'
+                              className='bottom-nav-avatar-menu-badges'
+                              aria-label={`${recentBadges.length} recently earned badge${recentBadges.length === 1 ? '' : 's'} — view all badges`}
+                            >
+                              {recentBadges.map((b) => (
+                                <BadgeRing key={b.id} badge={b} size={14} />
+                              ))}
+                            </Link>
+                          )}
+                        </p>
+                        <p className='bottom-nav-avatar-menu-email'>{user.email}</p>
+                      </div>
+                    </div>
+                    <div className='bottom-nav-avatar-menu-divider' />
+                    <Link
+                      to='/settings'
+                      role='menuitem'
+                      aria-current={location.pathname === '/settings' ? 'page' : undefined}
+                    >
+                      <IconGear /> Settings
+                    </Link>
+                    <button
+                      type='button'
+                      role='menuitem'
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                        setEditingProfile(true);
+                      }}
+                    >
+                      <IconPerson /> Edit profile
+                    </button>
+                    <div className='bottom-nav-avatar-menu-divider' />
+                    <button
+                      type='button'
+                      role='menuitem'
+                      onClick={async () => {
+                        await logout();
+                        navigate('/login', { replace: true });
+                      }}
+                    >
+                      <IconLogout /> Log out
+                    </button>
+                  </div>
+                )}
+                {editingProfile && (
+                  <EditProfileModal
+                    user={user}
+                    currentName={displayName}
+                    currentPhotoURL={photoURL}
+                    currentDuckSkin={duckSkin}
+                    onClose={() => setEditingProfile(false)}
+                    onSaved={({ name: savedName, photoURL: savedPhotoURL, duckSkin: savedDuckSkin }) => {
+                      setDisplayName(savedName);
+                      setPhotoURL(savedPhotoURL);
+                      setDuckSkin(savedDuckSkin);
+                      setEditingProfile(false);
+                    }}
+                  />
+                )}
+              </>
             ) : (
               // pending_org keeps the older dropdown shape — this role
               // isn't part of this redesign pass (see the module note up
@@ -355,9 +586,7 @@ export function BottomNav() {
                   aria-expanded={avatarMenuOpen}
                   onClick={() => setAvatarMenuOpen((v) => !v)}
                 >
-                  <span className='nav-avatar'>
-                    <PersonAvatar photoURL={avatarUrl} />
-                  </span>
+                  <UserAvatar photoURL={photoURL} duckSkin={duckSkin} className='nav-avatar nav-avatar-photo' />
                 </button>
                 {avatarMenuOpen && (
                   <div className='bottom-nav-avatar-menu' role='menu'>
@@ -381,7 +610,7 @@ export function BottomNav() {
             )}
           </div>
         )}
-      </div>
+      </motion.div>
     </>
   );
 }

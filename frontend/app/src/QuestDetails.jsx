@@ -7,18 +7,27 @@ import { callRsvpToQuest, callCancelRsvp, callGetSideQuestStatus } from '@shared
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
+import { usePreviousPath } from '@shared/PreviousPathContext.jsx';
+import { labelForPath } from '@shared/routeLabels.js';
 import { groupBySeries, attachSeriesRatings } from '@shared/questSeries.js';
 import { QuestDetailBody, sideQuestGate } from '@mobile/Quests.jsx';
+import { QuestSeriesDetailPane } from '@org/Quests.jsx';
 
 // A standalone page for one quest series, reusing the exact same
 // QuestDetailBody the main Quests page shows inline — this is what
 // Organization Profile's "Active Quests" cards (and anything else that
 // wants to link straight to a specific quest) point at, rather than a
-// deep link back into the browsing list.
+// deep link back into the browsing list. An organization landing here on
+// its OWN quest (from org/Quests.jsx's own mobile list — see that file's
+// own note on why it navigates here instead of expanding in place) gets
+// QuestSeriesDetailPane instead — the same edit/delete/QR/attendees
+// management body org/Quests.jsx's desktop sticky pane already shows —
+// rather than the read-only QuestDetailBody every other viewer sees.
 export function QuestDetails() {
   const { seriesId } = useParams();
   const navigate = useNavigate();
   const { user, role, loading } = useAuth();
+  const previousPath = usePreviousPath();
   const [series, setSeries] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -75,23 +84,38 @@ export function QuestDetails() {
   // user.uid unconditionally, so this has to wait on both, not just
   // `series`, or it crashes here specifically (a client-side nav never hit
   // this because `user` is already warm by the time this page mounts).
-  if (loading || !series) return <LoadingSpinner label="Loading quest..." />;
+  if (loading || !series) return <LoadingSpinner label="Loading quest…" />;
   if (!user) return <Navigate to="/login" replace />;
+
+  // Reachable from Explore Quests (any filter/search/sort — see
+  // mobile/Quests.jsx's own URL-syncing effect, which is what makes
+  // `previousPath` carry that state back), an organization's public
+  // profile ("Active Quests" cards), the map, or a direct link — "back"
+  // should reflect whichever of those actually got the caller here, not
+  // always the plain browsing list.
+  const previousLabel = labelForPath(previousPath);
+  const backTo = previousLabel ? previousPath : '/quests';
+  const backLabel = previousLabel || 'Quests';
+  const isOwner = role === 'organization' && series.primary.orgId === user.uid;
 
   return (
     <PageMotion>
-      <BackLink to="/quests" label="Quests" />
-      <div className="ink-card">
-        <QuestDetailBody
-          series={series}
-          userId={user.uid}
-          canRsvp={role === 'user'}
-          busyId={busyId}
-          onToggleRsvp={toggleRsvp}
-          gate={sideQuestGate(series.primary, sideQuestStatus)}
-          onGoToOrgQuests={() => navigate('/quests')}
-          showTitle
-        />
+      <BackLink to={backTo} label={backLabel} />
+      <div className="ink-card" data-frame="cozy">
+        {isOwner ? (
+          <QuestSeriesDetailPane series={series} onChanged={load} showTitle />
+        ) : (
+          <QuestDetailBody
+            series={series}
+            userId={user.uid}
+            canRsvp={role === 'user'}
+            busyId={busyId}
+            onToggleRsvp={toggleRsvp}
+            gate={sideQuestGate(series.primary, sideQuestStatus)}
+            onGoToOrgQuests={() => navigate('/quests')}
+            showTitle
+          />
+        )}
       </div>
     </PageMotion>
   );

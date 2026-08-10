@@ -42,7 +42,7 @@ export function ForgotPassword() {
         </label>
         {error && <p className="box-danger">{error}</p>}
         <StampButton type="submit" variant="primary" disabled={submitting}>
-          {submitting ? 'Sending...' : 'Send reset link'}
+          {submitting ? 'Sending…' : 'Send reset link'}
         </StampButton>
       </form>
     </AuthShell>

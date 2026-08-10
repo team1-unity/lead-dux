@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@shared/firebaseapp.jsx';
+import { getCachedCollection } from '@shared/collectionCache.js';
 import {
   callAdminListUsers,
   callAdminListOrganizations,
@@ -75,7 +76,7 @@ function CoordinatesBackfill() {
     try {
       setResult(await callBackfillQuestCoordinates());
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setRunning(false);
     }
@@ -90,7 +91,7 @@ function CoordinatesBackfill() {
           existed. Safe to run more than once — it only touches quests still missing coordinates.
         </p>
         <StampButton type="button" variant="primary" onClick={run} disabled={running}>
-          {running ? 'Backfilling...' : 'Backfill quest coordinates'}
+          {running ? 'Backfilling…' : 'Backfill quest coordinates'}
         </StampButton>
         {error && <p className="box-danger" style={{ marginTop: 10 }}>{error}</p>}
         {result && (
@@ -129,7 +130,7 @@ function DiamondCertifications() {
     }
   }
 
-  if (!users) return <LoadingSpinner label="Loading Diamond members..." />;
+  if (!users) return <LoadingSpinner label="Loading Diamond members…" />;
 
   return (
     <section style={{ marginBottom: 24 }}>
@@ -150,7 +151,7 @@ function DiamondCertifications() {
                   <StatusStamp tone="community">CERTIFICATE ISSUED</StatusStamp>
                 ) : (
                   <StampButton type="button" variant="primary" onClick={() => issue(u.uid)} disabled={busyUid === u.uid}>
-                    {busyUid === u.uid ? 'Issuing...' : 'Issue certificate'}
+                    {busyUid === u.uid ? 'Issuing…' : 'Issue certificate'}
                   </StampButton>
                 )}
               </div>
@@ -185,7 +186,7 @@ function PendingRequests() {
     }
   }
 
-  if (!requests) return <LoadingSpinner label="Loading requests..." />;
+  if (!requests) return <LoadingSpinner label="Loading requests…" />;
 
   return (
     <section style={{ marginBottom: 24 }}>
@@ -204,7 +205,7 @@ function PendingRequests() {
               <p className="data-row-sub">{r.reason}</p>
               <div className="data-row-actions">
                 <StampButton type="button" variant="primary" onClick={() => approve(r.uid)} disabled={busyUid === r.uid}>
-                  {busyUid === r.uid ? 'Approving...' : 'Approve'}
+                  {busyUid === r.uid ? 'Approving…' : 'Approve'}
                 </StampButton>
               </div>
             </div>
@@ -249,7 +250,7 @@ function AllUsers() {
     }
   }
 
-  if (!users) return <LoadingSpinner label="Loading users..." />;
+  if (!users) return <LoadingSpinner label="Loading users…" />;
 
   return (
     <section style={{ marginBottom: 24 }}>
@@ -257,7 +258,7 @@ function AllUsers() {
         <h2 style={{ marginBottom: 0 }}>All users</h2>
         <span className="data-stat">{users.length} total</span>
       </div>
-      <div className="ink-card data-list" style={{ marginTop: 12 }}>
+      <div className="ink-card data-list">
         {users.map((u) => (
           <button
             key={u.uid}
@@ -288,7 +289,7 @@ function AllUsers() {
             </select>
           </label>
           <StampButton type="button" variant="primary" onClick={assignRole} disabled={busy} style={{ marginTop: 12 }}>
-            {busy ? 'Saving...' : 'Save role'}
+            {busy ? 'Saving…' : 'Save role'}
           </StampButton>
         </div>
       )}
@@ -318,7 +319,7 @@ function Organizations() {
     }
   }
 
-  if (!orgs) return <LoadingSpinner label="Loading organizations..." />;
+  if (!orgs) return <LoadingSpinner label="Loading organizations…" />;
 
   return (
     <section style={{ marginBottom: 24 }}>
@@ -346,7 +347,7 @@ function Organizations() {
               </p>
               <div className="data-row-actions">
                 <StampButton type="button" variant="danger" onClick={() => remove(o.uid)} disabled={busyUid === o.uid}>
-                  {busyUid === o.uid ? 'Deleting...' : 'Delete organization'}
+                  {busyUid === o.uid ? 'Deleting…' : 'Delete organization'}
                 </StampButton>
               </div>
             </div>
@@ -382,8 +383,8 @@ function QuestsAdmin() {
 
   async function load() {
     const [questsSnap, seriesSnap] = await Promise.all([
-      getDocs(collection(db, 'quests')),
-      getDocs(collection(db, 'questSeries')),
+      getCachedCollection(db, 'quests'),
+      getCachedCollection(db, 'questSeries'),
     ]);
     setQuests(questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
     setSeriesAggregates(new Map(seriesSnap.docs.map((d) => [d.id, d.data()])));
@@ -431,13 +432,13 @@ function QuestsAdmin() {
       setUntil('');
       await load();
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || "That didn't go through — try again in a moment.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (!quests) return <LoadingSpinner label="Loading quests..." />;
+  if (!quests) return <LoadingSpinner label="Loading quests…" />;
 
   return (
     <section>
@@ -501,12 +502,12 @@ function QuestsAdmin() {
           )}
           {error && <p className="box-danger">{error}</p>}
           <StampButton type="submit" variant="primary" disabled={submitting}>
-            {submitting ? 'Adding...' : isRecurring ? 'Add recurring quest' : 'Add quest'}
+            {submitting ? 'Adding…' : isRecurring ? 'Add recurring quest' : 'Add quest'}
           </StampButton>
         </form>
       </div>
 
-      <div className="section-heading" style={{ marginBottom: 8 }}>
+      <div className="section-heading">
         <h2 style={{ marginBottom: 0 }}>All quests</h2>
         <span className="data-stat">{seriesList.length} total</span>
       </div>

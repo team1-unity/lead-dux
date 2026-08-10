@@ -11,16 +11,16 @@ import { LightboxBackdrop } from './LightboxBackdrop.jsx';
 // enough for the one caller (the gallery's own owner) that needs removal
 // without this otherwise-read-only component knowing anything about who's
 // allowed to call it.
-export function PhotoGallery({ photos = [], onDelete }) {
+export function PhotoGallery({ photos = [], onDelete, className }) {
   const [openIndex, setOpenIndex] = useState(null);
 
   if (photos.length === 0) {
-    return <p className="data-stat">No photos yet — check back after the next event.</p>;
+    return <p className="data-stat">No photos yet — the next event will start the gallery.</p>;
   }
 
   return (
     <>
-      <div className="photo-gallery-grid">
+      <div className={className ? `photo-gallery-grid ${className}` : 'photo-gallery-grid'}>
         {photos.map((url, i) => (
           <div key={`${url}-${i}`} className="photo-gallery-thumb-wrap">
             <button
@@ -50,14 +50,6 @@ export function PhotoGallery({ photos = [], onDelete }) {
         <LightboxBackdrop onClose={() => setOpenIndex(null)} label="Photo">
           <div className="photo-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={photos[openIndex]} alt="" className="photo-lightbox-image" />
-            <button
-              type="button"
-              className="photo-lightbox-close"
-              onClick={() => setOpenIndex(null)}
-              aria-label="Close"
-            >
-              <IconX width={18} height={18} />
-            </button>
           </div>
         </LightboxBackdrop>
       )}

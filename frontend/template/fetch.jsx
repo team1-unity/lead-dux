@@ -7,6 +7,7 @@
 
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebaseapp.jsx';
+import { invalidateCachedCollection } from './collectionCache.js';
 
 // Called once, right after Firebase Auth account creation — the one signup
 // path for both accountTypes ('individual', the default, or 'organization').
@@ -136,6 +137,7 @@ export async function callCreateQuest({
     title, description, tags, eventDate, eventEndTime, timezone, location, placeId, lat, lng, capacity,
     accommodationTags, accommodationDetails,
   });
+  invalidateCachedCollection('quests');
   return result.data;
 }
 
@@ -156,6 +158,7 @@ export async function callUpdateQuest({
     questId, title, description, tags, location, placeId, lat, lng, capacity,
     accommodationTags, accommodationDetails, eventDate, eventEndTime, timezone, tier,
   });
+  invalidateCachedCollection('quests');
   return result.data;
 }
 
@@ -166,6 +169,7 @@ export async function callUpdateQuest({
 export async function callAddQuestSeriesCoverPhoto({ seriesId, coverPhotoUrl }) {
   const fn = httpsCallable(functions, 'add_quest_series_cover_photo');
   const result = await fn({ seriesId, coverPhotoUrl });
+  invalidateCachedCollection('questSeries');
   return result.data;
 }
 
@@ -174,6 +178,7 @@ export async function callAddQuestSeriesCoverPhoto({ seriesId, coverPhotoUrl }) 
 export async function callRemoveQuestSeriesCoverPhoto({ seriesId, coverPhotoUrl }) {
   const fn = httpsCallable(functions, 'remove_quest_series_cover_photo');
   const result = await fn({ seriesId, coverPhotoUrl });
+  invalidateCachedCollection('questSeries');
   return result.data;
 }
 
@@ -219,6 +224,8 @@ export async function callCreateRecurringQuest({
     accommodationTags,
     accommodationDetails,
   });
+  invalidateCachedCollection('quests');
+  invalidateCachedCollection('questSeries');
   return result.data;
 }
 
@@ -228,6 +235,24 @@ export async function callCreateRecurringQuest({
 export async function callMakeQuestRecurring({ questId, frequency, until }) {
   const fn = httpsCallable(functions, 'make_quest_recurring');
   const result = await fn({ questId, frequency, until });
+  invalidateCachedCollection('quests');
+  invalidateCachedCollection('questSeries');
+  return result.data;
+}
+
+// organization (own series) or admin (own default series): changes an
+// *existing* series' frequency/until, adding or removing future
+// occurrences to match — see update_recurring_series in functions/main.py
+// for exactly what that diff does and why it refuses rather than silently
+// dropping RSVPs. Past occurrences and the returned counts are the only
+// thing this ever reports back; the actual added/removed docs aren't
+// individually listed since nothing here needs to react to which
+// particular ids changed, only that the series as a whole now matches.
+export async function callUpdateRecurringSeries({ seriesId, frequency, until }) {
+  const fn = httpsCallable(functions, 'update_recurring_series');
+  const result = await fn({ seriesId, frequency, until });
+  invalidateCachedCollection('quests');
+  invalidateCachedCollection('questSeries');
   return result.data;
 }
 
@@ -238,6 +263,7 @@ export async function callMakeQuestRecurring({ questId, frequency, until }) {
 export async function callCreateDefaultQuest({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity, tier }) {
   const fn = httpsCallable(functions, 'create_default_quest');
   const result = await fn({ title, description, tags, eventDate, eventEndTime, timezone, location, capacity, tier });
+  invalidateCachedCollection('quests');
   return result.data;
 }
 
@@ -246,6 +272,7 @@ export async function callCreateDefaultQuest({ title, description, tags, eventDa
 export async function callDeleteQuest(questId) {
   const fn = httpsCallable(functions, 'delete_quest');
   const result = await fn({ questId });
+  invalidateCachedCollection('quests');
   return result.data;
 }
 
@@ -257,6 +284,8 @@ export async function callDeleteQuest(questId) {
 export async function callDeleteQuestSeries(questId, keepQuestId) {
   const fn = httpsCallable(functions, 'delete_quest_series');
   const result = await fn({ questId, keepQuestId });
+  invalidateCachedCollection('quests');
+  invalidateCachedCollection('questSeries');
   return result.data;
 }
 
@@ -264,6 +293,7 @@ export async function callDeleteQuestSeries(questId, keepQuestId) {
 export async function callRsvpToQuest(questId) {
   const fn = httpsCallable(functions, 'rsvp_to_quest');
   const result = await fn({ questId });
+  invalidateCachedCollection('quests');
   return result.data;
 }
 
@@ -271,6 +301,7 @@ export async function callRsvpToQuest(questId) {
 export async function callCancelRsvp(questId) {
   const fn = httpsCallable(functions, 'cancel_rsvp');
   const result = await fn({ questId });
+  invalidateCachedCollection('quests');
   return result.data;
 }
 
