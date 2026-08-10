@@ -76,12 +76,20 @@ export function NotificationBanner() {
 
   if (notifications.length === 0) return null;
   const notice = notifications[0];
+  // Hides instantly on click rather than waiting on the round trip below
+  // (callDismissNotification, then the Firestore delete it performs
+  // propagating back through the onSnapshot listener above) — that chain
+  // is what used to make dismissing visibly slow. Only reset on failure;
+  // on success, onSnapshot naturally replaces `notice` with whatever's
+  // next (or nothing), so there's nothing to reset without risking the
+  // old notice flashing back for a moment first.
+  if (notice.id === dismissingId) return null;
 
   async function dismiss() {
     setDismissingId(notice.id);
     try {
       await callDismissNotification(notice.id);
-    } finally {
+    } catch {
       setDismissingId(null);
     }
   }
@@ -92,7 +100,6 @@ export function NotificationBanner() {
         type="button"
         className="notification-banner-close"
         onClick={dismiss}
-        disabled={dismissingId === notice.id}
         aria-label="Dismiss notification"
       >
         <IconX width={16} height={16} />

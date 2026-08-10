@@ -5056,9 +5056,20 @@ button.data-row:active:not(:disabled) {
    ordinary page-level floating widgets, but still stays well under real
    modals/lightboxes (30-60 elsewhere in this file). */
 .notification-banner {
-  position: relative;
+  /* Floats on top of the illustration now instead of pushing it down —
+     absolute against #root (the nearest positioned ancestor; this is a
+     sibling of .home-page, not a descendant, so it anchors there
+     regardless of .home-page's own transform, see this rule's own
+     comment above on why it has to be a sibling in the first place).
+     Full-bleed (same width:100vw + negative-margin pair .home-scene/
+     .home-content already use below, not #root's own padded content
+     width), with a gap held off the true top edge instead of sitting
+     flush against it. Covering part of the illustration underneath is
+     an accepted tradeoff, not a bug. */
+  position: absolute;
+  top: 1rem;
+  width: 90vw;
   z-index: 20;
-  margin-bottom: 16px;
 }
 .notification-banner-close {
   position: absolute;
