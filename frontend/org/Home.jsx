@@ -75,7 +75,7 @@ export function Home() {
       <AmbientParticles />
       <div className="org-home-greeting">
         <Link to={`/organizations/${user.uid}`} className="org-home-avatar-link" aria-label="View your public profile">
-          <OrgAvatar name={org.name} seed={user.uid} />
+          <OrgAvatar name={org.name} seed={user.uid} logoUrl={org.logoUrl} duckColorIndex={org.duckColorIndex} />
         </Link>
         <div>
           <h1>Hello, {org.name}</h1>

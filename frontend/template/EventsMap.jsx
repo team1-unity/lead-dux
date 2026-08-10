@@ -272,10 +272,12 @@ export function EventsMap() {
         // load(), which filters the same way before grouping).
         const quests = questsSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isUpcoming);
         const seriesAgg = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
-        const logoByOrgId = new Map(orgsSnap.docs.map((d) => [d.id, d.data().logoUrl]));
+        const orgById = new Map(orgsSnap.docs.map((d) => [
+          d.id, { logoUrl: d.data().logoUrl, duckColorIndex: d.data().duckColorIndex },
+        ]));
         const groups = attachOrgLogos(
           attachSeriesRatings(groupBySeries(quests), seriesAgg),
-          logoByOrgId,
+          orgById,
         ).filter((g) => g.primary.lat != null && g.primary.lng != null);
         setSeriesList(groups);
       })
@@ -648,7 +650,12 @@ export function EventsMap() {
               }}
             >
               <div className="quest-thumb">
-                <OrgAvatar name={g.primary.orgName} seed={g.primary.orgId || g.seriesId} logoUrl={g.orgLogoUrl} />
+                <OrgAvatar
+                  name={g.primary.orgName}
+                  seed={g.primary.orgId || g.seriesId}
+                  logoUrl={g.orgLogoUrl}
+                  duckColorIndex={g.orgDuckColorIndex}
+                />
               </div>
               <div className="events-map-list-meta">
                 <p className="quest-title" style={{ margin: 0 }}>{g.primary.title}</p>

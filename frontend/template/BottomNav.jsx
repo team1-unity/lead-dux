@@ -16,8 +16,8 @@ import {
   IconMap,
   IconHome,
 } from './icons.jsx';
-import { Logo } from './Logo.jsx';
-import { getInitials } from './initials.js';
+import { Logo, DuckMark } from './Logo.jsx';
+import { OrgAvatar } from './OrgAvatar.jsx';
 
 // Persistent navigation: a bottom tab bar on mobile, a horizontal topbar on
 // desktop — same items, same component, just a different flex direction
@@ -101,6 +101,21 @@ function fabCircleStyle(i, n) {
   return { left: `calc(50% + ${x}px)`, bottom: `calc(100% + ${y}px)` };
 }
 
+// A member's own nav avatar — their uploaded photoURL (see Profile.jsx's
+// EditProfileModal), or the duck mascot when they haven't set one. Mirrors
+// Profile.jsx's own UserAvatar; not reused directly since that one's local
+// to app/src/Profile.jsx and this nav lives in the shared template instead.
+function PersonAvatar({ photoURL }) {
+  if (!photoURL) return <DuckMark size={22} />;
+  return (
+    <img
+      src={photoURL}
+      alt=''
+      style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }}
+    />
+  );
+}
+
 // Unread count for the Journal badge — a live listener (not a one-time
 // fetch), so it updates the moment an organization answers a feedback
 // request while the app is open, same as NotificationBanner's Home-screen
@@ -128,6 +143,8 @@ export function BottomNav() {
   const location = useLocation();
   const isDesktop = useIsDesktop();
   const [displayName, setDisplayName] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [duckColorIndex, setDuckColorIndex] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const unreadFeedback = useUnreadFeedbackCount(user, role);
@@ -141,17 +158,24 @@ export function BottomNav() {
   }, [location.pathname]);
 
   // Only fetched for roles that render an avatar (desktop only) — an
-  // organization's own name from its org doc, a member's own name from
-  // their user doc. Every other role never touches this.
+  // organization's own name/logoUrl from its org doc, a member's own
+  // name/photoURL from their user doc. Every other role never touches this.
   useEffect(() => {
     if (!user) return;
     if (role === 'organization') {
       getDoc(doc(db, 'organizations', user.uid)).then((snap) => {
-        if (snap.exists()) setDisplayName(snap.data().name || '');
+        if (snap.exists()) {
+          setDisplayName(snap.data().name || '');
+          setAvatarUrl(snap.data().logoUrl || null);
+          setDuckColorIndex(snap.data().duckColorIndex ?? null);
+        }
       });
     } else if (role === 'user' || role === 'pending_org') {
       getDoc(doc(db, 'users', user.uid)).then((snap) => {
-        if (snap.exists()) setDisplayName(snap.data().name || '');
+        if (snap.exists()) {
+          setDisplayName(snap.data().name || '');
+          setAvatarUrl(snap.data().photoURL || null);
+        }
       });
     }
   }, [role, user]);
@@ -301,7 +325,9 @@ export function BottomNav() {
                 {showNameNextToAvatar && displayName && (
                   <span className='bottom-nav-org-name'>{displayName}</span>
                 )}
-                <span className='nav-avatar'>{getInitials(displayName)}</span>
+                <span className='nav-avatar'>
+                  <OrgAvatar name={displayName} seed={user.uid} logoUrl={avatarUrl} duckColorIndex={duckColorIndex} />
+                </span>
               </Link>
             ) : role === 'user' ? (
               // Same reasoning as the organization branch above — Settings
@@ -313,7 +339,9 @@ export function BottomNav() {
                 className='bottom-nav-avatar-link'
                 aria-current={location.pathname === '/profile' ? 'page' : undefined}
               >
-                <span className='nav-avatar'>{getInitials(displayName)}</span>
+                <span className='nav-avatar'>
+                  <PersonAvatar photoURL={avatarUrl} />
+                </span>
               </Link>
             ) : (
               // pending_org keeps the older dropdown shape — this role
@@ -327,7 +355,9 @@ export function BottomNav() {
                   aria-expanded={avatarMenuOpen}
                   onClick={() => setAvatarMenuOpen((v) => !v)}
                 >
-                  <span className='nav-avatar'>{getInitials(displayName)}</span>
+                  <span className='nav-avatar'>
+                    <PersonAvatar photoURL={avatarUrl} />
+                  </span>
                 </button>
                 {avatarMenuOpen && (
                   <div className='bottom-nav-avatar-menu' role='menu'>

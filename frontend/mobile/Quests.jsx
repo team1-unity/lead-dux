@@ -398,7 +398,14 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
   if (submission && (submission.status === 'pending' || submission.status === 'approved')) {
     content = (
       <div className='ink-card flex flex-col gap-sm'>
-        <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>Proof photo</p>
+        <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
+          {isDefault ? 'Proof photo' : 'Bonus photo'}
+        </p>
+        {!isDefault && (
+          <p className='field-optional' style={{ margin: 0 }}>
+            You're already checked in for this quest — this is just an extra bonus, not proof of attendance.
+          </p>
+        )}
         {submittedPhotoUrl && (
           <img
             src={submittedPhotoUrl}
@@ -411,7 +418,9 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
           {submission.status === 'approved' ? 'Approved' : 'Pending review'}
         </StatusStamp>
         {submission.status === 'approved' && (
-          <p style={{ margin: 0 }}>+{submission.pointsAwarded} points earned</p>
+          <p style={{ margin: 0 }}>
+            +{submission.pointsAwarded} {isDefault ? 'points earned' : 'bonus points earned'}
+          </p>
         )}
       </div>
     );
@@ -423,8 +432,14 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
     content = (
       <form onSubmit={submit} className='ink-card flex flex-col gap-md'>
         <p style={{ margin: 0, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>
-          {isDefault ? 'Reflection & photo' : 'Proof photo'}
+          {isDefault ? 'Reflection & photo' : 'Bonus photo'}
         </p>
+        {!isDefault && submission?.status !== 'rejected' && (
+          <p className='field-optional' style={{ margin: 0 }}>
+            Optional — you're already checked in. Submitting a photo just adds bonus points on top,
+            it doesn't affect your attendance.
+          </p>
+        )}
         {submission?.status === 'rejected' && (
           <>
             {submittedPhotoUrl && (
@@ -476,7 +491,7 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
           variant='primary'
           disabled={!file || uploading || (isDefault && !reflection.trim())}
         >
-          {uploading ? 'Uploading...' : isDefault ? 'Submit completion' : 'Submit photo'}
+          {uploading ? 'Uploading...' : isDefault ? 'Submit completion' : 'Submit bonus photo'}
         </StampButton>
       </form>
     );
@@ -511,11 +526,11 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
         </button>
       ) : (
         <StampButton type='button' onClick={() => setModalOpen(true)}>
-          {isDefault ? 'Mark as complete' : 'Submit Proof Photo'}
+          {isDefault ? 'Mark as complete' : 'Submit Bonus Photo'}
         </StampButton>
       )}
       {modalOpen && (
-        <LightboxBackdrop onClose={() => setModalOpen(false)} label='Proof photo'>
+        <LightboxBackdrop onClose={() => setModalOpen(false)} label={isDefault ? 'Proof photo' : 'Bonus photo'}>
           {/* No outer ink-card here — `content` already supplies its own
               (see above), and nesting two would double the border/padding.
               This wrapper is just the modal's sizing/scroll constraint. */}
@@ -575,11 +590,13 @@ export function QuestDetailBody({
     setSidePhotoStatus(null);
   }, [series.seriesId]);
 
-  // Community-photos hero (HeroCarousel.jsx) — only fetched for the
-  // standalone detail view (showTitle), matching where the map's own quest
-  // detail (MapQuestDetailBody.jsx) shows the same carousel. Side quests
-  // have no orgId, so this just stays null and HeroCarousel falls back to
-  // its plain DuckMark placeholder, same as an org with zero photos would.
+  // Hero (HeroCarousel.jsx) mixes the org's general Community Photos
+  // gallery (org.photos) with this specific series' own coverPhotos — only
+  // fetched for the standalone detail view (showTitle), matching where the
+  // map's own quest detail (MapQuestDetailBody.jsx) shows the same
+  // carousel. Side quests have no orgId, so this just stays null and
+  // HeroCarousel falls back to series.coverPhotos alone, then its plain
+  // DuckMark placeholder if that's empty too.
   const [orgMedia, setOrgMedia] = useState(null);
   useEffect(() => {
     if (!showTitle || !primary.orgId) {
@@ -665,7 +682,10 @@ export function QuestDetailBody({
     <div className='quest-card-body'>
       {showTitle && (
         <div className='quest-hero' style={{ marginBottom: 12 }}>
-          <HeroCarousel photoPaths={orgMedia?.photos} orgLogoUrl={orgMedia?.logoUrl} />
+          <HeroCarousel
+            photoPaths={[...(orgMedia?.photos || []), ...(series.coverPhotos || [])]}
+            orgLogoUrl={orgMedia?.logoUrl}
+          />
         </div>
       )}
       {/* Share is an organization-quest concept only (side quests have no
@@ -1008,7 +1028,8 @@ function QuestRow({ series, isDesktop, isActive, gate, onSelect }) {
               <OrgAvatar
                 name={primary.orgName}
                 seed={primary.orgId}
-                logoUrl={series.coverPhotos?.[0] || series.orgLogoUrl}
+                logoUrl={series.orgLogoUrl}
+                duckColorIndex={series.orgDuckColorIndex}
               />
             </Link>
           ) : (
@@ -1016,7 +1037,8 @@ function QuestRow({ series, isDesktop, isActive, gate, onSelect }) {
               <OrgAvatar
                 name={primary.orgName}
                 seed={series.seriesId}
-                logoUrl={series.coverPhotos?.[0] || series.orgLogoUrl}
+                logoUrl={series.orgLogoUrl}
+                duckColorIndex={series.orgDuckColorIndex}
               />
             </span>
           )}
@@ -1381,10 +1403,12 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
         setAllQuests(all);
         const seriesDocsById = new Map(seriesSnap.docs.map((d) => [d.id, d.data()]));
         setSeriesRatingsById(seriesDocsById);
-        const logoByOrgId = new Map(orgsSnap.docs.map((d) => [d.id, d.data().logoUrl]));
+        const orgById = new Map(orgsSnap.docs.map((d) => [
+          d.id, { logoUrl: d.data().logoUrl, duckColorIndex: d.data().duckColorIndex },
+        ]));
         const grouped = attachOrgLogos(
           attachSeriesRatings(groupBySeries(all.filter(isUpcoming)), seriesDocsById),
-          logoByOrgId,
+          orgById,
         );
         grouped.sort((a, b) => {
           // Organization quests only — AI ranking is generated server-side

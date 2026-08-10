@@ -557,12 +557,30 @@ TIER_COMPLETION_PLAN = {
 }
 
 
-def logo_url(name):
-    return f"https://api.dicebear.com/9.x/initials/svg?seed={name.replace(' ', '+')}&backgroundType=gradientLinear"
-
-
 def photo_url(slug, n):
     return f"https://picsum.photos/seed/{slug}-{n}/800/600"
+
+
+# One real (curl-verified against images.unsplash.com as of this writing —
+# same convention as JOURNAL_QUEST_PHOTOS below) logo photo per org, keyed
+# by slug and matched to what that org actually does — a kitchen for the
+# food pantry, a dog for the animal rescue, and so on. Deliberately only 8
+# of the 10 orgs: the two "brand_new" ones (downtown-neighborhood-alliance,
+# creative-futures-collective) haven't gotten around to a real logo yet,
+# which reads as consistent with an org that only just filed its paperwork
+# — see seed_organizations below, which leaves logoUrl unset for whichever
+# slug isn't in here, so the app's own OrgAvatar duck fallback renders
+# instead of a fake logo.
+ORG_LOGO_PHOTOS = {
+    "jc-community-kitchen": "https://images.unsplash.com/photo-1585647347384-2593bc35786b?auto=format&fit=crop&w=400&h=400&q=60",
+    "hudson-youth-leadership": "https://images.unsplash.com/photo-1529390079861-591de354faf5?auto=format&fit=crop&w=400&h=400&q=60",
+    "green-tomorrow-nj": "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=400&h=400&q=60",
+    "hoboken-animal-rescue": "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=400&h=400&q=60",
+    "nextgen-mentors": "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=400&h=400&q=60",
+    "garden-state-volunteers": "https://images.unsplash.com/photo-1516307365426-bea591f05011?auto=format&fit=crop&w=400&h=400&q=60",
+    "riverfront-community-garden": "https://images.unsplash.com/photo-1592841200221-a6898f307baa?auto=format&fit=crop&w=400&h=400&q=60",
+    "liberty-youth-sports": "https://images.unsplash.com/photo-1550881111-7cfde14b8073?auto=format&fit=crop&w=400&h=400&q=60",
+}
 
 
 # One real (curl-verified against images.unsplash.com as of this writing)
@@ -593,6 +611,39 @@ JOURNAL_QUEST_PHOTOS = {
     "Fall Harvest Volunteer Day": "https://images.unsplash.com/photo-1567306301408-9b74779a11af?auto=format&fit=crop&w=800&q=60",
     "Flag Football Jamboree Volunteer Day": "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?auto=format&fit=crop&w=800&q=60",
     "Fall Soccer Coaching Clinic": "https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&w=800&q=60",
+}
+
+# One real (curl-verified) photo per org-quest series title, written to
+# questSeries/{seriesId}.coverPhotos (see add_quest_series_cover_photo in
+# main.py) — the same "first photo shown on the card" spot a real org would
+# fill in themselves. Every completed title reuses its own
+# JOURNAL_QUEST_PHOTOS entry (same real event, same photo, whether it's
+# showing up as a journal thumbnail or a quest cover); the rest are new
+# entries for titles that never got a journal photo because they haven't
+# happened yet (a quest's cover is set ahead of time — it isn't proof
+# anything occurred, unlike the journal photo it's deliberately kept
+# separate from). If any of these ever 404, swap in a fresh id from
+# unsplash.com rather than leaving a broken <img> in a live demo.
+QUEST_COVER_PHOTOS = {
+    **JOURNAL_QUEST_PHOTOS,
+    "Holiday Meal Packing Day": "https://images.unsplash.com/photo-1608686207856-001b95cf60ca?auto=format&fit=crop&w=800&q=60",
+    "Youth Leadership Training: Goal Setting": "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=800&q=60",
+    "Student Council Bootcamp": "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=60",
+    "Branch Brook Park Cleanup": "https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?auto=format&fit=crop&w=800&q=60",
+    "Foster Orientation Night": "https://images.unsplash.com/photo-1601758228041-f3b2795255f1?auto=format&fit=crop&w=800&q=60",
+    "Winter Coat & Supply Drive": "https://images.unsplash.com/photo-1607453998774-d533f65dac99?auto=format&fit=crop&w=800&q=60",
+    "New Mentor Orientation": "https://images.unsplash.com/photo-1552581234-26160f608093?auto=format&fit=crop&w=800&q=60",
+    "Career Panel: Careers in Tech": "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=800&q=60",
+    "Friendly Visits Volunteer Training": "https://images.unsplash.com/photo-1447069387593-a5de0862481e?auto=format&fit=crop&w=800&q=60",
+    "Senior Center Holiday Party Setup": "https://images.unsplash.com/photo-1543934638-bd2e138430c4?auto=format&fit=crop&w=800&q=60",
+    "Spring Bed Prep Workshop": "https://images.unsplash.com/photo-1592419044706-39796d40f98c?auto=format&fit=crop&w=800&q=60",
+    "Community Planting Day": "https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=800&q=60",
+    "Winter Track Coaching Signup Night": "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?auto=format&fit=crop&w=800&q=60",
+    "Youth Soccer Tournament Volunteer Day": "https://images.unsplash.com/photo-1526232761682-d26e03ac148e?auto=format&fit=crop&w=800&q=60",
+    "Monthly Neighbor Potluck": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=800&q=60",
+    "Downtown Mural Cleanup Day": "https://images.unsplash.com/photo-1541961017774-22349e4a1262?auto=format&fit=crop&w=800&q=60",
+    "Youth Art Workshop: Community Murals": "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&w=800&q=60",
+    "Halsey Street Pop-Up Gallery Fundraiser": "https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=800&q=60",
 }
 
 
@@ -647,6 +698,10 @@ def seed_organizations():
         auth.set_custom_user_claims(user.uid, {"role": "organization"})
         org_uids[org["slug"]] = user.uid
 
+        # See main._assign_duck_color_index — idempotent by uid, so re-running
+        # this seeder never reshuffles an org's already-assigned duck color.
+        duck_color_index = main._assign_duck_color_index(db, user.uid)
+
         db.collection("organizations").document(user.uid).set({
             "name": org["name"],
             "email": org["email"],
@@ -656,7 +711,7 @@ def seed_organizations():
             "ltag": [],
             "etag": [],
             "verified": True,
-            "logoUrl": logo_url(org["name"]),
+            "logoUrl": ORG_LOGO_PHOTOS.get(org["slug"]),
             "category": org["category"],
             "missionStatement": org["missionStatement"],
             "city": org["city"],
@@ -665,6 +720,7 @@ def seed_organizations():
             "contactEmail": org["email"],
             "socialLinks": org["social"],
             "photos": [photo_url(org["slug"], i) for i in range(1, org["photos"] + 1)],
+            "duckColorIndex": duck_color_index,
             "reviewCount": 0,
             "avgRating": 0,
             "createdAt": firestore.SERVER_TIMESTAMP,
@@ -836,6 +892,10 @@ def seed_org_quests(org_uids, user_uids):
                 **qr_fields,
             })
 
+            cover_photo = QUEST_COVER_PHOTOS.get(template["title"])
+            if cover_photo:
+                db.collection("questSeries").document(quest_id).set({"coverPhotos": [cover_photo]}, merge=True)
+
             # qr_precheck: a handful of an upcoming event's own attendees
             # are seeded as already checked in via QR (backend has no
             # "too early" check — see check_in_to_event's module note in
@@ -913,6 +973,10 @@ def seed_recurring_series(org_uids, user_uids):
         occurrence_dates = [NOW + timedelta(days=days, hours=18) for days, _ in series["occurrences"]]
         series_id = f"seed-{slug}-series-0"
         until = occurrence_dates[-1]
+
+        cover_photo = QUEST_COVER_PHOTOS.get(series["title"])
+        if cover_photo:
+            db.collection("questSeries").document(series_id).set({"coverPhotos": [cover_photo]}, merge=True)
 
         for i, (days, count) in enumerate(series["occurrences"]):
             quest_id = f"seed-{slug}-series-{i}"

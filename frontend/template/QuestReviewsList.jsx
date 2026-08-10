@@ -79,10 +79,8 @@ export function QuestReviewsList({ questId, reviewCount }) {
         <div key={`${r.uid}-${r.eventDate}`} className="map-review-row">
           <div className="map-review-header">
             {/* No reviewer photo in this data (list_quest_reviews only
-                returns uid/name/rating/body/dates) — the same colored-
-                initial-tile OrgAvatar already renders elsewhere for
-                organizations works just as well keyed to a reviewer's own
-                name/uid instead. */}
+                returns uid/name/rating/body/dates) — reuses OrgAvatar with
+                no logoUrl, so it just falls back to the duck. */}
             <div className="map-review-avatar">
               <OrgAvatar name={r.name || 'Unnamed'} seed={r.uid} />
             </div>

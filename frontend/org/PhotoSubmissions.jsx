@@ -15,6 +15,15 @@ export function PhotoSubmissions() {
   return (
     <PageMotion>
       {/* <TopBar title="Photo Submissions" /> */}
+      {/* Every submission here is for one of this org's own (non-default)
+          quests — a member can only submit one after already checking in
+          via QR (see submit_quest_photo's own note in functions/main.py),
+          so approving never creates or backdates attendance; it's purely
+          the flat +5 bonus on top of a quest that's already complete. */}
+      <p className='field-optional' style={{ marginTop: -8, marginBottom: 16 }}>
+        These are optional bonus photos — everyone here already checked in with the QR code.
+        Approving adds +5 points; it doesn't change attendance.
+      </p>
       <PendingPhotoSubmissions
         scopeField='orgId'
         scopeValue={user.uid}

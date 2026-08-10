@@ -131,7 +131,10 @@ export function MapQuestDetailBody({ series, fullDetailsHref, onClose }) {
   return (
     <div className="map-quest-detail-body">
       <div className="quest-hero">
-        <HeroCarousel photoPaths={org?.photos} orgLogoUrl={org?.logoUrl} />
+        <HeroCarousel
+          photoPaths={[...(org?.photos || []), ...(series.coverPhotos || [])]}
+          orgLogoUrl={org?.logoUrl}
+        />
         {onClose && isDesktop && (
           <button type="button" className="map-quest-hero-close" onClick={onClose} aria-label="Close">
             <IconX width={18} height={18} />
