@@ -321,6 +321,7 @@ function JournalCard({ entry, isOpen, onOpen }) {
     <motion.div
       layoutId={`journal-card-${entry.id}`}
       className='journal-card'
+      data-frame='cozy'
       role='button'
       tabIndex={0}
       onClick={onOpen}
@@ -417,6 +418,7 @@ function ExpandedJournalEntry({ entry, onClose }) {
       <motion.div
         layoutId={`journal-card-${entry.id}`}
         className='journal-expanded-card journal-expanded-card--entry'
+        data-frame='cozy'
         onClick={(e) => e.stopPropagation()}
       >
         <JournalCardMenu
@@ -429,6 +431,7 @@ function ExpandedJournalEntry({ entry, onClose }) {
             setEditing(true);
           }}
         />
+        <div className='journal-expanded-card-scroll'>
         <motion.div
           layoutId={`journal-content-${entry.id}`}
           initial={reduce ? false : { opacity: 0, y: 24 }}
@@ -509,6 +512,7 @@ function ExpandedJournalEntry({ entry, onClose }) {
               instead). */}
           {!editing && <FeedbackStatus entry={entry} />}
         </motion.div>
+        </div>
       </motion.div>
 
       {pickingPicture && <ThumbnailPicker entry={entry} onClose={() => setPickingPicture(false)} />}
@@ -574,36 +578,39 @@ function ThumbnailPicker({ entry, onClose }) {
     <LightboxBackdrop onClose={onClose} label='Choose a background picture'>
       <div
         className='journal-expanded-card'
+        data-frame='cozy'
         style={{ width: 'min(420px, 100%)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ marginTop: 0 }}>Choose a background picture</h3>
-        {error && <p className='box-danger'>{error}</p>}
-        <ImageUploadCard
-          title=''
-          accept={THUMBNAIL_UPLOAD_CONTENT_TYPES.join(',')}
-          initialPreviewUrl={entry.thumbnailUrl || null}
-          onUpload={(_url, file) => {
-            setPickedFile(file);
-            setRemoved(false);
-          }}
-          onRemove={() => {
-            setPickedFile(null);
-            setRemoved(true);
-          }}
-        />
-        <div className='flex gap-sm' style={{ marginTop: 12 }}>
-          <StampButton
-            type='button'
-            variant='primary'
-            onClick={handleSave}
-            disabled={(!pickedFile && !removed) || saving}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </StampButton>
-          <StampButton type='button' onClick={onClose} disabled={saving}>
-            Cancel
-          </StampButton>
+        <div className='journal-expanded-card-scroll'>
+          <h3 style={{ marginTop: 0 }}>Choose a background picture</h3>
+          {error && <p className='box-danger'>{error}</p>}
+          <ImageUploadCard
+            title=''
+            accept={THUMBNAIL_UPLOAD_CONTENT_TYPES.join(',')}
+            initialPreviewUrl={entry.thumbnailUrl || null}
+            onUpload={(_url, file) => {
+              setPickedFile(file);
+              setRemoved(false);
+            }}
+            onRemove={() => {
+              setPickedFile(null);
+              setRemoved(true);
+            }}
+          />
+          <div className='flex gap-sm' style={{ marginTop: 12 }}>
+            <StampButton
+              type='button'
+              variant='primary'
+              onClick={handleSave}
+              disabled={(!pickedFile && !removed) || saving}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </StampButton>
+            <StampButton type='button' onClick={onClose} disabled={saving}>
+              Cancel
+            </StampButton>
+          </div>
         </div>
       </div>
     </LightboxBackdrop>

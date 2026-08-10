@@ -101,7 +101,7 @@ export function QuestDetails() {
   return (
     <PageMotion>
       <BackLink to={backTo} label={backLabel} />
-      <div className="ink-card">
+      <div className="ink-card" data-frame="cozy">
         {isOwner ? (
           <QuestSeriesDetailPane series={series} onChanged={load} showTitle />
         ) : (

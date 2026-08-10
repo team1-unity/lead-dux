@@ -81,19 +81,25 @@ export function QuestScanner() {
     // via html5-qrcode) is specific enough to give a real answer instead
     // of the raw browser error text — "NotAllowedError: Permission denied"
     // reads like a crash, "Allow camera access..." reads like something to
-    // actually do about it.
+    // actually do about it. html5-qrcode doesn't always hand that
+    // DOMException straight through, though — it often wraps it into a
+    // plain "Error getting userMedia, error = <name>: <message>" string
+    // instead, with no .name of its own at all — so this also matches
+    // against the stringified error text, not just err.name, to still
+    // catch the same underlying cause either way.
     function messageFor(err) {
       const name = err?.name || '';
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+      const text = String(err?.message ?? err ?? '');
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || /NotAllowedError|PermissionDeniedError|Permission denied/i.test(text)) {
         return 'Camera access is turned off for Lead-Dux. Allow camera access for this site in your browser or device settings, then reload this page.';
       }
-      if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      if (name === 'NotFoundError' || name === 'OverconstrainedError' || /NotFoundError|OverconstrainedError/i.test(text)) {
         return "No camera was found on this device — check-in still works by opening the event's QR link directly.";
       }
-      if (name === 'NotReadableError') {
+      if (name === 'NotReadableError' || /NotReadableError/i.test(text)) {
         return 'The camera is already in use by another app. Close it and reload this page.';
       }
-      return `Camera unavailable: ${err?.message || err}`;
+      return `Camera unavailable: ${text}`;
     }
 
     // Both the constructor and .start() itself (not just its returned

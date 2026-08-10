@@ -101,7 +101,7 @@ export function AvatarCropModal({ label = 'Upload photo', accept, maxSizeBytes =
 
   return (
     <LightboxBackdrop onClose={handleClose} label={label}>
-      <div className="ink-card avatar-crop-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="ink-card avatar-crop-modal" data-frame="cozy" onClick={(e) => e.stopPropagation()}>
         <h3 style={{ margin: 0 }}>{label}</h3>
 
         {pickedUrl ? (

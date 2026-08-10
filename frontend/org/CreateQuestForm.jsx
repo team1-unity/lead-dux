@@ -1091,27 +1091,29 @@ export function CreateQuestForm({
           )}
           {coverModalOpen && (
             <LightboxBackdrop onClose={closeCoverModal} label='Upload image'>
-              <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
-                <ImageUploadCard
-                  key={coverUploadKey}
-                  title='Upload image'
-                  accept={COVER_CONTENT_TYPES.join(',')}
-                  onUpload={(url, file) => setPickedCoverFile(file)}
-                  onRemove={() => setPickedCoverFile(null)}
-                />
-                {coverError && <p className='box-danger'>{coverError}</p>}
-                <div className='flex gap-sm' style={{ marginTop: 12 }}>
-                  <StampButton
-                    type='button'
-                    variant='primary'
-                    onClick={uploadCoverPhoto}
-                    disabled={!pickedCoverFile || uploadingCover}
-                  >
-                    {uploadingCover ? 'Uploading…' : 'Upload'}
-                  </StampButton>
-                  <StampButton type='button' onClick={closeCoverModal} disabled={uploadingCover}>
-                    Cancel
-                  </StampButton>
+              <div className='detail-modal-content' data-frame='cozy' onClick={(e) => e.stopPropagation()}>
+                <div className='detail-modal-content-scroll'>
+                  <ImageUploadCard
+                    key={coverUploadKey}
+                    title='Upload image'
+                    accept={COVER_CONTENT_TYPES.join(',')}
+                    onUpload={(url, file) => setPickedCoverFile(file)}
+                    onRemove={() => setPickedCoverFile(null)}
+                  />
+                  {coverError && <p className='box-danger'>{coverError}</p>}
+                  <div className='flex gap-sm' style={{ marginTop: 12 }}>
+                    <StampButton
+                      type='button'
+                      variant='primary'
+                      onClick={uploadCoverPhoto}
+                      disabled={!pickedCoverFile || uploadingCover}
+                    >
+                      {uploadingCover ? 'Uploading…' : 'Upload'}
+                    </StampButton>
+                    <StampButton type='button' onClick={closeCoverModal} disabled={uploadingCover}>
+                      Cancel
+                    </StampButton>
+                  </div>
                 </div>
               </div>
             </LightboxBackdrop>

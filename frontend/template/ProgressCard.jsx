@@ -49,15 +49,7 @@ export function ProgressCard({ profile: profileProp }) {
 
   return (
     <section className='ink-card' style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div
-        className='quest-card-titles'
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'baseline',
-          gap: 12,
-        }}
-      >
+      <div className='quest-card-titles rank-progress-header'>
         <h2 style={{ marginBottom: 0 }}>
           Leadership Rank
           <span style={{ fontFamily: 'var(--font-display)', textTransform: 'uppercase' }}>
@@ -65,7 +57,7 @@ export function ProgressCard({ profile: profileProp }) {
             — {rank}
           </span>
         </h2>
-        <p className='data-stat' style={{ margin: 0, flex: 'none' }}>
+        <p className='data-stat' style={{ margin: 0 }}>
           {toNext !== null ? `${toNext} to ${rankForPoints(points + toNext)}` : 'Top rank reached'}
         </p>
       </div>
@@ -103,7 +95,7 @@ export function ProgressCard({ profile: profileProp }) {
       </div>
 
       {certificateIssued && (
-        <div className='rank-certificate-banner'>
+        <div className='rank-certificate-banner' data-frame='cozy'>
           <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
           <Link to='/certificate'>
             <StampButton type='button' variant='primary'>

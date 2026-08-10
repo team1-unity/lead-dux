@@ -338,7 +338,8 @@ export function PendingPhotoReview() {
 
       {reviewOpen && (
         <LightboxBackdrop onClose={closeReview} label="Review pending photos" className="pending-review-backdrop">
-          <div className="pending-review-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="pending-review-modal" data-frame="cozy" onClick={(e) => e.stopPropagation()}>
+            <div className="pending-review-modal-scroll">
             {topPhoto ? (
               <>
                 <div className="pending-review-stack">
@@ -389,30 +390,33 @@ export function PendingPhotoReview() {
                 <p>You're all caught up!</p>
               </div>
             )}
+            </div>
           </div>
         </LightboxBackdrop>
       )}
 
       {pendingReject && (
         <LightboxBackdrop onClose={() => resolveReject(null)} label="Add a rejection reason">
-          <div className="detail-modal-content ink-card" onClick={(e) => e.stopPropagation()}>
-            <p style={{ marginTop: 0, fontWeight: 700 }}>
-              Add a note for {pendingReject.userName || 'this submission'}? (optional)
-            </p>
-            <textarea
-              className="pending-reject-textarea"
-              placeholder="Reason (optional)"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              maxLength={300}
-            />
-            <div className="flex gap-sm" style={{ marginTop: 10 }}>
-              <StampButton type="button" variant="primary" onClick={() => resolveReject(rejectReason.trim())}>
-                Submit
-              </StampButton>
-              <StampButton type="button" onClick={() => resolveReject(null)}>
-                Cancel
-              </StampButton>
+          <div className="detail-modal-content ink-card" data-frame="cozy" onClick={(e) => e.stopPropagation()}>
+            <div className="detail-modal-content-scroll">
+              <p style={{ marginTop: 0, fontWeight: 700 }}>
+                Add a note for {pendingReject.userName || 'this submission'}? (optional)
+              </p>
+              <textarea
+                className="pending-reject-textarea"
+                placeholder="Reason (optional)"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                maxLength={300}
+              />
+              <div className="flex gap-sm" style={{ marginTop: 10 }}>
+                <StampButton type="button" variant="primary" onClick={() => resolveReject(rejectReason.trim())}>
+                  Submit
+                </StampButton>
+                <StampButton type="button" onClick={() => resolveReject(null)}>
+                  Cancel
+                </StampButton>
+              </div>
             </div>
           </div>
         </LightboxBackdrop>

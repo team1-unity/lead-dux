@@ -88,7 +88,8 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, currentDu
 
   return (
     <LightboxBackdrop onClose={onClose} label='Edit profile'>
-      <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
+      <div className='detail-modal-content' data-frame='cozy' onClick={(e) => e.stopPropagation()}>
+        <div className='detail-modal-content-scroll'>
         <form onSubmit={handleSave} className='ink-card flex flex-col gap-md'>
           <h3 style={{ margin: 0 }}>Edit Profile</h3>
 
@@ -140,6 +141,7 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, currentDu
             </StampButton>
           </div>
         </form>
+        </div>
       </div>
       {cropModalOpen && (
         <AvatarCropModal

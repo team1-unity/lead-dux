@@ -91,19 +91,21 @@ export function ShareButton({ seriesId, questTitle, iconOnly = false, disabled =
       )}
       {modalOpen && (
         <LightboxBackdrop onClose={() => setModalOpen(false)} label="Share quest">
-          <div className="detail-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="ink-card flex flex-col gap-md">
-              <h3 style={{ margin: 0 }}>Share {questTitle || 'this quest'}</h3>
-              <p style={{ wordBreak: 'break-all' }}>{url}</p>
-              <StampButton type="button" variant="primary" onClick={copy}>
-                {copied ? (
-                  <>
-                    <IconCheck width={16} height={16} /> Copied!
-                  </>
-                ) : (
-                  'Copy link'
-                )}
-              </StampButton>
+          <div className="detail-modal-content" data-frame="cozy" onClick={(e) => e.stopPropagation()}>
+            <div className="detail-modal-content-scroll">
+              <div className="ink-card flex flex-col gap-md">
+                <h3 style={{ margin: 0 }}>Share {questTitle || 'this quest'}</h3>
+                <p style={{ wordBreak: 'break-all' }}>{url}</p>
+                <StampButton type="button" variant="primary" onClick={copy}>
+                  {copied ? (
+                    <>
+                      <IconCheck width={16} height={16} /> Copied!
+                    </>
+                  ) : (
+                    'Copy link'
+                  )}
+                </StampButton>
+              </div>
             </div>
           </div>
         </LightboxBackdrop>

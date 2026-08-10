@@ -73,7 +73,7 @@ export function Landing() {
         <p className="landing-tagline">A gamified way into real leadership</p>
         <div className="landing-lede">
           {LEDE_NOTES.map((note) => (
-            <div key={note.label} className="landing-note">
+            <div key={note.label} className="landing-note" data-frame="cozy">
               <TagStamp tone={note.tone}>{note.label}</TagStamp>
               <p>{note.body}</p>
             </div>

@@ -39,8 +39,8 @@ function toMillis(value) {
 // deliberate game-UI treatment (bordered slot, hard offset shadow,
 // lift-on-hover) rather than this app's usual flat StampButton, icon-only
 // and stacked in the top-right corner. Desktop: rendered in-flow inside
-// .home-hero-panel instead, as a plain list — icon + label rows divided
-// by hairlines (see .home-hero-panel .home-quick-action in style.css).
+// .home-hero-card instead, as a plain list — icon + label rows divided
+// by hairlines (see the .home-hero-card-scoped rules in style.css).
 // "My quests" only appears once there's an actual RSVP'd quest to jump to
 // (see useHasRsvpdQuest above); "Last quest" only once there's a past
 // quest to revisit (see useLastAttendedQuest above) — an empty
@@ -239,7 +239,7 @@ export function Home() {
           <div className="home-duck-stage home-hero-duck">
             <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} width={320} />
           </div>
-          <div className="home-hero-panel">
+          <div className="home-hero-panel" data-frame="cozy">
             <div className="home-hero-card">
               {greetingText}
               <HomeQuickActions hasRsvpd={hasRsvpd} lastAttended={lastAttended} />
@@ -291,7 +291,16 @@ export function Home() {
           </div>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
+        {/* Tried with no layout change, per explicit request, even though
+            this panel is deliberately full-bleed (see its own CSS note),
+            extending behind the fixed bottom nav so its background
+            reaches the true screen edge — the frame's own bottom border
+            extends there too, so most of it sits hidden behind the nav
+            with a thin sliver poking out below it, unlike the desktop
+            hero card's frame above (a normal self-contained card with no
+            such edge to worry about). */}
+        <div className="home-content" data-frame="cozy">
+          {greetingText}
           <ProgressCard profile={{ points: profile.points, certificateIssued: profile.certificateIssued }} />
         </div>
       </PageMotion>

@@ -129,21 +129,23 @@ export function MapQuestOverlay() {
   if (notFound || !portalTarget) return null;
 
   return createPortal(
-    <div className="events-map-detail-slot" ref={detailSlotRef}>
-      {!series ? (
-        // No hero photo to float a close button on yet — the generic
-        // bordered-card-inset .photo-lightbox-close (see style.css) covers
-        // this brief loading/error state instead; MapQuestDetailBody's own
-        // onClose renders one directly on the hero once it's loaded.
-        <>
-          <button type="button" className="photo-lightbox-close" onClick={close} aria-label="Close">
-            <IconX width={18} height={18} />
-          </button>
-          {error ? <p className="box-danger">{error}</p> : <LoadingSpinner label="Loading quest…" />}
-        </>
-      ) : (
-        <MapQuestDetailBody series={series} fullDetailsHref={`/quests/${series.seriesId}`} onClose={close} />
-      )}
+    <div className="events-map-detail-slot" data-frame="cozy">
+      <div className="events-map-detail-slot-scroll" ref={detailSlotRef}>
+        {!series ? (
+          // No hero photo to float a close button on yet — the generic
+          // bordered-card-inset .photo-lightbox-close (see style.css) covers
+          // this brief loading/error state instead; MapQuestDetailBody's own
+          // onClose renders one directly on the hero once it's loaded.
+          <>
+            <button type="button" className="photo-lightbox-close" onClick={close} aria-label="Close">
+              <IconX width={18} height={18} />
+            </button>
+            {error ? <p className="box-danger">{error}</p> : <LoadingSpinner label="Loading quest…" />}
+          </>
+        ) : (
+          <MapQuestDetailBody series={series} fullDetailsHref={`/quests/${series.seriesId}`} onClose={close} />
+        )}
+      </div>
     </div>,
     portalTarget,
   );

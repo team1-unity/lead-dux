@@ -175,13 +175,14 @@
   --brand-blue: #3d6fa8;
   --brand-orange: #d68f3a;
 
-  /* Theme-aware duck mark (DuckMark in Logo.jsx) — a brown-outline PNG
-     for light mode, a pale-yellow-outline one for dark mode (a plain
-     brown line is nearly invisible against a dark surface). Swapping the
-     url() itself via this token means DuckMark never needs to know which
-     theme is active — same mechanism as every other themed value in this
-     file, just holding a url() instead of a color. */
-  --duck-mark-url: url('/brand/duck-brown.png');
+  /* The duck mark (DuckMark in Logo.jsx) — the full logo-lockup asset
+     (duck + baked-in wordmark, fixed mustard colorway) now, in place of
+     the old theme-swapped brown/yellow-outline pair. Not theme-aware
+     any more — logo-lockup.png only ever has the one colorway — but
+     kept as a token (rather than hardcoded directly on .duck-mark)
+     since .auth-hero-duck below still wants to override it independent
+     of whatever the base rule points to. */
+  --duck-mark-url: url('/brand/logo-lockup.png');
 
   /* surfaces — values sampled directly from get-ripe.com's live computed
      styles (page section bg + card bg), not estimated: their page is
@@ -201,6 +202,19 @@
   --line-soft: #716352;
   --border: #8b6f4e;
   --shadow: rgba(87, 73, 31, 0.12);
+  /* [data-frame]'s own border/inner-ring + outer-ring tones (see the
+     game-frame section below) — split out from --border/--line-soft
+     into their own tokens rather than reused directly, since dark mode
+     wants a grey frame but still wants --border's own translucent white
+     and --line-soft's own value for everything else that already uses
+     them. No brown in dark mode (see the dark-mode blocks below) — a
+     literal brown line read as mud rather than a stylized border once
+     the rest of the page went dark. */
+  --game-frame-color: #8b6f4e;
+  --game-frame-ring-fill: #c19d93;
+  /* .bottom-nav-avatar-menu's own hover fill — see that rule's own
+     comment for why this isn't just --accent-soft directly. */
+  --menu-hover-bg: var(--accent-soft);
   /* Neutral, not theme-tinted on purpose — a photo's own edge shouldn't
      pick up the brand's brown/yellow cast (that reads as dirt on the
      image), so this stays pure black regardless of theme. */
@@ -320,7 +334,6 @@
    change. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --duck-mark-url: url('/brand/duck-yellow.png');
     --paper: #2b2d31;
     --paper-card: #35373c;
     --paper-well: #3f4147;
@@ -328,6 +341,13 @@
     --line-soft: #949ba4;
     --border: rgba(255, 255, 255, 0.08);
     --shadow: rgba(0, 0, 0, 0.4);
+    /* Grey, not brown, in dark mode — see the light :root's own comment
+       on why these are split out from --border/--line-soft. */
+    --game-frame-color: var(--line);
+    --game-frame-ring-fill: var(--line-soft);
+    /* Light grey, not --accent-soft's dark olive-brown — see
+       .bottom-nav-avatar-menu's own comment. */
+    --menu-hover-bg: rgba(255, 255, 255, 0.08);
     --image-outline: rgba(255, 255, 255, 0.1);
     --accent: var(--brand-green);
     --accent-contrast: var(--brand-green-ink);
@@ -390,7 +410,6 @@
   }
 }
 :root[data-theme='dark'] {
-  --duck-mark-url: url('/brand/duck-yellow.png');
   --paper: #2b2d31;
   --paper-card: #35373c;
   --paper-well: #3f4147;
@@ -398,6 +417,13 @@
   --line-soft: #949ba4;
   --border: rgba(255, 255, 255, 0.08);
   --shadow: rgba(0, 0, 0, 0.4);
+  /* Grey, not brown, in dark mode — see the light :root's own comment
+     on why these are split out from --border/--line-soft. */
+  --game-frame-color: var(--line);
+  --game-frame-ring-fill: var(--line-soft);
+  /* Light grey, not --accent-soft's dark olive-brown — see
+     .bottom-nav-avatar-menu's own comment. */
+  --menu-hover-bg: rgba(255, 255, 255, 0.08);
   --image-outline: rgba(255, 255, 255, 0.1);
   --accent: var(--brand-green);
   --accent-contrast: var(--brand-green-ink);
@@ -452,7 +478,6 @@
      block wins over plain :root whenever a "Light" theme is explicitly
      stored (see theme.js), so it has to carry every trial value too or
      anyone with a stored preference sees none of them. */
-  --duck-mark-url: url('/brand/duck-brown.png');
   --paper: #efe5d4;
   --paper-card: #fff7eb;
   --paper-well: #fff7eb;
@@ -460,6 +485,19 @@
   --line-soft: #716352;
   --border: #8b6f4e;
   --shadow: rgba(87, 73, 31, 0.12);
+  /* [data-frame]'s own border/inner-ring + outer-ring tones (see the
+     game-frame section below) — split out from --border/--line-soft
+     into their own tokens rather than reused directly, since dark mode
+     wants a grey frame but still wants --border's own translucent white
+     and --line-soft's own value for everything else that already uses
+     them. No brown in dark mode (see the dark-mode blocks below) — a
+     literal brown line read as mud rather than a stylized border once
+     the rest of the page went dark. */
+  --game-frame-color: #8b6f4e;
+  --game-frame-ring-fill: #c19d93;
+  /* .bottom-nav-avatar-menu's own hover fill — see that rule's own
+     comment for why this isn't just --accent-soft directly. */
+  --menu-hover-bg: var(--accent-soft);
   /* Neutral, not theme-tinted on purpose — a photo's own edge shouldn't
      pick up the brand's brown/yellow cast (that reads as dirt on the
      image), so this stays pure black regardless of theme. */
@@ -927,6 +965,73 @@ nav {
   background: var(--danger-soft);
 }
 
+/* ---------- Game frame ----------
+   A decorative, hand-drawn-feeling frame for the app's main "panel"
+   surfaces (the Home hero/content panel, badge/rank cards, the Explore
+   Quests detail pane — see mobile/Home.jsx, mobile/Badges.jsx,
+   mobile/Quests.jsx), as a bare [data-frame] attribute rather than a new
+   component — this app has no <Card> wrapper to hang a `frame` prop off
+   of, and unlike .ink-card's own existing [data-danger]/[data-muted]
+   modifiers, this one isn't scoped to that one class at all:
+   .home-hero-panel, .home-content, .ink-card, or any other "main panel"
+   surface can opt in with the same attribute.
+   Drawn directly on the element's own border + box-shadow — a thin outer
+   border, then two inset rings (a gap the width of the card's own fill,
+   then a thicker inner line), reading as close to three concentric
+   borders. Every image-based version tried had its own real problem that
+   scaled with card size — a raster PNG either seamed against this
+   element's own background at some sizes or smeared its corners at
+   extreme aspect ratios; an SVG with a feTurbulence-driven "hand-drawn
+   wobble" turned the wobble itself into a streaky, uneven texture once
+   stretched non-uniformly to fit a wide, short card. A ::after overlay
+   (paints on top of the card's own content, meant to dodge scrolled
+   content covering the inset rings near the edges) was tried too and
+   reverted — see the note below on why that's the wrong layer for it.
+   [data-frame] must NEVER be the element that itself has
+   overflow-y/x:auto. Two independent reasons, both confirmed directly
+   rather than assumed:
+   1) An inset box-shadow (like an inward outline, like a border) is
+      still just the host's own box decoration — it paints below that
+      same host's own in-flow descendants, always, regardless of
+      z-index (z-index only orders stacking *contexts* against each
+      other, it never reorders a box's own border/background/shadow
+      against its own children). So once a ring dips inward far enough
+      to sit where scrollable content can reach, scrolled-into-view
+      content paints over it — this is what ::after was reaching for,
+      but:
+   2) ::after doesn't actually fix it, because a position:absolute
+      pseudo-element's containing block is its nearest positioned
+      ancestor's padding box — and when that ancestor is also the one
+      scrolling, the pseudo-element scrolls right along with the rest of
+      its content (confirmed directly: an inset:0 child's own
+      getBoundingClientRect().top shifted by the exact scrollTop amount
+      on scroll, same as any in-flow child — position:absolute only
+      exempts an element from normal-flow *layout*, not from its
+      containing block's own scroll).
+   The only real fix is structural: keep [data-frame] on a wrapper that
+   never scrolls, with the actual overflow-y:auto living on a plain
+   inner child instead (see .home-hero-panel/.home-hero-card and
+   .quest-detail-pane/.quest-detail-pane-scroll). Once the host genuinely
+   never scrolls, plain border + inset box-shadow is enough — no ::after,
+   no z-index, no pointer-events juggling needed.
+   The ring itself is exposed as --game-frame-ring, a var rather than a
+   literal box-shadow value, specifically so a target that already has
+   its own box-shadow (.home-hero-card's drop-shadow) can merge the two
+   into one declaration instead of one silently overwriting the other —
+   box-shadow doesn't compose across two separate rules; whichever rule
+   wins the cascade replaces it whole. */
+[data-frame] {
+  position: relative;
+  border: var(--game-frame-width, 1px) solid var(--game-frame-color, #8b6f4e);
+  border-radius: var(--game-frame-radius, 16px);
+  background-color: var(--game-frame-fill, var(--paper-card));
+  --game-frame-ring:
+    inset 0 0 0 var(--game-frame-gap, 4px) var(--game-frame-ring-fill, #c19d93),
+    inset 0 0 0 calc(var(--game-frame-gap, 1px) + var(--game-frame-inner-width, 4px))
+      var(--game-frame-color, #8b6f4e);
+  box-shadow: var(--game-frame-ring);
+}
+
 .ink-btn-primary {
   background: var(--accent);
   color: var(--accent-contrast);
@@ -1146,12 +1251,10 @@ nav {
   }
   .auth-hero-duck {
     width: 48px;
-    /* This panel's butter-yellow background (--brand-green below) never
-       changes with the app's light/dark theme, so its foreground can't
-       either — var(--line)/the theme-aware --duck-mark-url would go
-       pale-on-pale the moment dark mode flips --line to a light color.
-       Force the fixed dark-ink duck variant regardless of theme. */
-    --duck-mark-url: url('/brand/duck-brown.png');
+    /* No override needed here any more — --duck-mark-url is a single
+       fixed logo-lockup asset regardless of theme now (the old brown/
+       yellow swap this override existed to counteract on this panel's
+       always-butter-yellow background is gone). */
   }
   .auth-hero-word {
     font-size: 1.3rem;
@@ -1659,6 +1762,11 @@ nav {
    screen would clip it. Revert target: top: calc(100% + 10px), right: 0,
    bottom: auto, left: auto. */
 .bottom-nav-avatar-menu {
+  /* Plain border (not the [data-frame] decorative ring) — tried the
+     stylized frame here first, but for this dropup a plain border read
+     better, same call as the org profile/home cards. */
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
   position: absolute;
   bottom: calc(100% + 10px);
   left: 0;
@@ -1670,9 +1778,6 @@ nav {
   min-width: 170px;
   padding: 6px;
   background: var(--paper-card);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: none;
 }
 /* button included alongside a — Log out is an action, not a route, so it
    renders as a plain <button role="menuitem">, not a <Link>; same look
@@ -1703,7 +1808,14 @@ nav {
 .bottom-nav-avatar-menu a:hover,
 .bottom-nav-avatar-menu button:hover,
 .bottom-nav-avatar-menu a[aria-current='page'] {
-  background: var(--accent-soft);
+  /* --menu-hover-bg, not --accent-soft directly — --accent-soft's own
+     dark-mode value (#3d3520) is a dark olive-brown (fine for the
+     accent-tinted badges/highlights it's actually meant for), but read
+     as a muddy, out-of-place hover here specifically. A dedicated token
+     (light mode mirrors --accent-soft exactly; dark mode is a plain
+     light-grey overlay instead) keeps --accent-soft itself untouched
+     for its other, unrelated uses. */
+  background: var(--menu-hover-bg);
 }
 .bottom-nav-avatar-menu a svg,
 .bottom-nav-avatar-menu button svg {
@@ -2115,13 +2227,14 @@ button.quest-card-head:hover:not(:disabled) {
   opacity: 0.6;
 }
 .side-quest-gate {
+  /* border/border-radius come from [data-frame] (see mobile/Quests.jsx)
+     — declaring them here too would win the cascade (this rule is
+     declared later in the file) and hide/mismatch the frame's own. */
   display: flex;
   align-items: flex-start;
   gap: 8px;
   margin: 0 0 12px;
   padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  border: 1px dashed var(--line-soft);
   background: var(--paper-well);
   color: var(--line-soft);
   font-size: 0.88rem;
@@ -2657,6 +2770,9 @@ a.stat-hero-tile:hover {
    number/label typography (.stat-hero-number/.stat-hero-label), just
    inheriting dark text from .ink-card instead of the colored tiles' white. */
 .org-home-stat-tile {
+  /* Plain border (not the [data-frame] decorative ring) — same call as
+     the org profile's own cards, see that section's own comment. */
+  border: 2px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2773,29 +2889,29 @@ a.org-home-stat-tile:hover {
 }
 .quest-list,
 .events-map-list-pane,
-.quest-detail-pane {
+.quest-detail-pane-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 .quest-list::-webkit-scrollbar,
 .events-map-list-pane::-webkit-scrollbar,
-.quest-detail-pane::-webkit-scrollbar {
+.quest-detail-pane-scroll::-webkit-scrollbar {
   width: 6px;
 }
 .quest-list::-webkit-scrollbar-track,
 .events-map-list-pane::-webkit-scrollbar-track,
-.quest-detail-pane::-webkit-scrollbar-track {
+.quest-detail-pane-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 .quest-list::-webkit-scrollbar-thumb,
 .events-map-list-pane::-webkit-scrollbar-thumb,
-.quest-detail-pane::-webkit-scrollbar-thumb {
+.quest-detail-pane-scroll::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: var(--radius-full);
 }
 .quest-list::-webkit-scrollbar-thumb:hover,
 .events-map-list-pane::-webkit-scrollbar-thumb:hover,
-.quest-detail-pane::-webkit-scrollbar-thumb:hover {
+.quest-detail-pane-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--line-soft);
 }
 /* ---------- quest filters (Explore Quests) ---------- */
@@ -2874,10 +2990,21 @@ a.org-home-stat-tile:hover {
   width: 100%;
   max-width: 420px;
   max-height: 80vh;
-  overflow-y: auto;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
   padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+/* See .detail-modal-content-scroll's own comment — same reason this
+   can't just be overflow-y:auto directly on .quest-filter-sheet. The
+   flex-column/gap that used to arrange {children}+Done directly on the
+   outer card move down here with them, since the outer now has just
+   this one flex child. */
+.quest-filter-sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -3045,6 +3172,13 @@ a.org-home-stat-tile:hover {
     overflow-y: auto;
     padding-right: 4px;
   }
+  /* The sticky, viewport-sized positioner — .quest-detail-pane-scroll
+     (below) does the actual scrolling inside it, and .ink-card's own
+     background/padding/border-radius stay on this outer box, same as
+     every other [data-frame] target. Split in two specifically so
+     [data-frame] (see mobile/Quests.jsx) never lands on the element that
+     scrolls; org/Quests.jsx nests the same way even without a frame, so
+     both stay structurally identical. */
   .quest-detail-pane {
     position: sticky;
     top: 40px;
@@ -3056,6 +3190,9 @@ a.org-home-stat-tile:hover {
        page tall enough to scroll the sticky list out of view entirely,
        rather than just scrolling its own content. */
     height: calc(100vh - 80px);
+  }
+  .quest-detail-pane-scroll {
+    height: 100%;
     overflow-y: auto;
   }
 }
@@ -3264,19 +3401,31 @@ a.org-home-stat-tile:hover {
   background: rgba(0, 0, 0, 0.75);
 }
 .pending-review-modal {
+  /* border-radius/box-shadow come from [data-frame] (see
+     PendingPhotoReview.jsx) — declaring them here too would win the
+     cascade (this rule is declared later in the file) and hide/mismatch
+     the frame's own. */
   position: relative;
   width: min(420px, 100%);
   max-height: 90vh;
+  padding: 24px 20px;
+  background: var(--paper-card);
+  display: flex;
+  flex-direction: column;
+}
+/* See .detail-modal-content-scroll's own comment — same reason this
+   can't just be overflow-y:auto directly on .pending-review-modal. The
+   align-items/gap that used to live on the outer card move down here
+   with the content, since the outer now has just this one flex child. */
+.pending-review-modal-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  padding: 24px 20px;
-  background: var(--paper-card);
-  border-radius: var(--radius-lg);
-  box-shadow: none;
-  scrollbar-width: none;
 }
 .pending-review-stack {
   position: relative;
@@ -3729,10 +3878,36 @@ a.org-home-stat-tile:hover {
    rows rather than one centered image, with its own scroll for a long
    attendee list instead of growing past the viewport. */
 .detail-modal-content {
+  /* padding matches .ink-card's own 18px/20px — unlike every other
+     [data-frame] target, this one had none of its own, so nested opaque
+     content (a nested .ink-card form, or just bare content) sat flush
+     against this box's own border with no gap, painting straight over
+     the inset ring (same reasoning as the game-frame section's own
+     comment: a child always paints above its own parent's border/box-
+     shadow, so the ring needs empty space to actually show through, not
+     z-index). Harmless for callers combining .ink-card directly on this
+     same element (org/Quests.jsx's Attendees modal, PendingPhotoReview's
+     rejection modal) — same value, so it's not additive there, just
+     whichever one wins the cascade (this one, being declared later). */
   position: relative;
   max-width: 420px;
   width: 100%;
   max-height: 80vh;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+}
+/* The actual scrolling surface — kept off .detail-modal-content itself
+   (see the game-frame section's own comment on why [data-frame] and
+   overflow-y:auto can never share an element): a position:absolute
+   overlay used to fake a "frame on top of content" effect, but its
+   containing block being the scrolling element meant it scrolled away
+   with everything else. flex:1 + min-height:0 lets this child actually
+   get clipped to .detail-modal-content's own max-height instead of
+   growing past it. */
+.detail-modal-content-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   text-align: left;
   scrollbar-width: none;
@@ -3828,7 +4003,7 @@ a.org-home-stat-tile:hover {
    close/back button takes over), so that same floating-outside look would
    get clipped by its own overflow-y:auto — inset it within the card
    instead. */
-.events-map-detail-slot > .photo-lightbox-close {
+.events-map-detail-slot .photo-lightbox-close {
   top: 10px;
   right: 10px;
 }
@@ -3840,6 +4015,9 @@ a.org-home-stat-tile:hover {
   display: inline-block;
 }
 .delete-dropdown-menu {
+  /* border/border-radius come from [data-frame] (see org/Quests.jsx) —
+     declaring them here too would win the cascade (this rule is
+     declared later in the file) and hide/mismatch the frame's own. */
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -3849,9 +4027,6 @@ a.org-home-stat-tile:hover {
   min-width: 200px;
   padding: 6px;
   background: var(--paper-card);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: none;
 }
 .delete-dropdown-menu button {
   display: block;
@@ -3919,11 +4094,12 @@ a.org-home-stat-tile:hover {
 
 /* QuestScanner.jsx's own camera view — .quest-scanner-video is the div
    html5-qrcode itself renders its <video>/<canvas> into, so nothing else
-   should be nested inside it (the library owns that subtree). The error
-   message is instead an absolutely-positioned sibling, overlaid on top of
-   (not below) the live camera feed and pinned near the top of the frame —
-   the first thing visible without looking away from the camera, unlike
-   the plain-below-the-video placement this replaced. */
+   should be nested inside it (the library owns that subtree). The
+   "requesting access" status message is an absolutely-positioned
+   sibling, overlaid on top of (not below) the live camera feed and
+   pinned near the top of the frame — the first thing visible without
+   looking away from the camera. The error message (see its own rule
+   below) is NOT overlaid the same way — see its own comment for why. */
 .quest-scanner {
   position: relative;
   margin-top: 12px;
@@ -3935,15 +4111,19 @@ a.org-home-stat-tile:hover {
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
+/* Not position:absolute like .quest-scanner-status below — that overlay
+   treatment only makes sense while a live camera feed is showing behind
+   it, and by the time `error` is ever set, .start() has already failed,
+   so .quest-scanner-video is empty and collapsed to 0 height. Overlaid
+   there anyway, this message had no in-flow box of its own to grow the
+   card's height to fit it, so a long one (the raw getUserMedia error
+   text can run several lines) visually floated past the collapsed
+   card's own bottom edge instead of the card growing to actually show
+   all of it. In normal flow instead, the card grows with it. */
 .quest-scanner-error {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
   width: calc(100% - 20px);
   max-width: 300px;
-  z-index: 2;
-  margin: 0;
+  margin: 10px auto 0;
 }
 /* The ordinary "browser's native permission dialog is up" wait, not a
    problem — same position as .quest-scanner-error (they're never both
@@ -4342,6 +4522,15 @@ button.data-row:active:not(:disabled) {
 .org-profile-quests {
   min-height: 20vh;
 }
+/* Plain border (not the [data-frame] decorative ring the rest of the app
+   uses) — tried the stylized frame here first, but for the org profile's
+   own cards a plain border read better than the illustrated one. */
+.org-profile-header,
+.org-profile-about,
+.org-profile-quests,
+.org-profile-photos {
+  border: 2px solid var(--border);
+}
 
 .org-profile-header {
   display: flex;
@@ -4573,6 +4762,17 @@ button.data-row:active:not(:disabled) {
 .org-onboarding-card {
   max-width: 480px;
   max-height: 90vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* See .detail-modal-content-scroll's own comment — same reason this
+   can't just be overflow-y:auto directly on .org-onboarding-card.
+   .tour-card's own padding is zeroed out above (this class wins the
+   cascade, declared later) so it doesn't double up with this one. */
+.org-onboarding-card-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 30px 28px 24px;
 }
@@ -4752,6 +4952,31 @@ button.data-row:active:not(:disabled) {
    9-tone tag rack uses (see tagTones.js/TagStamp) — a milestone or tier
    badge sets --rank-color/--rank-ink inline from its own tier name. */
 
+/* Title + "N to Rank" stat, stacked (not side-by-side) by default — at
+   mobile widths, "Leadership Rank — IRON" and "40 to Bronze" sharing one
+   row under justify-content:space-between left too little room for the
+   title, wrapping it to two lines while the stat sat isolated on the
+   first. Stacked, the title gets the card's full width to itself.
+   Restored to one row only at the same 860px breakpoint the rest of this
+   file uses for desktop-only treatments, where the wider hero card (and
+   Certificate/admin panel) has room for both side by side. */
+.rank-progress-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+@media (min-width: 860px) {
+  .rank-progress-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    text-align: left;
+    gap: 12px;
+  }
+}
+
 .rank-progress-track {
   position: relative;
   width: 100%;
@@ -4760,6 +4985,14 @@ button.data-row:active:not(:disabled) {
   background: var(--paper-well);
   overflow: hidden;
   margin: 1rem 0 2rem;
+}
+/* Same fix as .home-hero-panel's own override below, now needed here too:
+   mobile Home's ProgressCard sits inside .home-content, whose own
+   background is this exact same --paper-well — without this, the track's
+   empty portion was camouflaged against its own card instead of reading
+   as an unfilled track behind the --accent fill. */
+.home-content .rank-progress-track {
+  background: var(--paper);
 }
 .rank-progress-fill {
   position: absolute;
@@ -4823,9 +5056,20 @@ button.data-row:active:not(:disabled) {
    ordinary page-level floating widgets, but still stays well under real
    modals/lightboxes (30-60 elsewhere in this file). */
 .notification-banner {
-  position: relative;
+  /* Floats on top of the illustration now instead of pushing it down —
+     absolute against #root (the nearest positioned ancestor; this is a
+     sibling of .home-page, not a descendant, so it anchors there
+     regardless of .home-page's own transform, see this rule's own
+     comment above on why it has to be a sibling in the first place).
+     Full-bleed (same width:100vw + negative-margin pair .home-scene/
+     .home-content already use below, not #root's own padded content
+     width), with a gap held off the true top edge instead of sitting
+     flush against it. Covering part of the illustration underneath is
+     an accepted tradeoff, not a bug. */
+  position: absolute;
+  top: 1rem;
+  width: 90vw;
   z-index: 20;
-  margin-bottom: 16px;
 }
 .notification-banner-close {
   position: absolute;
@@ -4876,13 +5120,29 @@ button.data-row:active:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: url('/brand/bg.png') center 55% / cover no-repeat;
+  /* bg.png has a genuinely transparent margin along its own top edge
+     (~17px of its 1080px height, confirmed by sampling the file directly
+     — not a layout gap) — on most phone aspect ratios .home-scene's own
+     42vh height ends up the limiting dimension for `cover`, so the whole
+     image height renders with no vertical crop room to push that margin
+     out of view. This background-color sits behind it and matches the
+     sky's own top color, so the sliver blends into the sky seamlessly
+     instead of showing page background through it. */
+  background: rgb(210, 232, 237) url('/brand/bg.png') center 55% / cover no-repeat;
 }
 /* Everything below the illustrated banner — the greeting (moved down here
    from over the image, see Home.jsx) through the rank card — on a plain
    solid fill instead, matching the reference layout this is modeled on. */
 .home-content {
   background: var(--paper-well);
+  /* Same full-bleed breakout as .home-scene above (width:100vw + a
+     negative-margin pair centered on 50vw) — without it, #root's own
+     16px horizontal padding left a gutter down both sides instead of
+     this card actually reaching the true screen edges the way the
+     illustration above it already does. */
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
   /* Rounded top corners, pulled up to overlap .home-scene's own bottom
      edge (negative margin) rather than just butting flush against it —
      reads as a rounded card tucked in behind/under the illustration, not
@@ -4891,6 +5151,14 @@ button.data-row:active:not(:disabled) {
      paints on top of the overlapped strip without needing one. */
   margin-top: -24px;
   border-radius: 24px 24px 0 0;
+  /* Grows to fill whatever's left of .home-page's own min-height:100vh
+     after .home-scene's fixed 42vh, so this card's own fill reaches the
+     true bottom edge instead of stopping short and revealing a strip of
+     .home-page's plain --paper underneath (its old margin-bottom did
+     exactly that, so it's gone now). Shorter-than-viewport content just
+     means more of this flex-grown box is empty fill below it; taller
+     content still grows the whole page and scrolls, same as before. */
+  flex: 1;
   /* Bottom-nav clearance lives here now, not on #root (see
      #root:has(.home-scene) above) — the background still paints all the
      way to the true bottom edge, but the actual content stops short of
@@ -4906,7 +5174,25 @@ button.data-row:active:not(:disabled) {
      without scrolling; desktop keeps the roomier original padding since
      it isn't the width mobile users are stuck scrolling on. */
   padding: 24px 20px 20px;
-  margin-bottom: 16px;
+}
+/* More breathing room around the greeting specifically, on top of
+   .home-content's own outer padding/gap above — scoped to this card
+   (not .home-greeting-text generally) so the desktop hero's own
+   greeting, which lives in .home-hero-card instead, is untouched. */
+.home-content .home-greeting-text {
+  padding: 10px 0;
+}
+/* .home-content's own align-items:center (needed so .home-greeting-text's
+   short block of text reads centered) has a side effect on ProgressCard's
+   .ink-card: centered flex children size to their own content by default,
+   not the container's width, so the whole card (title row, progress bar,
+   milestones — everything inside it uses width:100%/full-row layouts that
+   only mean something once the card itself is actually full width) was
+   shrinking to whatever its widest line happened to need, then floating
+   centered with equal gaps on both sides instead of filling the card.
+   align-self:stretch overrides just this one child back to full width. */
+.home-content .ink-card {
+  align-self: stretch;
 }
 @media (min-width: 860px) {
   .home-greeting {
@@ -5030,8 +5316,10 @@ button.data-row:active:not(:disabled) {
      body-overflow effect), so .home-hero-card below scrolls internally if
      its content ever needs more room than this height allows, rather than
      the page growing a scrollbar around it. No padding/background of its
-     own — it's purely a sizing wrapper now; .home-hero-card is the only
-     visible surface. */
+     own beyond what [data-frame] adds (see Home.jsx — data-frame lives
+     here, not on .home-hero-card, precisely because .home-hero-card is
+     the one that scrolls; see the game-frame section's own comment on
+     why those two can never be the same element). */
   height: 78vh;
 }
 /* The one visible card surface — no separate outer frame around it
@@ -5047,7 +5335,12 @@ button.data-row:active:not(:disabled) {
    regardless. Same soft floating-card shadow .quest-filter-popover
    already uses elsewhere in this file (0 8px 24px var(--shadow)), not a
    new shadow style invented for this one panel — without it, the
-   flat-color card just cuts off hard against the illustrated background. */
+   flat-color card just cuts off hard against the illustrated background.
+   box-shadow also folds in --game-frame-ring (a real, always-defined
+   value here — .home-hero-panel, this card's own parent, always carries
+   data-frame='cozy', see Home.jsx): a plain second box-shadow rule would
+   just overwrite this one instead of adding to it, so the drop shadow
+   and the frame's inset rings have to share this one declaration. */
 .home-hero-card {
   height: 100%;
   display: flex;
@@ -5058,7 +5351,9 @@ button.data-row:active:not(:disabled) {
   overflow-y: auto;
   border-radius: var(--radius-xl);
   background: var(--paper-card);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow:
+    var(--game-frame-ring, inset 0 0 0 0 transparent),
+    0 8px 24px var(--shadow);
 }
 /* Left-aligned here, unlike the base rule's centered default — everything
    else in .home-hero-card reads left-to-right (quick actions, rank card),
@@ -5085,9 +5380,11 @@ button.data-row:active:not(:disabled) {
    game-UI quick-slots (bordered, hard offset shadow, gold accent glow +
    press-down feedback) stacked top-right, floating independent of scroll
    — top bar is a bottom tab bar here, so that corner is free. Desktop
-   renders this same component inside .home-hero-panel instead (see its
-   own rules below), in-flow rather than floating, so there's no
-   min-width:860px variant of *this* block anymore. */
+   renders this same component inside .home-hero-card instead, in-flow
+   rather than floating (see the .home-hero-card-scoped rules below) — this
+   base rule's position:fixed only ever applies to the mobile HUD in
+   practice, since the desktop render is always reached through that
+   descendant selector's own position:static override instead. */
 .home-quick-actions {
   position: fixed;
   top: 16px;
@@ -5144,59 +5441,78 @@ button.data-row:active:not(:disabled) {
     transform: none;
   }
 }
-@media (min-width: 860px) {
-  /* Desktop swaps the mobile icon-only quick-slots for a floaty list
-     panel — no outer border or shadow, just a soft fill and hairline
-     dividers between rows, rather than three separate chunky buttons;
-     there's room here for labels to just sit readable next to their icon
-     instead of needing a game-HUD slot to read at a glance. */
-  .home-quick-actions {
-    top: 50%;
-    right: -10%;
-    transform: translateY(-50%);
-    gap: 0;
-    min-width: auto;
-    border-radius: var(--radius-lg);
-    background-color: var(--paper-card);
-    padding: 6px;
-  }
-  .home-quick-action {
-    width: auto;
-    height: auto;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 14px 16px;
-    border: none;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    transform: none;
-  }
-  .home-quick-action:not(:last-child) {
-    border-bottom: 1px solid var(--border);
-  }
-  /* The base (mobile) :hover/:active rules above set their own box-shadow
-     and transform for the game-HUD slot look — same selector, same
-     specificity, so without explicitly zeroing those two properties here
-     they'd still win (a later rule only overrides the properties it
-     actually declares, not the whole previous rule), leaving the flat
-     desktop list panel with a leftover chunky-button lift/shadow on
-     hover/press. */
-  .home-quick-action:hover,
-  .home-quick-action:active {
-    box-shadow: none;
-    transform: none;
-  }
-  .home-quick-action:hover {
-    background: var(--paper-well);
-  }
-  .home-quick-action-label {
-    display: inline;
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 0.9rem;
-    white-space: nowrap;
-  }
+/* Desktop swaps the mobile icon-only quick-slots for a flat, in-flow list
+   panel — no outer border/shadow/fixed positioning, just a soft fill and
+   hairline dividers between rows, rather than three separate floating
+   chunky buttons; there's room here for labels to just sit readable next
+   to their icon instead of needing a game-HUD slot to read at a glance.
+   Scoped to .home-hero-card (the only place this ever renders on
+   desktop — see Home.jsx's isDesktop branch), not a min-width media
+   query: this used to be width-gated, but the base rule's own
+   position:fixed/top/right still applied underneath it regardless of
+   viewport width, so the panel rendered fixed at this rule's old
+   top:50%/right:-10% instead of in-flow inside the hero card the way
+   Home.jsx actually nests it. Overriding position/top/right here instead
+   (keyed off the ancestor this only ever appears inside) removes it from
+   that fixed layer entirely, at any width.
+   align-items:stretch overrides the generic `nav { align-items: center }`
+   rule elsewhere in this file (for the settings/admin-data dashboard nav
+   bar) — harmless on the mobile HUD, where each icon slot is a fixed
+   46x46 square regardless of alignment, but it left each row here
+   shrink-wrapped and centered instead of stretched to the panel's full
+   width, so the hairline dividers only spanned a row's own content
+   instead of the whole card. */
+.home-hero-card .home-quick-actions {
+  position: static;
+  top: auto;
+  right: auto;
+  align-items: stretch;
+  gap: 0;
+  border-radius: var(--radius-lg);
+  background-color: var(--paper-card);
+  padding: 6px;
+}
+.home-hero-card .home-quick-action {
+  width: auto;
+  height: auto;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+.home-hero-card .home-quick-action:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+/* The base (mobile) :hover/:active rules above set their own box-shadow
+   and transform for the game-HUD slot look — same selector, same
+   specificity, so without explicitly zeroing those two properties here
+   they'd still win (a later rule only overrides the properties it
+   actually declares, not the whole previous rule), leaving the flat
+   desktop list panel with a leftover chunky-button lift/shadow on
+   hover/press. */
+.home-hero-card .home-quick-action:hover,
+.home-hero-card .home-quick-action:active {
+  box-shadow: none;
+  transform: none;
+}
+/* --paper, not --paper-well: this panel's own background is --paper-card
+   (see .home-hero-card .home-quick-actions above), and --paper-well is
+   literally the same color as --paper-card in light mode — hovering
+   "worked" (the rule applied) but was invisible there. --paper is
+   distinct from --paper-card in both themes, so this actually shows. */
+.home-hero-card .home-quick-action:hover {
+  background: var(--paper);
+}
+.home-hero-card .home-quick-action-label {
+  display: inline;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 /* Check in/My quests/Last quest — a compact horizontal row of equally-
@@ -5294,13 +5610,14 @@ button.data-row:active:not(:disabled) {
 }
 
 .rank-certificate-banner {
+  /* border/border-radius come from [data-frame] (see ProgressCard.jsx)
+     — declaring them here too would win the cascade (this rule is
+     declared later in the file) and hide/mismatch the frame's own. */
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
   padding: 12px 16px;
   /* This is the "you did it, go get your certificate" moment — it was
      sitting only 4px under the rank milestones above it, closer than any
@@ -5364,10 +5681,11 @@ button.data-row:active:not(:disabled) {
   gap: 16px;
 }
 .landing-note {
+  /* border/border-radius come from [data-frame] (see Landing.jsx) —
+     declaring them here too would win the cascade (this rule is
+     declared later in the file) and hide/mismatch the frame's own — same
+     reason box-shadow isn't set to `none` here either. */
   background: var(--paper-card);
-  border: 2.4px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: none;
   padding: 14px 18px 16px;
   display: flex;
   flex-direction: column;
@@ -5994,9 +6312,17 @@ button.data-row:active:not(:disabled) {
   z-index: 2;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  border: 2px solid var(--border);
-  overflow-y: auto;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+/* The actual scrolling surface — kept off .events-map-detail-slot itself
+   (see the game-frame section's own comment on why [data-frame] and
+   overflow-y:auto can never share an element). */
+.events-map-detail-slot-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 /* Mobile: same fixed-bottom-nav clearance the list itself needs — the
    detail view's own content (its "View full quest details" button) was
@@ -6007,7 +6333,7 @@ button.data-row:active:not(:disabled) {
    actually wins — same specificity, so source order decides, and the base
    rule's shorthand `padding: 20px` would otherwise reset it back down. */
 @media (max-width: 859px) {
-  .events-map-detail-slot {
+  .events-map-detail-slot-scroll {
     padding-bottom: calc(20px + var(--nav-height));
   }
 }
@@ -6046,11 +6372,16 @@ button.data-row:active:not(:disabled) {
 }
 
 .journal-card {
-  position: relative;
-  border-radius: var(--radius-lg);
+  /* border/border-radius come from [data-frame] (see Journal.jsx) —
+     declaring them here too would win the cascade (this rule is
+     declared later in the file) and hide/mismatch the frame's own. Its
+     inset ring won't actually be visible here though — .journal-card-bg
+     is a full-bleed inset:0 photo with no padding to sit inside, so it
+     paints straight over the ring (a child always paints above its own
+     parent's border/box-shadow); only the outer line shows. box-shadow
+     itself also comes from [data-frame] now — a plain `none` here would
+     override it the same way a literal border/border-radius would. */
   overflow: hidden;
-  border: 2px solid var(--border);
-  box-shadow: none;
   aspect-ratio: 4 / 5;
   cursor: pointer;
   background: var(--paper-well);
@@ -6162,14 +6493,24 @@ button.data-row:active:not(:disabled) {
    card is what makes it morph from its grid position instead of just
    appearing centered. */
 .journal-expanded-card {
+  /* box-shadow comes from [data-frame] (see Journal.jsx) — a plain
+     `none` here would win the cascade (this rule is declared later in
+     the file) and hide the frame's own ring entirely. */
   position: relative;
   background: var(--paper-card);
   border-radius: var(--radius-lg);
-  box-shadow: none;
   width: min(560px, 100%);
   max-height: 85vh;
-  overflow-y: auto;
   padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+/* See .detail-modal-content-scroll's own comment — same reason this
+   can't just be overflow-y:auto directly on .journal-expanded-card. */
+.journal-expanded-card-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 /* Only the full reflection-viewing card (ExpandedJournalEntry) gets a tall
    floor — FeedbackRequestModal and ThumbnailPicker share the base class
