@@ -102,8 +102,8 @@ export function Certificate() {
       ? profile.certificateIssuedAt.toDate()
       : new Date();
     // --duck-mark-url holds a raw url(...) token (see style.css), not a
-    // value the browser resolves for us — same theme-aware asset DuckMark
-    // uses in Logo.jsx, just unwrapped here since canvas needs a plain path.
+    // value the browser resolves for us — same asset DuckMark uses in
+    // Logo.jsx, just unwrapped here since canvas needs a plain path.
     const duckUrlRaw = style.getPropertyValue('--duck-mark-url').trim();
     const duckUrlMatch = duckUrlRaw.match(/url\(["']?([^"')]+)["']?\)/);
     drawCertificate(canvasRef.current, {
@@ -111,7 +111,7 @@ export function Certificate() {
       issuedAt: issuedAt.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }),
       ink: style.getPropertyValue('--line').trim(),
       paper: style.getPropertyValue('--paper-card').trim(),
-      duckUrl: duckUrlMatch ? duckUrlMatch[1] : '/brand/duck-brown.png',
+      duckUrl: duckUrlMatch ? duckUrlMatch[1] : '/brand/logo-lockup.png',
     });
   }, [profile]);
 

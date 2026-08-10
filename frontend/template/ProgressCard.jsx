@@ -95,7 +95,7 @@ export function ProgressCard({ profile: profileProp }) {
       </div>
 
       {certificateIssued && (
-        <div className='rank-certificate-banner'>
+        <div className='rank-certificate-banner' data-frame='cozy'>
           <p style={{ margin: 0 }}>You&rsquo;ve been awarded a Diamond leadership certificate!</p>
           <Link to='/certificate'>
             <StampButton type='button' variant='primary'>

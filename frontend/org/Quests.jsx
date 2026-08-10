@@ -196,7 +196,7 @@ export function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) 
                 <IconTrash />
               </button>
               {deleteMenuOpen && (
-                <div className='delete-dropdown-menu' role='menu'>
+                <div className='delete-dropdown-menu' data-frame='cozy' role='menu'>
                   <button
                     type='button'
                     onClick={() => {
@@ -344,7 +344,7 @@ export function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) 
       {a.qrError && <p className='box-danger'>{a.qrError}</p>}
       {a.qrOpen && a.qr && (
         <LightboxBackdrop onClose={a.viewQr} label='Event check-in QR code'>
-          <div className='ink-card qr-modal-content' onClick={(e) => e.stopPropagation()}>
+          <div className='ink-card qr-modal-content' data-frame='cozy' onClick={(e) => e.stopPropagation()}>
             <img src={a.qr} alt='Event check-in QR code' className='qr-modal-image' />
             <p className='data-stat'>Attendees scan this from the app's Check In screen.</p>
             <div className='flex gap-sm' style={{ marginTop: 10, justifyContent: 'center' }}>
@@ -370,7 +370,7 @@ export function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) 
           onClose={() => setConfirmingRefresh(false)}
           label='Confirm regenerate QR code'
         >
-          <div className='qr-modal-content' onClick={(e) => e.stopPropagation()}>
+          <div className='qr-modal-content' data-frame='cozy' onClick={(e) => e.stopPropagation()}>
             <ConfirmBox
               message="This invalidates the current code — anyone with the old one (printed, screenshotted, still on a poster) won't be able to check in with it anymore."
               confirmLabel={a.qrBusy ? 'Working…' : 'Yes, regenerate'}
@@ -389,36 +389,39 @@ export function QuestSeriesDetailPane({ series, onChanged, showTitle = false }) 
         <LightboxBackdrop onClose={a.toggleAttendees} label='Attendees'>
           <div
             className='ink-card detail-modal-content quest-attendees-modal'
+            data-frame='cozy'
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: '0 0 18px' }}>Attendees</h3>
-            {a.attendees.length === 0 ? (
-              <p className='field-optional'>No RSVPs yet.</p>
-            ) : (
-              // A grid of centered cards rather than QuestReviewsList's own
-              // left-aligned rows (see .map-review-* in style.css) — that
-              // row layout left a lot of dead space once this modal grew
-              // wider than the shared .detail-modal-content default (see
-              // .quest-attendees-modal); a name/email/status pill has no
-              // long body text underneath it the way a review does, so a
-              // compact centered card reads faster at a glance and actually
-              // uses the extra width instead of just padding a single
-              // column out.
-              <div className='attendee-grid'>
-                {a.attendees.map((att) => (
-                  <div key={att.uid} className='attendee-card'>
-                    <div className='attendee-card-avatar'>
-                      <OrgAvatar name={att.name || 'Unnamed'} seed={att.uid} />
+            <div className='detail-modal-content-scroll'>
+              <h3 style={{ margin: '0 0 18px' }}>Attendees</h3>
+              {a.attendees.length === 0 ? (
+                <p className='field-optional'>No RSVPs yet.</p>
+              ) : (
+                // A grid of centered cards rather than QuestReviewsList's own
+                // left-aligned rows (see .map-review-* in style.css) — that
+                // row layout left a lot of dead space once this modal grew
+                // wider than the shared .detail-modal-content default (see
+                // .quest-attendees-modal); a name/email/status pill has no
+                // long body text underneath it the way a review does, so a
+                // compact centered card reads faster at a glance and actually
+                // uses the extra width instead of just padding a single
+                // column out.
+                <div className='attendee-grid'>
+                  {a.attendees.map((att) => (
+                    <div key={att.uid} className='attendee-card'>
+                      <div className='attendee-card-avatar'>
+                        <OrgAvatar name={att.name || 'Unnamed'} seed={att.uid} />
+                      </div>
+                      <p className='attendee-card-name'>{att.name || 'Unnamed'}</p>
+                      {att.email && <p className='attendee-card-email'>{att.email}</p>}
+                      <StatusStamp tone='environment' muted={att.status !== 'checked_in'}>
+                        {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
+                      </StatusStamp>
                     </div>
-                    <p className='attendee-card-name'>{att.name || 'Unnamed'}</p>
-                    {att.email && <p className='attendee-card-email'>{att.email}</p>}
-                    <StatusStamp tone='environment' muted={att.status !== 'checked_in'}>
-                      {att.status === 'checked_in' ? 'Checked in' : 'Not checked in'}
-                    </StatusStamp>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </LightboxBackdrop>
       )}
@@ -544,6 +547,7 @@ function OrgQuests({ creating, setCreating }) {
           <AnimatePresence>
             <motion.section
               className='ink-card'
+              data-frame='cozy'
               style={{ marginBottom: 16, overflow: 'hidden' }}
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
@@ -599,17 +603,19 @@ function OrgQuests({ creating, setCreating }) {
       </div>
 
       {isDesktop && (
-        <div className='ink-card quest-detail-pane'>
-          {creating ? (
-            <div className='quest-card-body'>{createForm}</div>
-          ) : activeSeries ? (
-            <QuestSeriesDetailPane series={activeSeries} onChanged={load} showTitle />
-          ) : (
-            <div className='quest-detail-empty'>
-              <DuckMark size={56} />
-              <p>Select a quest to see its details.</p>
-            </div>
-          )}
+        <div className='ink-card quest-detail-pane' data-frame='cozy'>
+          <div className='quest-detail-pane-scroll'>
+            {creating ? (
+              <div className='quest-card-body'>{createForm}</div>
+            ) : activeSeries ? (
+              <QuestSeriesDetailPane series={activeSeries} onChanged={load} showTitle />
+            ) : (
+              <div className='quest-detail-empty'>
+                <DuckMark size={56} />
+                <p>Select a quest to see its details.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

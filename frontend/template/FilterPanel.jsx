@@ -106,11 +106,13 @@ export function DesktopFilterPopover({ children }) {
 export function MobileFilterSheet({ onClose, children }) {
   return (
     <LightboxBackdrop onClose={onClose} label="Filters">
-      <div className="quest-filter-sheet" onClick={(e) => e.stopPropagation()}>
-        {children}
-        <StampButton type="button" variant="primary" style={{ width: '100%' }} onClick={onClose}>
-          Done
-        </StampButton>
+      <div className="quest-filter-sheet" data-frame="cozy" onClick={(e) => e.stopPropagation()}>
+        <div className="quest-filter-sheet-scroll">
+          {children}
+          <StampButton type="button" variant="primary" style={{ width: '100%' }} onClick={onClose}>
+            Done
+          </StampButton>
+        </div>
       </div>
     </LightboxBackdrop>
   );

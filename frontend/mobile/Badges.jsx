@@ -81,7 +81,7 @@ function BadgesBody({ earned, inProgress, undiscovered, newIds, isDesktop }) {
         <TopBar title="Badges" />
       )}
 
-      <section className="ink-card" style={{ marginBottom: 16 }}>
+      <section className="ink-card" data-frame="cozy" style={{ marginBottom: 16 }}>
         <p className="badge-section-title">Earned</p>
         {earned.length > 0 ? (
           <div className="badges-row">

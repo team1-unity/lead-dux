@@ -517,8 +517,8 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
           {/* No outer ink-card here — `content` already supplies its own
               (see above), and nesting two would double the border/padding.
               This wrapper is just the modal's sizing/scroll constraint. */}
-          <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
-            {content}
+          <div className='detail-modal-content' data-frame='cozy' onClick={(e) => e.stopPropagation()}>
+            <div className='detail-modal-content-scroll'>{content}</div>
           </div>
         </LightboxBackdrop>
       )}
@@ -870,7 +870,7 @@ export function QuestDetailBody({
       )}
       <p className='quest-description'>{primary.description}</p>
       {gate && (
-        <p className='side-quest-gate' id={`${selected.id}-gate`} role='status'>
+        <p className='side-quest-gate' data-frame='cozy' id={`${selected.id}-gate`} role='status'>
           <IconLock /> {gate.message}
         </p>
       )}
@@ -965,18 +965,22 @@ export function QuestDetailBody({
           is needed here beyond opening/closing the modal itself. */}
       {!primary.isDefault && isRsvpd && checkedIn && reviewModalOpen && (
         <LightboxBackdrop onClose={() => setReviewModalOpen(false)} label='Review'>
-          <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
-            <QuestReview questId={selected.id} onSubmitted={() => setHasReview(true)} />
+          <div className='detail-modal-content' data-frame='cozy' onClick={(e) => e.stopPropagation()}>
+            <div className='detail-modal-content-scroll'>
+              <QuestReview questId={selected.id} onSubmitted={() => setHasReview(true)} />
+            </div>
           </div>
         </LightboxBackdrop>
       )}
       {!primary.isDefault && isRsvpd && checkedIn && requestFeedbackOpen && (
         <LightboxBackdrop onClose={() => setRequestFeedbackOpen(false)} label='Request feedback'>
-          <div className='detail-modal-content' onClick={(e) => e.stopPropagation()}>
-            <RequestFeedbackForm
-              questId={selected.id}
-              onRequested={() => setFeedbackRequestStatus('pending')}
-            />
+          <div className='detail-modal-content' data-frame='cozy' onClick={(e) => e.stopPropagation()}>
+            <div className='detail-modal-content-scroll'>
+              <RequestFeedbackForm
+                questId={selected.id}
+                onRequested={() => setFeedbackRequestStatus('pending')}
+              />
+            </div>
           </div>
         </LightboxBackdrop>
       )}
@@ -1796,24 +1800,26 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
       </div>
 
       {isDesktop && (
-        <div className='ink-card quest-detail-pane'>
-          {activeSeries ? (
-            <QuestDetailBody
-              series={activeSeries}
-              userId={user?.uid}
-              canRsvp={role === 'user'}
-              busyId={busyId}
-              onToggleRsvp={toggleRsvp}
-              gate={sideQuestGate(activeSeries.primary, sideQuestStatus)}
-              onGoToOrgQuests={() => setSegment('org')}
-              showTitle
-            />
-          ) : (
-            <div className='quest-detail-empty'>
-              <DuckMark size={56} />
-              <p>Select a quest to see its details.</p>
-            </div>
-          )}
+        <div className='ink-card quest-detail-pane' data-frame='cozy'>
+          <div className='quest-detail-pane-scroll'>
+            {activeSeries ? (
+              <QuestDetailBody
+                series={activeSeries}
+                userId={user?.uid}
+                canRsvp={role === 'user'}
+                busyId={busyId}
+                onToggleRsvp={toggleRsvp}
+                gate={sideQuestGate(activeSeries.primary, sideQuestStatus)}
+                onGoToOrgQuests={() => setSegment('org')}
+                showTitle
+              />
+            ) : (
+              <div className='quest-detail-empty'>
+                <DuckMark size={56} />
+                <p>Select a quest to see its details.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -507,22 +507,24 @@ function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
       />
       {modalOpen && (
         <LightboxBackdrop onClose={closeModal} label="Upload image">
-          <div className="detail-modal-content" onClick={(e) => e.stopPropagation()}>
-            <ImageUploadCard
-              key={uploadKey}
-              title="Upload image"
-              accept={ORG_PHOTO_CONTENT_TYPES.join(',')}
-              onUpload={(url, file) => setPickedFile(file)}
-              onRemove={() => setPickedFile(null)}
-            />
-            {error && <p className="box-danger">{error}</p>}
-            <div className="flex gap-sm" style={{ marginTop: 12 }}>
-              <StampButton type="button" variant="primary" onClick={handleUpload} disabled={!pickedFile || uploading}>
-                {uploading ? 'Uploading…' : 'Upload'}
-              </StampButton>
-              <StampButton type="button" onClick={closeModal} disabled={uploading}>
-                Cancel
-              </StampButton>
+          <div className="detail-modal-content" data-frame="cozy" onClick={(e) => e.stopPropagation()}>
+            <div className="detail-modal-content-scroll">
+              <ImageUploadCard
+                key={uploadKey}
+                title="Upload image"
+                accept={ORG_PHOTO_CONTENT_TYPES.join(',')}
+                onUpload={(url, file) => setPickedFile(file)}
+                onRemove={() => setPickedFile(null)}
+              />
+              {error && <p className="box-danger">{error}</p>}
+              <div className="flex gap-sm" style={{ marginTop: 12 }}>
+                <StampButton type="button" variant="primary" onClick={handleUpload} disabled={!pickedFile || uploading}>
+                  {uploading ? 'Uploading…' : 'Upload'}
+                </StampButton>
+                <StampButton type="button" onClick={closeModal} disabled={uploading}>
+                  Cancel
+                </StampButton>
+              </div>
             </div>
           </div>
         </LightboxBackdrop>
@@ -768,7 +770,7 @@ export function OrganizationProfile() {
         </section>
       </div>
 
-      <section className="ink-card" style={{ marginTop: 16 }}>
+      <section className="ink-card org-profile-photos" style={{ marginTop: 16 }}>
         <h2 style={{ margin: '0 0 12px' }}>Community Photos</h2>
         <OrgPhotoGallery
           orgId={orgId}

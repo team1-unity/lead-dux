@@ -126,6 +126,7 @@ function TourCard({ slide, Icon, children }) {
     <motion.div
       key={slide.title}
       className="ink-card tour-card"
+      data-frame="cozy"
       initial={reduce ? false : { opacity: 0, y: 12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
