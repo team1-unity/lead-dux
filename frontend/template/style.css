@@ -2100,16 +2100,7 @@ button.quest-card-head:hover:not(:disabled) {
   height: 100%;
   border-radius: var(--radius-full);
   border: none;
-  background: var(--tag-color, var(--paper-well));
-  color: var(--tag-ink, var(--line));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 1.15rem;
-  /* Only applies once <OrgAvatar logoUrl> renders an <img> instead of the
-     letter tile above — harmless no-op on the non-replaced div case. */
+  background: var(--paper-well);
   object-fit: cover;
 }
 

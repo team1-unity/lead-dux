@@ -1,18 +1,68 @@
 // The 9 pastel ink-rack tones (style.css --tag-*), shared wherever
 // something needs to either display a specific tag's color (TagStamp) or
-// deterministically pick ONE of the 9 from an arbitrary string (OrgAvatar).
+// deterministically pick ONE of the 9 from an arbitrary string.
 export const TAG_TONES = [
   'community', 'education', 'environment', 'outdoors', 'technology',
   'youth', 'fitness', 'food-security', 'arts',
 ];
 
-export function hashTone(seed) {
+function hashString(seed) {
   const s = String(seed ?? '');
   let h = 0;
   for (let i = 0; i < s.length; i++) {
     h = (h * 31 + s.charCodeAt(i)) >>> 0;
   }
-  return TAG_TONES[h % TAG_TONES.length];
+  return h;
+}
+
+export function hashTone(seed) {
+  return TAG_TONES[hashString(seed) % TAG_TONES.length];
+}
+
+// OrgAvatar's duck-mascot fallback, pre-rendered once per body color —
+// beak/feet/eyes/outline are pixel-identical across every file; only the
+// head/torso/wings hue changes. 18 hues evenly spaced 20° apart around the
+// full wheel (starting from the original mustard's own hue), each kept at
+// that same hue's natural pastel saturation/lightness rather than a flat
+// fill — a warm-only palette (see git history) only had room for about 4
+// hues before two became too close to tell apart; going pastel-but-full-
+// wheel is what actually makes "a lot of distinguishable colors" possible.
+export const DUCK_AVATAR_VARIANTS = [
+  '/brand/duck-avatar.png',
+  '/brand/duck-avatar-2.png',
+  '/brand/duck-avatar-3.png',
+  '/brand/duck-avatar-4.png',
+  '/brand/duck-avatar-5.png',
+  '/brand/duck-avatar-6.png',
+  '/brand/duck-avatar-7.png',
+  '/brand/duck-avatar-8.png',
+  '/brand/duck-avatar-9.png',
+  '/brand/duck-avatar-10.png',
+  '/brand/duck-avatar-11.png',
+  '/brand/duck-avatar-12.png',
+  '/brand/duck-avatar-13.png',
+  '/brand/duck-avatar-14.png',
+  '/brand/duck-avatar-15.png',
+  '/brand/duck-avatar-16.png',
+  '/brand/duck-avatar-17.png',
+  '/brand/duck-avatar-18.png',
+];
+
+// Pure-hash fallback for a duck avatar with no assigned color (a member
+// reviewer's avatar in QuestReviewsList, say — there's no "organization"
+// to keep unique here, just a name/uid to pick something stable-looking
+// from). Real organizations should prefer duckAvatarByIndex instead, since
+// only a value assigned server-side (see main.py's _assign_duck_color_index)
+// can guarantee two orgs never end up with the same color.
+export function hashDuckAvatar(seed) {
+  return DUCK_AVATAR_VARIANTS[hashString(seed) % DUCK_AVATAR_VARIANTS.length];
+}
+
+// organizations/{uid}.duckColorIndex, assigned once at approval time (see
+// main.py's _assign_duck_color_index) so it's stable and unique across
+// orgs for as long as DUCK_AVATAR_VARIANTS has an unused slot to give it.
+export function duckAvatarByIndex(index) {
+  return DUCK_AVATAR_VARIANTS[index % DUCK_AVATAR_VARIANTS.length];
 }
 
 // Mirrors style.css's --tag-*/--tag-*-ink pairs — needed anywhere a tone

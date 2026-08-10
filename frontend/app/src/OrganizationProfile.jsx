@@ -533,11 +533,14 @@ function OrgPhotoGallery({ orgId, paths, canEdit, onPathsChange }) {
   );
 }
 
-function OrgQuestCard({ series }) {
+function OrgQuestCard({ series, orgId, orgName, orgLogoUrl, orgDuckColorIndex }) {
   const { primary } = series;
   const rsvpCount = (primary.rsvpd || []).length;
   return (
     <Link to={`/quests/${series.seriesId}`} className="ink-card org-quest-card">
+      <span className="quest-thumb" aria-hidden="true" style={{ marginBottom: 8 }}>
+        <OrgAvatar name={orgName} seed={orgId} logoUrl={orgLogoUrl} duckColorIndex={orgDuckColorIndex} />
+      </span>
       <p className="quest-title">{primary.title}</p>
       {primary.description && <p className="quest-card-description">{primary.description}</p>}
       <p className="data-stat">{rsvpCount} RSVP'd</p>
@@ -648,7 +651,7 @@ export function OrganizationProfile() {
         ) : org.logoUrl ? (
           <img src={org.logoUrl} alt="" className="org-profile-logo" />
         ) : (
-          <OrgAvatar name={org.name} seed={orgId} />
+          <OrgAvatar name={org.name} seed={orgId} duckColorIndex={org.duckColorIndex} />
         )}
         <div className="org-profile-header-info">
           <div className="flex items-center gap-sm">
@@ -763,7 +766,14 @@ export function OrganizationProfile() {
           ) : (
             <div className="org-quest-grid">
               {seriesList.map((series) => (
-                <OrgQuestCard key={series.seriesId} series={series} />
+                <OrgQuestCard
+                  key={series.seriesId}
+                  series={series}
+                  orgId={orgId}
+                  orgName={org.name}
+                  orgLogoUrl={org.logoUrl}
+                  orgDuckColorIndex={org.duckColorIndex}
+                />
               ))}
             </div>
           )}

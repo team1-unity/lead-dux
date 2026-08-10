@@ -84,6 +84,12 @@ def _require_admin(req: https_fn.CallableRequest):
 
 DEFAULT_EVENT_WINDOW_HOURS = 6  # used when a quest has no explicit end time
 
+# Must match frontend/template/tagTones.js's DUCK_AVATAR_VARIANTS.length —
+# kept in sync by hand, same as TONE_HEX/style.css already are (see that
+# file's own note). This is the fixed warm-pastel duck-mascot palette
+# organizations without a logoUrl fall back to (see OrgAvatar.jsx).
+DUCK_AVATAR_COLOR_COUNT = 18
+
 # The event QR encodes a real URL (see _make_qr_data_uri) rather than a raw
 # JSON payload, specifically so it's scannable by a phone's own native
 # camera app, not just this app's in-app scanner (QuestScanner.jsx) —
@@ -879,6 +885,38 @@ def submit_organization_request(req: https_fn.CallableRequest) -> dict:
     return {"success": True, "role": "pending_org"}
 
 
+# Assigns each organization a stable index into DUCK_AVATAR_COLOR_COUNT
+# colors — which of the frontend's fixed DUCK_AVATAR_VARIANTS (see
+# tagTones.js) its duck-mascot avatar uses whenever it has no logoUrl.
+# Idempotent by uid: an org that's already been assigned one keeps it
+# (so re-running the demo seeder never reshuffles anyone's color) — only a
+# uid with no organizations/{uid} doc yet, or one whose doc predates this
+# field, gets a fresh pick: whichever index the fewest current
+# organizations hold (ties broken toward the lowest index). While any slot
+# is still completely unused its count is 0, so it always wins first,
+# handing out 0..DUCK_AVATAR_COLOR_COUNT-1 in order with no two orgs ever
+# sharing one. Once every slot has at least one org on it, uniqueness isn't
+# possible with a fixed palette this size — but the
+# least-used slot still keeps overflow assignments spread as evenly as
+# possible instead of all colliding on one color (an earlier version of
+# this picked the fallback from the org doc *count*, which doesn't change
+# when re-assigning an *existing* org, silently handing every overflow org
+# calling it in the same run the identical index).
+def _assign_duck_color_index(db, uid: str) -> int:
+    org_snap = db.collection("organizations").document(uid).get()
+    if org_snap.exists:
+        current = org_snap.to_dict().get("duckColorIndex")
+        if current is not None:
+            return current
+
+    counts = [0] * DUCK_AVATAR_COLOR_COUNT
+    for doc in db.collection("organizations").stream():
+        idx = doc.to_dict().get("duckColorIndex")
+        if idx is not None:
+            counts[idx % DUCK_AVATAR_COLOR_COUNT] += 1
+    return counts.index(min(counts))
+
+
 # Callable from the admin dashboard's "pending organization requests" list.
 # Admin-gated for the same reason set_user_role is: it can grant a role to
 # an arbitrary uid, so it can't be left open to just anyone.
@@ -903,6 +941,7 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         )
 
     request_data = req_snap.to_dict()
+    duck_color_index = _assign_duck_color_index(db, target_uid)
     db.collection("organizations").document(target_uid).set({
         "name": request_data.get("name"),
         "email": request_data.get("email"),
@@ -932,6 +971,7 @@ def approve_organization(req: https_fn.CallableRequest) -> dict:
         "contactEmail": None,
         "socialLinks": {},
         "photos": [],
+        "duckColorIndex": duck_color_index,
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })

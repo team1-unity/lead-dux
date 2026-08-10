@@ -139,6 +139,7 @@ export function BottomNav() {
   const [photoURL, setPhotoURL] = useState(null);
   const [duckSkin, setDuckSkin] = useState(null);
   const [orgLogoUrl, setOrgLogoUrl] = useState(null);
+  const [duckColorIndex, setDuckColorIndex] = useState(null);
   const [fabOpen, setFabOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   // Sticks true after the first open and never resets — lets the badges
@@ -177,7 +178,8 @@ export function BottomNav() {
 
   // Only fetched for roles that render an avatar (desktop only) — an
   // organization's own name and logo (see OrgAvatar — same logoUrl field
-  // its own OrganizationProfile.jsx page reads) from its org doc, a
+  // its own OrganizationProfile.jsx page reads) and its assigned duck
+  // color (see _assign_duck_color_index in main.py) from its org doc, a
   // member's own name and photo (for the image-or-duck avatar below — see
   // UserAvatar) from their user doc. Every other role never touches this.
   //
@@ -196,6 +198,7 @@ export function BottomNav() {
         const data = snap.exists() ? snap.data() : {};
         setDisplayName(data.name || '');
         setOrgLogoUrl(data.logoUrl || null);
+        setDuckColorIndex(data.duckColorIndex ?? null);
       });
     }
     if (role === 'user' || role === 'pending_org') {
@@ -385,7 +388,7 @@ export function BottomNav() {
                       truncation reads oddly leading into a picture instead
                       of following it. */}
                   <div className='nav-avatar'>
-                    <OrgAvatar name={displayName} seed={user.uid} logoUrl={orgLogoUrl} />
+                    <OrgAvatar name={displayName} seed={user.uid} logoUrl={orgLogoUrl} duckColorIndex={duckColorIndex} />
                   </div>
                   {showNameNextToAvatar && displayName && (
                     <span className='bottom-nav-org-name'>{displayName}</span>
@@ -400,7 +403,7 @@ export function BottomNav() {
                         here too. */}
                     <div className='bottom-nav-avatar-menu-header'>
                       <div className='nav-avatar'>
-                        <OrgAvatar name={displayName} seed={user.uid} logoUrl={orgLogoUrl} />
+                        <OrgAvatar name={displayName} seed={user.uid} logoUrl={orgLogoUrl} duckColorIndex={duckColorIndex} />
                       </div>
                       <div className='bottom-nav-avatar-menu-identity'>
                         <p className='bottom-nav-avatar-menu-name'>

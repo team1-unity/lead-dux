@@ -1,24 +1,27 @@
-import { hashTone } from './tagTones.js';
+import { hashDuckAvatar, duckAvatarByIndex } from './tagTones.js';
 
-// A bold colored initial tile — the "no logo yet" placeholder for a quest's
-// owning organization. This occupies the exact visual slot a real uploaded
-// org logo takes once one exists: pass `logoUrl` (organizations/{uid}.
-// logoUrl, see update_organization_profile) and this renders that instead —
-// falls back to the letter tile whenever it's omitted/null, so every
-// existing caller that doesn't know about logos yet keeps working unchanged.
-export function OrgAvatar({ name, seed, logoUrl }) {
-  if (logoUrl) {
-    return <img src={logoUrl} alt="" className="org-avatar" aria-hidden="true" />;
-  }
-  const tone = hashTone(seed ?? name);
-  const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+// The brand duck-avatar (frontend/app/public/brand/duck-avatar*.png) — the
+// "no logo yet" placeholder for a quest's owning organization. This
+// occupies the exact visual slot a real uploaded org logo takes once one
+// exists: pass `logoUrl` (organizations/{uid}.logoUrl, see
+// update_organization_profile) and this renders that instead. Falls back to
+// the duck whenever it's omitted/null: `duckColorIndex` (organizations/
+// {uid}.duckColorIndex, assigned once at approval time — see main.py's
+// _assign_duck_color_index) picks a color that's guaranteed unique across
+// orgs, for as long as the palette has an unused slot left to give. Callers
+// with no such org doc (a member reviewer's avatar in QuestReviewsList, for
+// instance — nothing to keep unique there) can omit it and get the old
+// pure-hash-from-seed color instead.
+export function OrgAvatar({ name, seed, logoUrl, duckColorIndex }) {
+  const duckSrc = typeof duckColorIndex === 'number'
+    ? duckAvatarByIndex(duckColorIndex)
+    : hashDuckAvatar(seed ?? name);
   return (
-    <div
+    <img
+      src={logoUrl || duckSrc}
+      alt=""
       className="org-avatar"
-      style={{ '--tag-color': `var(--tag-${tone})`, '--tag-ink': `var(--tag-${tone}-ink)` }}
       aria-hidden="true"
-    >
-      {initial}
-    </div>
+    />
   );
 }

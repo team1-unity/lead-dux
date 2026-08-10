@@ -72,9 +72,10 @@ export function groupBySeries(quests) {
 // add_quest_series_cover_photo) onto each series group. Series with neither
 // a review nor a cover photo yet have no questSeries doc at all, hence the
 // fallbacks. coverPhotos can hold any number of photos (an org adds as many
-// as it wants) — callers that just need one thumbnail (list cards) read
-// coverPhotos[0], falling back to the org's own logo the same way a single
-// cover photo already did.
+// as it wants) — shown in the quest details hero (mixed in alongside the
+// org's own Community Photos gallery, see HeroCarousel's callers), never on
+// list-card thumbnails, which always show the org's fixed logo/avatar
+// instead.
 export function attachSeriesRatings(groups, seriesDocsById) {
   return groups.map((group) => {
     const agg = seriesDocsById.get(group.seriesId);
@@ -120,17 +121,24 @@ export function getTrustStatus(reviewCount, avgRating) {
   return null;
 }
 
-// Merges each series' owning organization's uploaded logo (organizations/
-// {uid}.logoUrl, see update_organization_profile in functions/main.py) onto
-// the group — null for a default/neighborhood quest (no orgId) or an org
-// that hasn't uploaded one yet, same fallback shape as attachOrgTrustStatus
-// above. Callers pass orgLogoUrl straight to OrgAvatar, which falls back to
-// its own letter-tile placeholder whenever this comes back null.
-export function attachOrgLogos(groups, logoByOrgId) {
-  return groups.map((group) => ({
-    ...group,
-    orgLogoUrl: (group.primary.orgId && logoByOrgId.get(group.primary.orgId)) || null,
-  }));
+// Merges each series' owning organization's uploaded logo AND its assigned
+// duck-avatar color (organizations/{uid}.logoUrl/duckColorIndex — see
+// update_organization_profile and _assign_duck_color_index in
+// functions/main.py) onto the group — both null for a default/neighborhood
+// quest (no orgId) or an org this map doesn't have an entry for, same
+// fallback shape as attachOrgTrustStatus above. Callers pass orgLogoUrl/
+// orgDuckColorIndex straight to OrgAvatar, which falls back to its own
+// duck-mascot placeholder whenever orgLogoUrl comes back null.
+// `orgById` maps orgId -> { logoUrl, duckColorIndex }.
+export function attachOrgLogos(groups, orgById) {
+  return groups.map((group) => {
+    const org = group.primary.orgId ? orgById.get(group.primary.orgId) : null;
+    return {
+      ...group,
+      orgLogoUrl: org?.logoUrl || null,
+      orgDuckColorIndex: org?.duckColorIndex ?? null,
+    };
+  });
 }
 
 const FREQUENCY_LABELS = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };

@@ -40,10 +40,10 @@ export function paintQuestPin(el, seed, selected = false) {
   el.style.cursor = 'pointer';
 }
 
-// A bold colored pin per quest, echoing the same tone (via the same
-// hashTone(orgId) seed) as that quest's OrgAvatar tile elsewhere on this
-// page — the marker and the list row it corresponds to visibly match.
-// Built as a plain <div> painted with an SVG data-URI background rather
+// A bold colored pin per quest, its tone deterministically derived from the
+// same seed (orgId, or the series id for side quests) every time, so a
+// given org/quest always gets the same pin color across renders. Built as
+// a plain <div> painted with an SVG data-URI background rather
 // than an <img> or a Google-style icon descriptor object — MapLibre's
 // Marker takes any real DOM element directly (new maplibregl.Marker({
 // element })), so there's no separate icon-shape API to satisfy the way
