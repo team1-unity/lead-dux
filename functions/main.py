@@ -3411,6 +3411,40 @@ def submit_host_reflection(req: https_fn.CallableRequest) -> dict:
     return {"success": True}
 
 
+# Shared by list_quest_attendees (org-authenticated) and get_demo_org_view
+# (the unauthenticated demo route below) — resolving a quest's rsvpd uids
+# into names/emails/check-in status is the exact same read regardless of
+# who's asking, only the auth gate around it differs.
+def _list_attendees_for_quest(db, quest_id: str, quest: dict) -> list:
+    attendance_by_uid = {
+        doc.to_dict()["userId"]: doc.to_dict()
+        for doc in db.collection("attendance").where("eventId", "==", quest_id).stream()
+    }
+
+    # One batched read for every attendee's name/email, not one
+    # users/{uid}.get() per RSVP inside the loop below — a well-attended
+    # quest was doing one serial round-trip per attendee just to list them.
+    rsvpd_uids = quest.get("rsvpd", [])
+    users_by_uid = {}
+    if rsvpd_uids:
+        refs = [db.collection("users").document(uid) for uid in rsvpd_uids]
+        users_by_uid = {s.id: s.to_dict() for s in db.get_all(refs) if s.exists}
+
+    attendees = []
+    for uid in rsvpd_uids:
+        user_data = users_by_uid.get(uid, {})
+        attendance = attendance_by_uid.get(uid)
+        checked_in_at = attendance.get("checkedInAt") if attendance else None
+        attendees.append({
+            "uid": uid,
+            "name": user_data.get("name"),
+            "email": user_data.get("email"),
+            "status": "checked_in" if attendance else "rsvpd",
+            "checkedInAt": checked_in_at.isoformat() if checked_in_at else None,
+        })
+    return attendees
+
+
 # Callable from the org dashboard's "view attendees" button (own quests
 # only) and the admin dashboard (any quest). The client Firestore rules
 # only let a user read their OWN users/{uid} doc, so resolving a quest's
@@ -3443,34 +3477,7 @@ def list_quest_attendees(req: https_fn.CallableRequest) -> dict:
             "You can only view attendees for your own organization's quests.",
         )
 
-    attendance_by_uid = {
-        doc.to_dict()["userId"]: doc.to_dict()
-        for doc in db.collection("attendance").where("eventId", "==", quest_id).stream()
-    }
-
-    # One batched read for every attendee's name/email, not one
-    # users/{uid}.get() per RSVP inside the loop below — a well-attended
-    # quest was doing one serial round-trip per attendee just to list them.
-    rsvpd_uids = quest.get("rsvpd", [])
-    users_by_uid = {}
-    if rsvpd_uids:
-        refs = [db.collection("users").document(uid) for uid in rsvpd_uids]
-        users_by_uid = {s.id: s.to_dict() for s in db.get_all(refs) if s.exists}
-
-    attendees = []
-    for uid in rsvpd_uids:
-        user_data = users_by_uid.get(uid, {})
-        attendance = attendance_by_uid.get(uid)
-        checked_in_at = attendance.get("checkedInAt") if attendance else None
-        attendees.append({
-            "uid": uid,
-            "name": user_data.get("name"),
-            "email": user_data.get("email"),
-            "status": "checked_in" if attendance else "rsvpd",
-            "checkedInAt": checked_in_at.isoformat() if checked_in_at else None,
-        })
-
-    return {"attendees": attendees}
+    return {"attendees": _list_attendees_for_quest(db, quest_id, quest)}
 
 
 # Reviews ---------------------------------------------------------------
@@ -4256,4 +4263,427 @@ def delete_account(req: https_fn.CallableRequest) -> dict:
     db.collection("users").document(uid).delete()
     auth.delete_user(uid)
 
+    return {"success": True}
+
+
+# Demo showcase ---------------------------------------------------------
+#
+# Backs three no-login routes built for live presentations:
+#   - /demo-org  (frontend/app/src/DemoOrg.jsx)  — signs the visitor in as
+#     the fixed DGI org and drops them into the REAL /org dashboard.
+#   - /demo-stud (frontend/app/src/DemoStud.jsx) — signs the visitor in as
+#     the fixed Jordan Ortiz student and drops them into the REAL app at /.
+#   - /demo-ops  (frontend/app/src/DemoOps.jsx)  — the presenter's own
+#     backstage control screen (never signs in as anyone): shows the
+#     event's QR code, a live feed of RSVPs/check-ins as they happen, and
+#     the Seed/Reset controls.
+#
+# /demo-org and /demo-stud sign in via the client SDK's own
+# signInWithEmailAndPassword, straight against DEMO_ORG_EMAIL/
+# DEMO_STUDENT_EMAIL and the shared DEMO_PASSWORD (see frontend/template/
+# demoConfig.js) — no callable involved in signing in at all. An earlier
+# version of this minted a custom auth token server-side instead
+# (admin.auth().create_custom_token), but that has to sign the token via
+# the IAM signBlob API when running without a service account key (the
+# normal case in Cloud Functions), which the runtime service account isn't
+# granted by default — a project-level IAM change not worth requiring just
+# to log into two fixed, low-privilege demo accounts. Plain password
+# sign-in has no such dependency and needs nothing granted at all.
+#
+# The whole point is that /demo-org and /demo-stud don't need their own
+# bespoke UI at all — once signed in as the real account, the actual app
+# (real nav, real RSVP button, real Journal, real duck picker) just works,
+# because it IS the real app. That's a deliberate choice over hand-building
+# a lookalike: a hand-built copy can only ever approximate the real thing
+# and drifts the moment the real UI changes, where signing in as a real
+# (if fixed) account can't drift at all.
+#
+# Every function below is hardcoded to exactly one quest (DEMO_QUEST_ID),
+# one org (DEMO_ORG_EMAIL), and one student (_demo_student_uid()) — nothing
+# here ever takes an arbitrary questId/uid/email from the caller, so an
+# unauthenticated caller has no lever to pull against real data or any
+# other real account, only this one fixed showcase quest and its two fixed
+# personas.
+DEMO_QUEST_ID = "demo-dgi-twilight-sparkle-office-hours"
+DEMO_ORG_EMAIL = "dgi@lead-dux.app"
+DEMO_ORG_NAME = "Digital Girl Inc (DGI)"
+DEMO_QUEST_LOCATION = "882 3rd Ave, Brooklyn, NY 11215"
+# Approximate coordinates for the address above (Park Slope/Gowanus,
+# Brooklyn) — close enough for the map view; never run through a real
+# geocoder.
+DEMO_QUEST_LAT, DEMO_QUEST_LNG = 40.6746, -73.9862
+# Matches seed_demo_data.py's seed_users()'s name -> email derivation for
+# "Jordan Ortiz" (f"{name.lower().replace(' ', '.')}@{EMAIL_DOMAIN}") — kept
+# as an email lookup rather than a frozen uid because Firebase Auth assigns
+# that uid itself at account-creation time; there's no way to pin it in
+# advance.
+DEMO_STUDENT_EMAIL = "jordan.ortiz@lead-dux.app"
+DEMO_STUDENT_NAME = "Jordan Ortiz"
+# Same fixed password seed_demo_data.py issues every demo account — lets a
+# presenter log in as either the org or the student for real (outside these
+# no-auth demo routes) with known credentials. Keep in sync with that
+# script's own DEMO_PASSWORD.
+DEMO_PASSWORD = "password123"
+
+
+def _demo_student_uid() -> str:
+    try:
+        return auth.get_user_by_email(DEMO_STUDENT_EMAIL).uid
+    except auth.UserNotFoundError:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Demo data hasn't been seeded yet — use the Seed Demo Data button on /demo-ops (or this page).",
+        )
+
+
+def _ensure_demo_org(db) -> str:
+    try:
+        org_user = auth.get_user_by_email(DEMO_ORG_EMAIL)
+    except auth.UserNotFoundError:
+        org_user = auth.create_user(email=DEMO_ORG_EMAIL, password=DEMO_PASSWORD, display_name=DEMO_ORG_NAME)
+    auth.set_custom_user_claims(org_user.uid, {"role": "organization"})
+
+    duck_color_index = _assign_duck_color_index(db, org_user.uid)
+    db.collection("organizations").document(org_user.uid).set({
+        "name": DEMO_ORG_NAME,
+        "email": DEMO_ORG_EMAIL,
+        "phone": "(718) 555-0199",
+        "location": "Brooklyn, NY",
+        "reason": "A demo organization used to showcase Lead-Dux's check-in and journal flow.",
+        "ltag": [],
+        "etag": [],
+        "verified": True,
+        "logoUrl": None,
+        "category": "Education",
+        "missionStatement": "Empowering the next generation of girls in STEM leadership.",
+        "website": None,
+        "contactEmail": DEMO_ORG_EMAIL,
+        "socialLinks": {},
+        "photos": [],
+        "duckColorIndex": duck_color_index,
+        "reviewCount": 0,
+        "avgRating": 0,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }, merge=True)
+    return org_user.uid
+
+
+# Only ever writes users/{uid} on first creation — if seed_demo_data.py's
+# full seed_users() already ran, Jordan Ortiz has a much richer profile
+# (points, rank, quest history) than this bare-bones fallback would set,
+# and stomping it back to zero every time this button is pressed would
+# silently undo that. An already-existing account just gets its role claim
+# re-affirmed (harmless, idempotent) and is left otherwise untouched.
+def _ensure_demo_student(db) -> str:
+    try:
+        user = auth.get_user_by_email(DEMO_STUDENT_EMAIL)
+        auth.set_custom_user_claims(user.uid, {"role": "user"})
+        return user.uid
+    except auth.UserNotFoundError:
+        pass
+
+    user = auth.create_user(email=DEMO_STUDENT_EMAIL, password=DEMO_PASSWORD, display_name=DEMO_STUDENT_NAME)
+    auth.set_custom_user_claims(user.uid, {"role": "user"})
+    db.collection("users").document(user.uid).set({
+        "email": DEMO_STUDENT_EMAIL,
+        "name": DEMO_STUDENT_NAME,
+        "interests": ["community", "food-security"],
+        "accommodationNeeds": [],
+        "isSuspended": False,
+        "points": 0,
+        "rank": _rank_for_points(0),
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    })
+    return user.uid
+
+
+def _ensure_demo_quest(db, org_uid: str) -> str:
+    quest_ref = db.collection("quests").document(DEMO_QUEST_ID)
+    existing = quest_ref.get()
+    existing_data = existing.to_dict() if existing.exists else {}
+    # Keep whatever QR is already live across reseeds — same "mint once,
+    # never silently rotate" rule _quest_doc_fields documents above. A QR
+    # already pulled up on a second screen or printed for a rehearsal
+    # shouldn't stop working just because this ran again.
+    qr_fields = (
+        {"qrToken": existing_data["qrToken"], "qrTokenVersion": existing_data.get("qrTokenVersion", 0)}
+        if existing_data.get("qrToken")
+        else {"qrToken": secrets.token_urlsafe(24), "qrTokenVersion": 0}
+    )
+    quest_ref.set({
+        "title": "Twilight Sparkle Office Hours (Friendship is Magic)",
+        "description": "Drop-in office hours with Twilight Sparkle — bring your leadership questions, big ideas, or anything friendship-related.",
+        "tags": ["leadership", "mentorship"],
+        "location": DEMO_QUEST_LOCATION,
+        "placeId": None,
+        "lat": DEMO_QUEST_LAT,
+        "lng": DEMO_QUEST_LNG,
+        "accommodationTags": [],
+        "accommodationDetails": None,
+        "timezone": "America/New_York",
+        "capacity": None,
+        "seriesId": DEMO_QUEST_ID,
+        "recurrenceFrequency": None,
+        "recurrenceUntil": None,
+        # Reset to "right now" every time this runs, same as demo_reset_
+        # event — a freshly (re)seeded demo should never start with a
+        # closed check-in window.
+        "eventDate": datetime.now(timezone.utc),
+        "eventEndTime": None,
+        "orgId": org_uid,
+        "orgName": DEMO_ORG_NAME,
+        "isDefault": False,
+        "tier": None,
+        "rsvpd": [],
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        # What CheckInConfirm.jsx (frontend) checks to decide whether a
+        # scanned QR should hijack check-in to the demo student instead of
+        # whoever actually scanned it — see demo_check_in below.
+        "isDemoQuest": True,
+        **qr_fields,
+    }, merge=True)
+    return quest_ref.id
+
+
+# The single source of truth for "what does a freshly-seeded demo look
+# like" — called both by demo_seed_showcase (the no-auth callable behind
+# /demo-org's Seed/Reseed button) and seed_demo_data.py's seed_demo_
+# showcase (the CLI path), so the two never drift apart. Safe to call
+# repeatedly: every write here is either idempotent or explicitly
+# guarded against clobbering richer data written elsewhere (see
+# _ensure_demo_student).
+def _ensure_demo_showcase_data() -> dict:
+    db = firestore.client()
+    org_uid = _ensure_demo_org(db)
+    student_uid = _ensure_demo_student(db)
+    quest_id = _ensure_demo_quest(db, org_uid)
+    return {"orgUid": org_uid, "studentUid": student_uid, "questId": quest_id}
+
+
+# Callable from /demo-org's "Seed / Reseed Demo Data" button (no auth) —
+# self-service demo bootstrap. Creates or repairs the DGI org account, the
+# Jordan Ortiz demo student account, and the showcase quest, all under
+# fixed/known credentials (DEMO_PASSWORD) — a presenter can stand up the
+# entire demo from this one button, with no CLI or service-account access
+# to this project at all. Idempotent — safe to press again if the demo
+# data ever looks off, without needing demo_reset_event first.
+@https_fn.on_call()
+def demo_seed_showcase(req: https_fn.CallableRequest) -> dict:
+    _ensure_demo_showcase_data()
+    return {"success": True}
+
+
+def _iso(value):
+    # Callable responses go through JSON, which doesn't know what to do
+    # with a raw Firestore/Python datetime the way the client SDK's own
+    # Timestamp-aware deserialization does — same reason list_quest_
+    # attendees above converts checkedInAt with .isoformat() before
+    # returning it. Passes through anything that isn't a datetime as-is.
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+def _get_demo_quest(db):
+    ref = db.collection("quests").document(DEMO_QUEST_ID)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Demo data hasn't been seeded yet — use the Seed Demo Data button on /demo-ops (or this page).",
+        )
+    return ref, snap.to_dict()
+
+
+# Callable from DemoOrg.jsx (no auth) — the teacher/org view of the one
+# demo quest: org profile, quest details, resolved attendee list (reusing
+# _list_attendees_for_quest, the exact same read list_quest_attendees does
+# for a real signed-in org), and the QR code image.
+@https_fn.on_call()
+def get_demo_org_view(req: https_fn.CallableRequest) -> dict:
+    db = firestore.client()
+    quest_ref, quest = _get_demo_quest(db)
+
+    org_id = quest.get("orgId")
+    org_snap = db.collection("organizations").document(org_id).get() if org_id else None
+    org = org_snap.to_dict() if org_snap and org_snap.exists else {}
+
+    token = quest.get("qrToken")
+    qr = _make_qr_data_uri(quest_ref.id, token) if token else None
+
+    return {
+        "org": {"name": org.get("name"), "logoUrl": org.get("logoUrl"), "location": org.get("location")},
+        "quest": {
+            "id": quest_ref.id,
+            "title": quest.get("title"),
+            "description": quest.get("description"),
+            "location": quest.get("location"),
+            "lat": quest.get("lat"),
+            "lng": quest.get("lng"),
+            "timezone": quest.get("timezone"),
+            "eventDate": _iso(quest.get("eventDate")),
+            "eventEndTime": _iso(quest.get("eventEndTime")),
+            "rsvpCount": len(quest.get("rsvpd", [])),
+        },
+        "attendees": _list_attendees_for_quest(db, quest_ref.id, quest),
+        "qr": qr,
+    }
+
+
+# Callable from DemoOrg.jsx's Reset button (no auth) — restores the demo
+# quest to a pristine, never-happened state so the same run-through can be
+# repeated as many times as needed: clears every RSVP, deletes every
+# attendance/journal record tied to it, and reschedules it to right now
+# (eventEndTime cleared back to the DEFAULT_EVENT_WINDOW_HOURS fallback) so
+# the QR check-in window is always open the moment this returns. qrToken is
+# deliberately left untouched — a QR already pulled up on a second screen
+# or printed for the demo keeps working across resets.
+@https_fn.on_call()
+def demo_reset_event(req: https_fn.CallableRequest) -> dict:
+    db = firestore.client()
+    quest_ref, quest = _get_demo_quest(db)
+    student_uid = _demo_student_uid()
+
+    for doc in db.collection("attendance").where("eventId", "==", quest_ref.id).stream():
+        doc.reference.delete()
+    _journal_ref(db, student_uid, quest_ref.id).delete()
+
+    quest_ref.update({
+        "rsvpd": [],
+        "eventDate": datetime.now(timezone.utc),
+        "eventEndTime": None,
+    })
+    return {"success": True}
+
+
+# Shared by demo_check_in (a real scan, token-validated) and
+# demo_force_check_in (the /demo-ops keyboard-shortcut failsafe, no token
+# at all) — everything check-in actually DOES to the demo student once
+# it's been decided, one way or another, that this counts as a check-in.
+def _perform_demo_check_in(db, quest_ref, quest, uid: str, token) -> dict:
+    if uid not in quest.get("rsvpd", []):
+        quest_ref.update({"rsvpd": firestore.ArrayUnion([uid])})
+
+    attendance_ref = _attendance_ref(db, quest_ref.id, uid)
+    existing = attendance_ref.get()
+    if existing.exists:
+        return {"success": True, "alreadyCheckedIn": True, "pointsAwarded": existing.to_dict().get("pointsAwarded", 0)}
+
+    _award_points(db, uid, ORG_QUEST_BASE_POINTS)
+
+    _journal_ref(db, uid, quest_ref.id).set({
+        "questId": quest_ref.id,
+        "questTitle": quest.get("title"),
+        "seriesId": quest.get("seriesId") or quest_ref.id,
+        "orgId": quest.get("orgId"),
+        "orgName": quest.get("orgName"),
+        "eventDate": quest.get("eventDate"),
+        "reflectionBody": "",
+        "reflectionUpdatedAt": None,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "requestStatus": None,
+    }, merge=True)
+
+    attendance_ref.set({
+        "userId": uid,
+        "orgId": quest.get("orgId"),
+        "eventId": quest_ref.id,
+        "checkedInAt": firestore.SERVER_TIMESTAMP,
+        "pointsAwarded": ORG_QUEST_BASE_POINTS,
+        "qrToken": token,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    })
+    _record_quest_attended(db, uid, quest.get("tags") or [])
+
+    return {"success": True, "alreadyCheckedIn": False, "pointsAwarded": ORG_QUEST_BASE_POINTS}
+
+
+# Callable from CheckInConfirm.jsx (no auth) whenever the scanned quest is
+# the demo quest (see quest.isDemoQuest, checked client-side before this is
+# ever called) — the QR-scan-becomes-Jordan trick that makes cross-device
+# check-in demoable at all: whoever scans it, logged in or not, gets
+# attributed to the fixed demo student instead of themselves. token is
+# still validated against the quest's real qrToken (same constant-time
+# compare check_in_to_event uses) so this isn't a fully open door, just one
+# that ignores who walked through it.
+#
+# Deliberately skips the check-in-window expiry check check_in_to_event
+# enforces, and auto-RSVPs the demo student if she isn't already on the
+# list — this route's entire purpose is "never a hitch," and demo_reset_
+# event already keeps the window open anyway.
+@https_fn.on_call()
+def demo_check_in(req: https_fn.CallableRequest) -> dict:
+    token = req.data.get("token")
+    if not token:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "token is required.")
+
+    db = firestore.client()
+    quest_ref, quest = _get_demo_quest(db)
+    uid = _demo_student_uid()
+
+    stored_token = quest.get("qrToken")
+    if not stored_token or not secrets.compare_digest(stored_token, token):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Invalid or expired QR code.",
+        )
+
+    return _perform_demo_check_in(db, quest_ref, quest, uid, token)
+
+
+# Callable from /demo-ops's keyboard-shortcut failsafe (no auth) — a "fake
+# scan": does exactly what demo_check_in does, minus needing an actual QR
+# token at all. For a split-screen presentation where there's no second
+# camera free to physically scan anything, this is the way to trigger the
+# same check-in beat (attendance, points, journal entry, and the on-screen
+# confirmation on /demo-ops) with a single keystroke instead.
+@https_fn.on_call()
+def demo_force_check_in(req: https_fn.CallableRequest) -> dict:
+    db = firestore.client()
+    quest_ref, quest = _get_demo_quest(db)
+    uid = _demo_student_uid()
+    return _perform_demo_check_in(db, quest_ref, quest, uid, "manual-demo-ops-override")
+
+
+# Callable from /demo-ops (no auth) — the "Jordan RSVPs" beat, fired either
+# automatically (a live Firestore listener on the public quest doc's rsvpd
+# array — see DemoOps.jsx) the moment anyone else RSVPs to the demo quest
+# through the real app, or manually via that page's keyboard-shortcut
+# failsafe. Idempotent: does nothing if she's already on the list, so
+# mashing the shortcut (or a duplicate listener fire) is harmless.
+@https_fn.on_call()
+def demo_rsvp_student(req: https_fn.CallableRequest) -> dict:
+    db = firestore.client()
+    quest_ref, quest = _get_demo_quest(db)
+    uid = _demo_student_uid()
+    if uid not in quest.get("rsvpd", []):
+        quest_ref.update({"rsvpd": firestore.ArrayUnion([uid])})
+    return {"success": True}
+
+
+# Callable from /demo-ops's "Reset Jordan" button (no auth) — restores the
+# demo student's PROFILE to baseline: points/rank back to zero (undoing
+# whatever demo_check_in awarded over however many rehearsals) and name/
+# duck back to their originals (undoing anything a presenter changed while
+# poking around the real Edit Profile modal signed in as her — /demo-stud
+# is a real, fully signed-in session now, so this is a real possibility).
+# Deliberately doesn't touch rsvpd/attendance/journal — demo_reset_event
+# already resets those for the demo quest specifically, and this account
+# may also carry legitimate seeded history on OTHER quests (see
+# seed_demo_data.py's USERS list) that a blanket reset here would wrongly
+# erase. The two reset buttons are intentionally orthogonal: Reset Event
+# clears the EVENT for everyone on it; Reset Jordan restores just HER
+# profile, without touching any real attendee's own RSVP.
+@https_fn.on_call()
+def demo_reset_student(req: https_fn.CallableRequest) -> dict:
+    db = firestore.client()
+    uid = _demo_student_uid()
+    db.collection("users").document(uid).update({
+        "name": DEMO_STUDENT_NAME,
+        # Matches duckSkins.js's DEFAULT_DUCK_SKIN — kept in sync by hand,
+        # same as every other frontend/backend duck-skin constant pair.
+        "duckSkin": "duck1",
+        "points": 0,
+        "rank": _rank_for_points(0),
+    })
     return {"success": True}

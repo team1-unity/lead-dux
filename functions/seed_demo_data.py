@@ -33,6 +33,7 @@
 #   cd functions && source venv/bin/activate && python3 seed_demo_data.py
 
 import secrets
+import sys
 from datetime import datetime, timedelta, timezone
 
 import main
@@ -812,6 +813,25 @@ def seed_users():
         user_uids.append({"uid": user.uid, "email": email, "name": u["name"], "rank": rank})
         print(f"User ready: {u['name']} <{email}> — {rank} ({points} pts)")
     return user_uids
+
+
+# --- Demo showcase (/demo-org, /demo-stud) ------------------------------
+#
+# The fixed org + student + quest backing the app's two no-login "always
+# works for a presentation" routes. The actual field shapes live in
+# functions/main.py's _ensure_demo_showcase_data() (and the _ensure_demo_org/
+# _ensure_demo_student/_ensure_demo_quest helpers it calls) — this is just
+# the CLI entry point into that same logic, which is also reachable live
+# from /demo-org's own "Seed / Reseed Demo Data" button (demo_seed_showcase,
+# a no-auth callable) for a presenter who'd rather not touch a service
+# account/CLI at all. Kept in exactly one place so the two paths can never
+# drift apart. Safe to re-run either way.
+def seed_demo_showcase():
+    result = main._ensure_demo_showcase_data()
+    print(f"Demo organization ready: {main.DEMO_ORG_NAME} <{main.DEMO_ORG_EMAIL}> ({result['orgUid']})")
+    print(f"Demo student ready: {main.DEMO_STUDENT_NAME} <{main.DEMO_STUDENT_EMAIL}> ({result['studentUid']})")
+    print(f"Demo quest ready: {result['questId']}")
+    return result["orgUid"], result["questId"]
 
 
 # Wipes every document this script itself would have created — every seed
@@ -1649,6 +1669,9 @@ def main_seed():
     print("\nSeeding demo users...")
     user_uids = seed_users()
 
+    print("\nSeeding demo showcase (/demo-org, /demo-stud)...")
+    seed_demo_showcase()
+
     print("\nClearing previously seeded journal/notification activity...")
     wipe_seed_user_activity(user_uids)
 
@@ -1684,4 +1707,12 @@ def main_seed():
 
 
 if __name__ == "__main__":
-    main_seed()
+    # `python seed_demo_data.py --demo-only` re-seeds just the /demo-org +
+    # /demo-stud showcase (org + quest) without touching anything else —
+    # handy for restoring a pristine demo quest without a full reseed of
+    # every other demo account. Depends on seed_users() having already run
+    # at least once (Jordan Ortiz must already exist).
+    if "--demo-only" in sys.argv:
+        seed_demo_showcase()
+    else:
+        main_seed()

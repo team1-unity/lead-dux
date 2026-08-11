@@ -9,7 +9,16 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 // "node_modules/maplibre-gl/..." relative path — this workspace hoists
 // maplibre-gl up to the repo root's node_modules, not this package's own,
 // so a path relative to frontend/app never resolves.
-const maplibreGlDir = dirname(createRequire(import.meta.url).resolve('maplibre-gl/package.json'))
+//
+// Forward slashes only, even on Windows: dirname() returns OS-native
+// separators there (backslashes), and viteStaticCopy's targets below
+// append `/dist/...` with a literal forward slash — the resulting mixed-
+// separator string (`C:\Users\...\maplibre-gl/dist/...`) gets matched as a
+// glob pattern under the hood, where a bare backslash is an escape
+// character, not a path separator. That silently breaks the match (the
+// file exists; the glob just never sees it), surfacing as a Windows-only
+// "No file was found to copy" build failure.
+const maplibreGlDir = dirname(createRequire(import.meta.url).resolve('maplibre-gl/package.json')).replaceAll('\\', '/')
 
 // https://vite.dev/config/
 export default defineConfig({

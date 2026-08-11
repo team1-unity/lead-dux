@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from './firebaseapp.jsx';
 import { callUpdateUserProfile } from './fetch.jsx';
+import { notifyError } from './saveStatusBus.js';
 import { StampButton } from './StampButton.jsx';
 import { UserAvatar } from './UserAvatar.jsx';
 import { AvatarCropModal } from './AvatarCropModal.jsx';
@@ -49,7 +50,6 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, currentDu
   const [photoURL, setPhotoURL] = useState(currentPhotoURL || null);
   const [duckSkin, setDuckSkin] = useState(currentDuckSkin || DEFAULT_DUCK_SKIN);
   const [cropModalOpen, setCropModalOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   async function handleAvatarSave(file) {
@@ -61,29 +61,38 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, currentDu
     setPhotoURL(url);
   }
 
-  async function handleSave(e) {
+  // Optimistic: applies the change and closes this modal (onSaved's job —
+  // see Profile.jsx/BottomNav.jsx) immediately, rather than waiting on
+  // update_user_profile's own round trip first. That Cloud Function is
+  // cold-startable (see its module note in main.py), and waiting on it made
+  // even a simple duck-avatar pick feel stuck for a few seconds. The actual
+  // save still happens in the background with one silent retry; only if
+  // both attempts fail does this surface at all, as a small toast rather
+  // than reopening a modal the user already dismissed (see
+  // saveStatusBus.js/SaveStatusToast.jsx, mounted at the app-shell level so
+  // it's still there to report a failure after this component is gone).
+  function handleSave(e) {
     e.preventDefault();
     setError('');
     if (!name.trim()) {
       setError('Give yourself a name.');
       return;
     }
-    setSaving(true);
-    try {
-      const trimmedName = name.trim();
-      const duckSkinChanged = duckSkin !== (currentDuckSkin || DEFAULT_DUCK_SKIN);
-      if (trimmedName !== currentName || duckSkinChanged) {
-        await callUpdateUserProfile({
-          name: trimmedName,
-          ...(duckSkinChanged ? { duckSkin } : {}),
-        });
-      }
-      onSaved({ name: trimmedName, photoURL, duckSkin });
-    } catch (err) {
-      setError(err.message || 'Something went wrong.');
-    } finally {
-      setSaving(false);
-    }
+    const trimmedName = name.trim();
+    const duckSkinChanged = duckSkin !== (currentDuckSkin || DEFAULT_DUCK_SKIN);
+    const fields =
+      trimmedName !== currentName || duckSkinChanged
+        ? { name: trimmedName, ...(duckSkinChanged ? { duckSkin } : {}) }
+        : null;
+
+    onSaved({ name: trimmedName, photoURL, duckSkin });
+    if (!fields) return;
+
+    callUpdateUserProfile(fields).catch(() =>
+      callUpdateUserProfile(fields).catch(() =>
+        notifyError("Couldn't save your profile changes — please try again."),
+      ),
+    );
   }
 
   return (
@@ -133,10 +142,10 @@ export function EditProfileModal({ user, currentName, currentPhotoURL, currentDu
           </div>
           {error && <p className='box-danger'>{error}</p>}
           <div className='flex gap-sm'>
-            <StampButton type='submit' variant='primary' disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
+            <StampButton type='submit' variant='primary'>
+              Save
             </StampButton>
-            <StampButton type='button' onClick={onClose} disabled={saving}>
+            <StampButton type='button' onClick={onClose}>
               Cancel
             </StampButton>
           </div>
