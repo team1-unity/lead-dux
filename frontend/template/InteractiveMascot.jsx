@@ -95,6 +95,10 @@ export function InteractiveMascot({ imageSrc, alt = '', width = 140, className, 
     <motion.div
       ref={containerRef}
       className={className}
+      // Opts out of App.jsx's global click sound — this mascot plays its
+      // own quack on click instead (see mobile/Home.jsx's playQuack), and
+      // both firing on the same click would double up.
+      data-no-click-sound=""
       onClick={onClick}
       onPointerMove={handlePointerMove}
       onHoverStart={handleHoverStart}
