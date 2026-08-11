@@ -13,6 +13,7 @@ import { PreviousPathProvider } from '@shared/PreviousPathContext.jsx';
 import { SmoothScroll } from '@shared/SmoothScroll.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
 import { OrgOnboarding } from '@org/OrgOnboarding.jsx';
+import { SaveStatusToast } from '@shared/SaveStatusToast.jsx';
 import { Landing } from './Landing.jsx';
 import '@shared/style.css';
 
@@ -41,6 +42,9 @@ const OrganizationProfile = lazy(() =>
 );
 const QuestDetails = lazy(() => import('./QuestDetails.jsx').then((m) => ({ default: m.QuestDetails })));
 const SharedQuest = lazy(() => import('./SharedQuest.jsx').then((m) => ({ default: m.SharedQuest })));
+const DemoOrg = lazy(() => import('./DemoOrg.jsx').then((m) => ({ default: m.DemoOrg })));
+const DemoStud = lazy(() => import('./DemoStud.jsx').then((m) => ({ default: m.DemoStud })));
+const DemoOps = lazy(() => import('./DemoOps.jsx').then((m) => ({ default: m.DemoOps })));
 const MapQuestPage = lazy(() => import('./MapQuestPage.jsx').then((m) => ({ default: m.MapQuestPage })));
 const MapQuestOverlay = lazy(() => import('./MapQuestOverlay.jsx').then((m) => ({ default: m.MapQuestOverlay })));
 const RegisterPublic = lazy(() => import('@mobile/Register.jsx').then((m) => ({ default: m.Register })));
@@ -232,6 +236,7 @@ function AppShell() {
       {showNav && <BottomNav />}
       <WelcomeTour />
       <OrgOnboarding />
+      <SaveStatusToast />
     </PreviousPathProvider>
   );
 }
@@ -278,6 +283,18 @@ function AppRoutes() {
             MapQuestDetailBody.jsx) rather than a second, map-flavored
             share page — one shareable link per quest, not two. */}
         <Route path="/share/:seriesId" element={<SharedQuest />} />
+        {/* Always-works-for-a-presentation demo routes (see
+            functions/main.py's "Demo showcase" section) — deliberately
+            outside AppShell, same as /share above: no login, no role
+            check, nothing that can fail on stale auth state mid-demo.
+            /demo-org and /demo-stud sign the visitor into a fixed demo
+            account and immediately redirect into the real /org or /
+            experience (see those files) — they render nothing of their
+            own past a brief loading state. /demo-ops is the presenter's
+            own backstage control screen and never signs in as anyone. */}
+        <Route path="/demo-org" element={<DemoOrg />} />
+        <Route path="/demo-stud" element={<DemoStud />} />
+        <Route path="/demo-ops" element={<DemoOps />} />
         {/* Deliberately outside AppShell too, same reasoning as /share
             above — an event QR's own URL (see functions/main.py's
             _check_in_url) has to work the moment it's scanned with a

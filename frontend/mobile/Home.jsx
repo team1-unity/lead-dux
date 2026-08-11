@@ -202,6 +202,20 @@ export function Home() {
 
   if (profile === null) return <LoadingSpinner label="Loading…" />;
 
+  // A fresh Audio instance per click, not one shared/reused element —
+  // reusing a single <audio> and calling .play() again restarts it from
+  // the beginning, cutting off whatever was still playing. A new instance
+  // per click plays fully independently, so mashing the duck stacks up
+  // overlapping quacks instead of cutting any of them short, and none of
+  // them ever get stopped by a later click either.
+  function playQuack() {
+    new Audio('/audio/quack.mp3').play().catch(() => {
+      // Blocked by the browser's autoplay policy or similar — this is a
+      // decorative sound effect, not something worth surfacing an error
+      // for.
+    });
+  }
+
   const firstName = profile.name ? profile.name.split(' ')[0] : null;
   const greetingText = (
     <div className="home-greeting-text">
@@ -244,7 +258,7 @@ export function Home() {
         <NotificationBanner />
         <PageMotion className="home-hero">
           <div className="home-duck-stage home-hero-duck">
-            <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} width={320} />
+            <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} width={320} onClick={playQuack} />
           </div>
           <div className="home-hero-panel" data-frame="cozy">
             <div className="home-hero-card">
@@ -293,7 +307,7 @@ export function Home() {
             reference's own character does. */}
         <div className="home-scene">
           <div className="home-duck-stage">
-            <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} />
+            <InteractiveMascot imageSrc={duckSkinSrc(profile.duckSkin)} onClick={playQuack} />
           </div>
         </div>
 

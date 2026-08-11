@@ -610,3 +610,69 @@ export async function callBackfillQuestCoordinates() {
   const result = await fn();
   return result.data;
 }
+
+// No auth: /demo-ops's "Seed / Reseed Demo Data" button — self-service
+// demo bootstrap (creates/repairs the DGI org, Jordan Ortiz, and the
+// showcase quest). Safe to call anytime, including before anything has
+// ever been seeded.
+export async function callDemoSeedShowcase() {
+  const fn = httpsCallable(functions, 'demo_seed_showcase');
+  const result = await fn({});
+  return result.data;
+}
+
+// No auth (see functions/main.py's "Demo showcase" section) — backs
+// /demo-ops's QR code display, attendee list, and live RSVP/check-in feed.
+// Returns { org, quest, attendees, qr }.
+export async function callGetDemoOrgView() {
+  const fn = httpsCallable(functions, 'get_demo_org_view');
+  const result = await fn({});
+  return result.data;
+}
+
+// No auth: /demo-ops's Reset Event button — clears the demo quest's RSVPs
+// and attendance/journal, and reschedules it to right now.
+export async function callDemoResetEvent() {
+  const fn = httpsCallable(functions, 'demo_reset_event');
+  const result = await fn({});
+  return result.data;
+}
+
+// No auth: called by CheckInConfirm.jsx instead of callCheckInToEvent
+// whenever the scanned quest has isDemoQuest set — attributes check-in to
+// the fixed demo student regardless of who actually scanned it.
+export async function callDemoCheckIn(token) {
+  const fn = httpsCallable(functions, 'demo_check_in');
+  const result = await fn({ token });
+  return result.data;
+}
+
+// No auth: /demo-ops's live "Jordan RSVPs" beat — adds her to the demo
+// quest's rsvpd list, fired automatically by a live listener the moment
+// anyone else RSVPs to the event for real.
+export async function callDemoRsvpStudent() {
+  const fn = httpsCallable(functions, 'demo_rsvp_student');
+  const result = await fn({});
+  return result.data;
+}
+
+// No auth: /demo-ops's keyboard-shortcut failsafe — a "fake scan" that
+// checks Jordan in exactly like a real QR scan would (attendance, points,
+// journal entry), just without needing an actual token/camera. For a
+// split-screen presentation with no second device free to physically
+// scan the QR code.
+export async function callDemoForceCheckIn() {
+  const fn = httpsCallable(functions, 'demo_force_check_in');
+  const result = await fn({});
+  return result.data;
+}
+
+// No auth: /demo-ops's "Reset Jordan" button — restores her name/duck/
+// points/rank to baseline. Doesn't touch RSVPs/attendance/journal; see
+// callDemoResetEvent for that (and demo_reset_student's own module note in
+// main.py for why the two stay separate).
+export async function callDemoResetStudent() {
+  const fn = httpsCallable(functions, 'demo_reset_student');
+  const result = await fn({});
+  return result.data;
+}

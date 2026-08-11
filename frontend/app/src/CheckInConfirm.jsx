@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
 import { motion, useReducedMotion } from 'framer-motion';
+import { db } from '@shared/firebaseapp.jsx';
 import { PageMotion } from '@shared/PageMotion.jsx';
 import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { BackLink } from '@shared/BackLink.jsx';
 import { useAuth } from '@shared/AuthContext.jsx';
-import { callCheckInToEvent } from '@shared/fetch.jsx';
+import { callCheckInToEvent, callDemoCheckIn } from '@shared/fetch.jsx';
 import { IconCheck, IconAlert } from '@shared/icons.jsx';
 
 const EASE_OUT = [0.23, 1, 0.32, 1];
@@ -24,17 +26,49 @@ const EASE_OUT = [0.23, 1, 0.32, 1];
 // opens, not depend on already being deep in the app's own nav chrome.
 export function CheckInConfirm() {
   const { questId, token } = useParams();
+  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
   const reduce = useReducedMotion();
+  // Set by CheckIn.jsx's demo-student-only keyboard shortcut (press "C" on
+  // the real scanner screen) instead of an actual decoded QR — the check-in
+  // itself already happened (see callDemoForceCheckIn there) by the time
+  // this page ever mounts, so there's nothing left here to call or wait
+  // on, just this same success UI to show for it. questId/token in the URL
+  // are placeholders in this case, never looked up.
+  const simulated = Boolean(location.state?.simulated);
   // 'pending' | 'success' | 'already' | 'error'
-  const [state, setState] = useState('pending');
-  const [result, setResult] = useState(null);
+  const [state, setState] = useState(simulated ? (location.state.alreadyCheckedIn ? 'already' : 'success') : 'pending');
+  const [result, setResult] = useState(simulated ? location.state : null);
   const [error, setError] = useState('');
+  // null while unknown, then true/false — read straight off the quest doc
+  // (quests/{questId}'s `allow get: if true`, same public read SharedQuest.jsx
+  // relies on) so this can be checked before deciding whether the sign-in
+  // gate below even applies. See functions/main.py's demo_check_in and
+  // seed_demo_data.py's seed_demo_showcase for what sets this flag. Already
+  // known true for a simulated visit — nothing to look up.
+  const [isDemoQuest, setIsDemoQuest] = useState(simulated ? true : null);
 
   useEffect(() => {
-    if (authLoading || !user) return undefined;
+    if (simulated) return undefined;
     let cancelled = false;
-    callCheckInToEvent({ questId, token })
+    getDoc(doc(db, 'quests', questId)).then((snap) => {
+      if (!cancelled) setIsDemoQuest(snap.exists() && Boolean(snap.data().isDemoQuest));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [simulated, questId]);
+
+  useEffect(() => {
+    if (simulated || isDemoQuest === null) return undefined;
+    // The demo quest never needs a signed-in caller (see demo_check_in) —
+    // whoever scans it, logged in or not, gets attributed to the fixed demo
+    // student instead of themselves. Every other quest keeps the original
+    // "wait for auth, then check the real caller in" behavior untouched.
+    if (!isDemoQuest && (authLoading || !user)) return undefined;
+    let cancelled = false;
+    const checkIn = isDemoQuest ? callDemoCheckIn(token) : callCheckInToEvent({ questId, token });
+    checkIn
       .then((res) => {
         if (cancelled) return;
         setResult(res);
@@ -48,17 +82,18 @@ export function CheckInConfirm() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user, questId, token]);
+  }, [simulated, isDemoQuest, authLoading, user, questId, token]);
 
-  if (authLoading) return <LoadingSpinner />;
+  if (!simulated && (isDemoQuest === null || authLoading)) return <LoadingSpinner />;
 
   // Not signed in — this URL can be opened cold (a native camera app, or a
   // link tapped from outside the app entirely), so there's no guarantee of
   // an existing session the way most of the app can assume. No redirect-
   // back-after-login plumbing here on purpose: the QR itself is a durable,
   // reusable link (see _check_in_url — no per-scan one-time token), so
-  // "log in, then scan again" is a real fallback, not a dead end.
-  if (!user) {
+  // "log in, then scan again" is a real fallback, not a dead end. Skipped
+  // entirely for the demo quest, which never requires a caller at all.
+  if (!isDemoQuest && !user) {
     return (
       <PageMotion>
         <BackLink to="/" label="Home" />
