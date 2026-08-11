@@ -1533,12 +1533,17 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
   // isDefault), built from allQuests (the one list load() doesn't pre-
   // filter to upcoming) crossed against attendedAtByEventId, so a quest
   // only shows here once actually checked into, not just RSVP'd and never
-  // attended. Segment-filtered same as segmentedList below, at the point
-  // it's actually used (visibleSeries) — not here, so this one list can
-  // still serve either segment without rebuilding it per-segment.
+  // attended. Deliberately NOT also gated on !isUpcoming(q) — checking in
+  // moves a quest here immediately, not whenever its own event window
+  // happens to expire hours later (see the "mine" branch of visibleSeries
+  // below, which is the other half of this: an attended occurrence has to
+  // disappear from RSVP'd at the same moment it appears here, or it'd
+  // briefly sit in both). Segment-filtered same as segmentedList below, at
+  // the point it's actually used (visibleSeries) — not here, so this one
+  // list can still serve either segment without rebuilding it per-segment.
   const pastAttendedSeriesList = useMemo(() => {
     if (!allQuests || !attendedAtByEventId) return [];
-    const attended = allQuests.filter((q) => !isUpcoming(q) && attendedAtByEventId.has(q.id));
+    const attended = allQuests.filter((q) => attendedAtByEventId.has(q.id));
     return attachOrgLogos(
       attachSeriesRatings(groupBySeries(attended), seriesRatingsById || new Map()),
       orgById || new Map(),
@@ -1584,7 +1589,15 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
         segment === 'side-quests' ? s.primary.isDefault : !s.primary.isDefault,
       );
     } else if (activity === 'mine') {
-      list = segmentedList.filter((s) => s.occurrences.some((o) => (o.rsvpd || []).includes(user?.uid)));
+      // An occurrence someone's already checked into belongs in Past
+      // Attended now, not here (see pastAttendedSeriesList's own note) —
+      // excluded the moment attendedAtByEventId has it, regardless of
+      // whether its own event window has technically expired yet.
+      list = segmentedList.filter((s) =>
+        s.occurrences.some(
+          (o) => (o.rsvpd || []).includes(user?.uid) && !attendedAtByEventId?.has(o.id),
+        ),
+      );
     } else {
       // Default browsing view — a one-off quest already RSVP'd to (or
       // already attended, e.g. checked in before its own eventDate) has
@@ -1703,10 +1716,16 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
         <div className='quest-feed-greeting'>
           <h1>
             {activity === 'mine'
-              ? "Your RSVP'd quests"
+              ? segment === 'side-quests'
+                ? "RSVP'd Side Quests"
+                : "RSVP'd Quests"
               : activity === 'past'
-                ? 'Past attended quests'
-                : 'Explore Quests'}
+                ? segment === 'side-quests'
+                  ? 'Past Attended Side Quests'
+                  : 'Past Attended Quests'
+                : segment === 'side-quests'
+                  ? 'Explore Side Quests'
+                  : 'Explore Quests'}
           </h1>
         </div>
 
