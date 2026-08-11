@@ -367,6 +367,42 @@ export function IconDots(props) {
 // instead of the instant brand recognition every other app gives this
 // exact button. Fixed colors, not theme tokens — this is a third-party
 // mark, not a UI color choice, same exception a real org logo already is.
+// Settings' Audio section — the "Duck" volume row. A plain line icon
+// rather than the DuckMark brand asset (logo-lockup.png) on purpose: that
+// asset bakes in the wordmark and is sized for a real logo slot, not a
+// small monochrome row icon matching the other two here.
+export function IconDuck(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M4 15.5c0-4.5 3.2-8 7.5-8 4 0 7 2.7 7.8 6.3.9.2 1.7.9 1.7 2.2 0 1.3-1 2-2.2 2h-.3" />
+      <path d="M4 15.5c0 2.5 2 4.5 5 4.5h4c2.8 0 5-1.6 5-4" />
+      <circle cx="15.5" cy="9.5" r="0.9" fill="currentColor" stroke="none" />
+      <path d="M18.5 10.2c1 .2 1.8.9 1.8 1.3" />
+    </svg>
+  );
+}
+
+// Settings' Audio section — the "Clicks" volume row.
+export function IconCursorClick(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M6 4l1.6 15.2 3-3.6 3.2 5.4 2-1.2-3.2-5.4 4.6-1.2z" />
+      <path d="M4 4v.01M9.5 3v.01M4 9.5v.01" />
+    </svg>
+  );
+}
+
+// Settings' Audio section — the "Background Music" volume row.
+export function IconMusicNote(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M9 18V5.5L20 3v12.5" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="17.5" cy="15.5" r="2.5" />
+    </svg>
+  );
+}
+
 export function IconGoogle(props) {
   return (
     <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true" {...props}>

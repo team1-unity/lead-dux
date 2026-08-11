@@ -11,6 +11,7 @@ import { PageMotion } from '@shared/PageMotion.jsx';
 import { IconQrCode, IconList, IconHistory } from '@shared/icons.jsx';
 import { duckSkinSrc } from '@shared/duckSkins.js';
 import { InteractiveMascot } from '@shared/InteractiveMascot.jsx';
+import { getVolume } from '@shared/audioSettings.js';
 import { useIsDesktop } from '@shared/useIsDesktop.js';
 
 // A small rotating set rather than one fixed line — Home is the one screen
@@ -209,7 +210,11 @@ export function Home() {
   // overlapping quacks instead of cutting any of them short, and none of
   // them ever get stopped by a later click either.
   function playQuack() {
-    new Audio('/audio/quack.mp3').play().catch(() => {
+    const volume = getVolume('duck');
+    if (volume <= 0) return;
+    const audio = new Audio('/audio/quack.mp3');
+    audio.volume = volume;
+    audio.play().catch(() => {
       // Blocked by the browser's autoplay policy or similar — this is a
       // decorative sound effect, not something worth surfacing an error
       // for.

@@ -14,6 +14,8 @@ import { SmoothScroll } from '@shared/SmoothScroll.jsx';
 import { PendingBanner } from '@org/PendingBanner.jsx';
 import { OrgOnboarding } from '@org/OrgOnboarding.jsx';
 import { SaveStatusToast } from '@shared/SaveStatusToast.jsx';
+import { BackgroundMusic } from '@shared/BackgroundMusic.jsx';
+import { getVolume } from '@shared/audioSettings.js';
 import { Landing } from './Landing.jsx';
 import '@shared/style.css';
 
@@ -260,6 +262,31 @@ function AppRoutes() {
   const location = useLocation();
   const backgroundLocation = location.state?.backgroundLocation;
 
+  // A global click sound — everywhere except the org side (an org's own
+  // workspace, not the game-like member experience this sound belongs to)
+  // and the Home duck mascot (which already plays its own quack — see
+  // InteractiveMascot.jsx's data-no-click-sound, mobile/Home.jsx's
+  // playQuack). Kept as a ref rather than a `location.pathname` effect
+  // dependency so the listener itself is only ever attached once; the ref
+  // is what stays current across navigations instead. A fresh Audio
+  // instance per click, same reasoning as playQuack — lets rapid clicks
+  // overlap instead of the next one cutting off whatever's still playing.
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
+  useEffect(() => {
+    function onClick(e) {
+      if (pathnameRef.current.startsWith('/org')) return;
+      if (e.target.closest?.('[data-no-click-sound]')) return;
+      const volume = getVolume('clicks');
+      if (volume <= 0) return;
+      const audio = new Audio('/audio/mouse-click.mp3');
+      audio.volume = volume;
+      audio.play().catch(() => {});
+    }
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, []);
+
   return (
     // Covers the routes below that render outside AppShell (Login,
     // Register, the /share and /check-in links) — those have no
@@ -387,6 +414,12 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <SmoothScroll />
+        {/* A sibling of AppRoutes, not nested inside it — never sits behind
+            any route-switching subtree, so navigating never remounts it
+            (see BackgroundMusic.jsx's own module note for the belt-and-
+            suspenders reason its actual <audio> is a plain singleton on
+            top of that). */}
+        <BackgroundMusic />
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

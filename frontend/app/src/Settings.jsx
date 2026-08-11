@@ -23,6 +23,9 @@ import { TagStamp } from '@shared/TagStamp.jsx';
 import { PlaceAutocompleteInput } from '@shared/PlaceAutocompleteInput.jsx';
 import { ACCOMMODATION_OPTIONS } from '@shared/accommodations.js';
 import { getStoredTheme, applyTheme } from '@shared/theme.js';
+import { getVolume, setVolume, VOLUME_CHANNELS } from '@shared/audioSettings.js';
+import { VolumeSlider } from '@shared/VolumeSlider.jsx';
+import { IconDuck, IconCursorClick, IconMusicNote } from '@shared/icons.jsx';
 
 const THEME_OPTIONS = [
   { value: 'light', label: 'Light' },
@@ -53,6 +56,47 @@ export function ThemePicker() {
           >
             {opt.label}
           </StampButton>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// One row per channel — see audioSettings.js for why each of these is
+// independent instead of a single master volume: the duck's quack
+// (mobile/Home.jsx), UI click sounds (App.jsx's global click listener, off
+// on the org side), and looping background music (BackgroundMusic.jsx,
+// also off on the org side) are different enough in how often/loud they
+// should be that muting one shouldn't force muting the others.
+const VOLUME_ROWS = [
+  { channel: 'duck', label: 'Duck', icon: <IconDuck /> },
+  { channel: 'clicks', label: 'Clicks', icon: <IconCursorClick /> },
+  { channel: 'music', label: 'Background Music', icon: <IconMusicNote /> },
+];
+
+export function AudioSettings() {
+  const [volumes, setVolumes] = useState(() =>
+    Object.fromEntries(VOLUME_CHANNELS.map((channel) => [channel, getVolume(channel)])),
+  );
+
+  function change(channel, value) {
+    setVolume(channel, value);
+    setVolumes((prev) => ({ ...prev, [channel]: value }));
+  }
+
+  return (
+    <section className="ink-card">
+      <h2>Audio</h2>
+      <p style={{ marginTop: 0 }}>Adjust or mute each sound independently.</p>
+      <div className="flex flex-col gap-md">
+        {VOLUME_ROWS.map((row) => (
+          <VolumeSlider
+            key={row.channel}
+            icon={row.icon}
+            label={row.label}
+            value={volumes[row.channel]}
+            onChange={(value) => change(row.channel, value)}
+          />
         ))}
       </div>
     </section>
@@ -409,6 +453,7 @@ export function Settings() {
       <TopBar title="Settings" />
       <div className="settings-grid">
         <ThemePicker />
+        <AudioSettings />
         {role === 'user' && <AccommodationNeedsEditor />}
         <AccountSection />
         {role !== 'user' && role !== 'organization' && <LogoutSection />}

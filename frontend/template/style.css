@@ -4800,6 +4800,69 @@ button.data-row:active:not(:disabled) {
   color: var(--accent-contrast);
 }
 
+/* Settings' Audio section (VolumeSlider.jsx) — a custom-built slider, not
+   a styled native <input type="range">; see that file's own module note
+   for why. Icon + label read as one unit on the left, the track fills the
+   remaining width, the live percentage sits fixed-width on the right so
+   the track doesn't visibly resize as the number changes from e.g. "40%"
+   to "5%". */
+.volume-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.volume-slider-icon {
+  display: flex;
+  flex: none;
+  color: var(--line-soft);
+}
+.volume-slider-label {
+  flex: none;
+  width: 120px;
+  font-weight: 600;
+}
+.volume-slider-track {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--paper-well);
+  border: 2px solid var(--border);
+  cursor: pointer;
+  touch-action: none;
+}
+.volume-slider-fill {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  pointer-events: none;
+}
+.volume-slider-thumb {
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper-card);
+  border: 2px solid var(--line);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.volume-slider-track:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.volume-slider-value {
+  flex: none;
+  width: 40px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--line-soft);
+}
+
 /* generic single-select pill row — same active/inactive treatment as the
    theme picker above, just not settings-specific (Onboarding's leadership-
    profile questions use this). */
