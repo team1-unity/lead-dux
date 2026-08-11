@@ -56,11 +56,6 @@ export function CheckIn() {
       <BackLink to="/" label="Home" />
       <h1>Scan QR Code</h1>
       <p>Point your camera at the event's check-in code, displayed by the organization at the event.</p>
-      {isDemoStudent && (
-        <p className="field-optional">
-          Signed in as the demo student — press <strong>C</strong> to simulate scanning the Twilight Sparkle event.
-        </p>
-      )}
       <QuestScanner />
     </PageMotion>
   );
