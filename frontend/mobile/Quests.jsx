@@ -133,7 +133,7 @@ function StarRatingInput({ value, onChange }) {
 // A member's own review for a quest they've checked in to. Shows the
 // existing review read-only if one was already submitted; otherwise a
 // The "Request feedback" destination (see QuestDetailBody's Request
-// Feedback button, below the Leave a review/Proof Photo row) — this used
+// Feedback button, below the Leave a review/Bonus Photo row) — this used
 // to live in the journal's 3-dot menu; testing found that wasn't an
 // intuitive place to look for it, so it moved here instead. There's
 // nothing to show once requested (the organization's answers land back in
@@ -524,7 +524,7 @@ function QuestPhotoSubmission({ questId, userId, isDefault, onStatusChange }) {
         </button>
       ) : (
         <StampButton type='button' variant='primary' onClick={() => setModalOpen(true)}>
-          {isDefault ? 'Mark as complete' : 'Submit Proof Photo'}
+          {isDefault ? 'Mark as complete' : 'Submit Bonus Photo'}
         </StampButton>
       )}
       {modalOpen && (
@@ -637,11 +637,11 @@ export function QuestDetailBody({
   }, [selectedId, series.seriesId]);
   // Org quest, checked in — the completed/attended state: date/spots/
   // accessibility/RSVP all give way to a plain "Completed on …" line and
-  // the review/proof-photo actions. Side quests never set this (checkedIn
+  // the review/bonus-photo actions. Side quests never set this (checkedIn
   // is always false for them — see the effect below).
   const isCompleted = !primary.isDefault && checkedIn;
 
-  // Review/Proof Photo (org quests only — see each render site below) only
+  // Review/Bonus Photo (org quests only — see each render site below) only
   // ever mean anything once this member has actually checked in, not just
   // RSVP'd — the same `attendance/{questId}_{uid}` doc submit_review and
   // submit_quest_photo already gate on server-side (a doc existing there IS
@@ -958,7 +958,7 @@ export function QuestDetailBody({
             organization to review. Gated on actually having checked in
             (not just RSVP'd) — matching what submit_review itself
             requires, so this never opens a form the server would reject.
-            Proof Photo and Request Feedback sit right beside it (not
+            Bonus Photo and Request Feedback sit right beside it (not
             below, in their own blocks) so every completion action reads as
             one row. Request Feedback hides once feedbackRequestStatus is
             set — same reasoning as JournalCardMenu's old copy of this
@@ -979,7 +979,7 @@ export function QuestDetailBody({
           </>
         )}
       </div>
-      {/* Same modal treatment as Proof Photo — QuestReview already shows
+      {/* Same modal treatment as Bonus Photo — QuestReview already shows
           either the submission form or (once one exists) the read-only
           "Your review: ★★★★☆" card, so no separate open/closed label logic
           is needed here beyond opening/closing the modal itself. */}
@@ -1100,6 +1100,7 @@ function QuestRow({ series, index, isDesktop, isActive, gate, onSelect }) {
                 seed={series.seriesId}
                 logoUrl={series.orgLogoUrl}
                 duckColorIndex={series.orgDuckColorIndex}
+                isDefault={primary.isDefault}
               />
             </span>
           )}
@@ -1317,6 +1318,12 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
   // (attachSeriesRatings) — kept around so Past Attended, built separately
   // below, can show the same star rating a completed quest already has.
   const [seriesRatingsById, setSeriesRatingsById] = useState(null);
+  // Same idea as seriesRatingsById, but for attachOrgLogos — without this,
+  // Past Attended's own series (built separately below, not through
+  // load()'s attachOrgLogos call) had no orgLogoUrl/orgDuckColorIndex at
+  // all, so every org quest there fell back to the duck placeholder even
+  // when that org actually has a real logo.
+  const [orgById, setOrgById] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [openSeriesId, setOpenSeriesId] = useState(null);
@@ -1423,6 +1430,7 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
         const orgById = new Map(orgsSnap.docs.map((d) => [
           d.id, { logoUrl: d.data().logoUrl, duckColorIndex: d.data().duckColorIndex },
         ]));
+        setOrgById(orgById);
         const grouped = attachOrgLogos(
           attachSeriesRatings(groupBySeries(all.filter(isUpcoming)), seriesDocsById),
           orgById,
@@ -1531,8 +1539,11 @@ export function Quests({ interests, name, recommendedQuestOrder, attendedTagCoun
   const pastAttendedSeriesList = useMemo(() => {
     if (!allQuests || !attendedAtByEventId) return [];
     const attended = allQuests.filter((q) => !isUpcoming(q) && attendedAtByEventId.has(q.id));
-    return attachSeriesRatings(groupBySeries(attended), seriesRatingsById || new Map());
-  }, [allQuests, attendedAtByEventId, seriesRatingsById]);
+    return attachOrgLogos(
+      attachSeriesRatings(groupBySeries(attended), seriesRatingsById || new Map()),
+      orgById || new Map(),
+    );
+  }, [allQuests, attendedAtByEventId, seriesRatingsById, orgById]);
 
   // No longer a picker in the filter panel (see FilterPanelContent) — just
   // the pool of real tag values #-search can match against, and the
