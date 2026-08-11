@@ -705,6 +705,7 @@ export function EventsMap() {
                   seed={g.primary.orgId || g.seriesId}
                   logoUrl={g.orgLogoUrl}
                   duckColorIndex={g.orgDuckColorIndex}
+                  isDefault={g.primary.isDefault}
                 />
               </div>
               <div className="events-map-list-meta">

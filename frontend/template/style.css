@@ -2103,6 +2103,20 @@ button.quest-card-head:hover:not(:disabled) {
   background: var(--paper-well);
   object-fit: cover;
 }
+/* A side/default quest's "?" placeholder (OrgAvatar's isDefault branch) —
+   colored per-series via hashTone(seed), same --tag-color/--tag-ink pair
+   the old letter-tile fallback used for every quest before orgs got their
+   own duck avatars. */
+.org-avatar-unknown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tag-color, var(--paper-well));
+  color: var(--tag-ink, var(--line));
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.3rem;
+}
 
 .quest-card-titles {
   flex: 1;
