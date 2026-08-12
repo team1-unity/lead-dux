@@ -4304,9 +4304,16 @@ def delete_account(req: https_fn.CallableRequest) -> dict:
 # unauthenticated caller has no lever to pull against real data or any
 # other real account, only this one fixed showcase quest and its two fixed
 # personas.
+# Both of these are stable internal identifiers, not shown anywhere in the
+# UI — DEMO_ORG_NAME below is the one that's actually user-facing, and has
+# changed since these were picked (originally "Digital Girl Inc"/"Twilight
+# Sparkle Office Hours"). Left as-is on purpose: renaming either would
+# orphan the existing seeded Firestore doc/Auth account rather than update
+# it in place, since _ensure_demo_org/_ensure_demo_quest look these up by
+# exact id/email.
 DEMO_QUEST_ID = "demo-dgi-twilight-sparkle-office-hours"
 DEMO_ORG_EMAIL = "dgi@lead-dux.app"
-DEMO_ORG_NAME = "Digital Girl Inc (DGI)"
+DEMO_ORG_NAME = "Equestria & Friends"
 DEMO_QUEST_LOCATION = "882 3rd Ave, Brooklyn, NY 11215"
 # Approximate coordinates for the address above (Park Slope/Gowanus,
 # Brooklyn) — close enough for the map view; never run through a real
@@ -4341,6 +4348,10 @@ def _ensure_demo_org(db) -> str:
         org_user = auth.get_user_by_email(DEMO_ORG_EMAIL)
     except auth.UserNotFoundError:
         org_user = auth.create_user(email=DEMO_ORG_EMAIL, password=DEMO_PASSWORD, display_name=DEMO_ORG_NAME)
+    # Unconditional, not just on the create branch above — keeps the Auth
+    # display name in sync with DEMO_ORG_NAME even for an account that
+    # already existed under an older name (see that constant's own note).
+    auth.update_user(org_user.uid, display_name=DEMO_ORG_NAME)
     auth.set_custom_user_claims(org_user.uid, {"role": "organization"})
 
     duck_color_index = _assign_duck_color_index(db, org_user.uid)
@@ -4355,7 +4366,7 @@ def _ensure_demo_org(db) -> str:
         "verified": True,
         "logoUrl": None,
         "category": "Education",
-        "missionStatement": "Empowering the next generation of girls in STEM leadership.",
+        "missionStatement": "We create events for people in the neighborhood to meet and have fun, because building community starts with friendship — and friendship is magic.",
         "website": None,
         "contactEmail": DEMO_ORG_EMAIL,
         "socialLinks": {},
@@ -4413,8 +4424,8 @@ def _ensure_demo_quest(db, org_uid: str) -> str:
         else {"qrToken": secrets.token_urlsafe(24), "qrTokenVersion": 0}
     )
     quest_ref.set({
-        "title": "Twilight Sparkle Office Hours (Friendship is Magic)",
-        "description": "Drop-in office hours with Twilight Sparkle — bring your leadership questions, big ideas, or anything friendship-related.",
+        "title": "Building a Community Through Friendship Class — First Lesson: Knowing Your Neighbors",
+        "description": "A community-building class for meeting your neighbors and making new friends — first lesson: getting to know the people around you.",
         "tags": ["leadership", "mentorship"],
         "location": DEMO_QUEST_LOCATION,
         "placeId": None,
@@ -4463,7 +4474,7 @@ def _ensure_demo_showcase_data() -> dict:
 
 
 # Callable from /demo-org's "Seed / Reseed Demo Data" button (no auth) —
-# self-service demo bootstrap. Creates or repairs the DGI org account, the
+# self-service demo bootstrap. Creates or repairs the demo org account, the
 # Jordan Ortiz demo student account, and the showcase quest, all under
 # fixed/known credentials (DEMO_PASSWORD) — a presenter can stand up the
 # entire demo from this one button, with no CLI or service-account access

@@ -28,7 +28,7 @@ export function CheckIn() {
 
   // Presenting on a split screen (or anywhere with no second camera free
   // to physically scan the projected QR) — pressing "C" does exactly what
-  // a real scan of the Twilight Sparkle event would (see
+  // a real scan of the demo event would (see
   // demo_force_check_in's own module note in main.py: same attendance/
   // points/journal effect as demo_check_in, just without needing an actual
   // token), then hands off to the real CheckInConfirm success screen via
