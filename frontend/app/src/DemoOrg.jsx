@@ -8,9 +8,9 @@ import { LoadingSpinner } from '@shared/LoadingSpinner.jsx';
 import { StampButton } from '@shared/StampButton.jsx';
 import { callDemoSeedShowcase } from '@shared/fetch.jsx';
 
-// No UI of its own on purpose — signs the visitor into the fixed DGI demo
-// org account (see @shared/demoConfig.js) and hands off straight to the
-// real /org dashboard. A hand-built lookalike page can only ever
+// No UI of its own on purpose — signs the visitor into the fixed demo org
+// account (Equestria & Friends — see @shared/demoConfig.js) and hands off
+// straight to the real /org dashboard. A hand-built lookalike page can only ever
 // approximate the real org app and drifts the moment that UI changes;
 // actually signing in as a real (if fixed) account can't drift at all —
 // every nav item, the real "Generate/View QR Code" button, real Edit
@@ -44,7 +44,7 @@ export function DemoOrg() {
     }
   }
 
-  if (!error) return <LoadingSpinner label="Entering as Digital Girl Inc…" />;
+  if (!error) return <LoadingSpinner label="Entering as Equestria & Friends…" />;
 
   return (
     <PageMotion>

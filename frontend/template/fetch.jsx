@@ -612,7 +612,7 @@ export async function callBackfillQuestCoordinates() {
 }
 
 // No auth: /demo-ops's "Seed / Reseed Demo Data" button — self-service
-// demo bootstrap (creates/repairs the DGI org, Jordan Ortiz, and the
+// demo bootstrap (creates/repairs the demo org, Jordan Ortiz, and the
 // showcase quest). Safe to call anytime, including before anything has
 // ever been seeded.
 export async function callDemoSeedShowcase() {
